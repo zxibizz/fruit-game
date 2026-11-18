@@ -2,7 +2,7 @@
 // view.js draws the state and turns taps into calls of build/upgrade/sell/useBonus/buy; it also reads
 // game.events (kills, shots, zaps, bites...) every frame for effects and sounds, and clears the list.
 // When any file in public/ changes, bump VERSION here and in sw.js.
-export const VERSION = '0.1.0';
+export const VERSION = '0.1.1';
 
 import {
   COLS, ROWS, TRAPS, ENEMIES, BONUSES, SHOP, LEVELS, FRUIT_HP, WAVE_GAP, SELL_BACK, makeWaves, levelStrength,

@@ -38,7 +38,7 @@ let fx = { parts: [], rings: [], texts: [], zaps: [], flames: [], decals: [] };
 let fired = new Map();
 let trails = new Map();
 let fruitShake = 0;
-let routeKey = '';
+let routeKey = null;
 let routes = [];
 let lastFrame = 0;
 let acc = 0;
@@ -61,6 +61,7 @@ function layout() {
   const k = cs * dpr;
   V.T = portrait ? [0, k, -k, 0, (ox + ROWS * cs) * dpr, oy * dpr] : [k, 0, 0, k, ox * dpr, oy * dpr];
   placePop();
+  if ($('float')) { $('float').dataset.top = ''; placeFloat(); }
 }
 
 function paint() {
@@ -165,7 +166,7 @@ function drawZones() {
 }
 
 function computeRoutes() {
-  const key = g.traps.map((q) => q.c).join(',');
+  const key = `${g.L}:${g.traps.map((q) => q.c).join(',')}`;
   if (key === routeKey) return;
   routeKey = key;
   routes = g.spawns.map((s) => {
@@ -664,7 +665,7 @@ window.addEventListener('pointerup', (ev) => {
 
 function tryBuild(kind, c) {
   const why = G.canBuild(g, kind, c);
-  if (!why) { G.build(g, kind, c); routeKey = ''; return true; }
+  if (!why) { G.build(g, kind, c); routeKey = null; return true; }
   if (why === 'blocks') hint(t('cantBlock'));
   else if (why === 'coins') hint(t('noCoins'));
   S.play('deny');
@@ -709,6 +710,18 @@ function bonusTap(k) {
 }
 
 // ---------- the trap popup ----------
+// The Start / next-wave buttons sit at the end of the field farthest from the fruit, so they never cover it.
+function placeFloat() {
+  if (!g || !V) return;
+  const [, fy] = toScreen(g.fruit.x, g.fruit.y);
+  const top = fy > V.oy + (V.h - 2 * V.oy) / 2;
+  const el = $('float');
+  if (el.dataset.top === String(top)) return;
+  el.dataset.top = String(top);
+  el.style.top = top ? `${V.oy + 10}px` : '';
+  el.style.bottom = top ? '' : `${V.oy + 10}px`;
+}
+
 function placePop() {
   if (!picked || !g || !V) return;
   const tr = g.traps.find((q) => q.id === picked);
@@ -736,7 +749,7 @@ function updatePop() {
 }
 function closePop() { picked = null; $('pop').hidden = true; hudCache.pop = ''; }
 $('upBtn').addEventListener('click', () => { if (picked && G.upgrade(g, picked)) { hudCache.pop = ''; updatePop(); } });
-$('sellBtn').addEventListener('click', () => { if (picked && G.sell(g, picked)) { routeKey = ''; closePop(); } });
+$('sellBtn').addEventListener('click', () => { if (picked && G.sell(g, picked)) { routeKey = null; closePop(); } });
 
 // ---------- buttons ----------
 $('startBtn').addEventListener('click', () => { S.unlock(); G.start(g); });
@@ -872,9 +885,10 @@ window.addEventListener('pagehide', saveRun);
 
 // ---------- levels ----------
 function resetView() {
+  $('float').dataset.top = '';
   sel = null; aim = null; hover = null; drag = null; picked = null;
   fx = { parts: [], rings: [], texts: [], zaps: [], flames: [], decals: [] };
-  fired = new Map(); trails = new Map(); routeKey = ''; fruitShake = 0; acc = 0;
+  fired = new Map(); trails = new Map(); routeKey = null; fruitShake = 0; acc = 0;
   $('pop').hidden = true;
 }
 
@@ -886,6 +900,7 @@ function startLevel(L) {
   if (V) V.board = null;
   buildPanels();
   layout();
+  placeFloat();
   const level = LEVELS[L];
   const list = [];
   if (L === 0 && !profile.seen.how) { list.push(['how', 'how', fruitURL(level.fruit, 128)]); profile.seen.how = 1; }
