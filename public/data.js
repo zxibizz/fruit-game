@@ -3,6 +3,8 @@
 export const COLS = 14;
 export const ROWS = 8;
 export const FRUIT_HP = 20;
+// After the first wave the next one comes by itself after BREAK seconds; calling it early pays EARLY_DEW per second left.
+export const BREAK = 20, EARLY_DEW = 1;
 
 // Stats with three values are per plant level 1..3.
 export const PLANTS = {

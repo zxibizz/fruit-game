@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, step, place, placeProblem, trail, startWave, removePlant, upgrade, usePower, COLS, ROWS } from '../public/game.js';
+import { createGame, step, place, placeProblem, trail, startWave, removePlant, upgrade, usePower, earlyBonus, COLS, ROWS, BREAK } from '../public/game.js';
 import { LEVELS, PLANTS } from '../public/data.js';
 import { playLevel } from './bot.mjs';
 
@@ -60,4 +60,18 @@ test('the bot wins every level (balance check)', () => {
     const r = playLevel(n);
     assert.ok(r.won, `level ${n + 1} lost at wave ${r.wave}`);
   }
+});
+
+test('after the first wave the next one starts by itself; calling it early pays dew', () => {
+  const g = createGame(0); g.dew = 1000;
+  for (let j = 0; j < ROWS; j++) if (j !== 3) place(g, 'rose', 11, j);
+  startWave(g);
+  for (let n = 0; n < 60 * 120 && g.phase === 'wave'; n++) step(g, 1 / 60);
+  assert.equal(g.phase, 'build'); assert.equal(g.nextIn, BREAK);
+  for (let n = 0; n < 60 * 5; n++) step(g, 1 / 60);
+  const bonus = earlyBonus(g), dew = g.dew; assert.equal(bonus, BREAK - 5);
+  assert.ok(startWave(g)); assert.equal(g.dew, dew + bonus); assert.equal(g.wave, 2);
+  for (let n = 0; n < 60 * 120 && g.phase === 'wave'; n++) step(g, 1 / 60);
+  for (let n = 0; n < 60 * (BREAK + 1) && g.phase === 'build'; n++) step(g, 1 / 60);
+  assert.equal(g.wave, 3); assert.equal(g.phase, 'wave');
 });

@@ -1,8 +1,8 @@
 // Simulation: no DOM, plain data. The view reads the state and the events, and calls the actions below.
-import { COLS, ROWS, FRUIT_HP, PLANTS, BUGS, LEVELS } from './data.js';
+import { COLS, ROWS, FRUIT_HP, PLANTS, BUGS, LEVELS, BREAK, EARLY_DEW } from './data.js';
 
-export const VERSION = '0.6.0';
-export { COLS, ROWS };
+export const VERSION = '0.7.0';
+export { COLS, ROWS, BREAK };
 
 const DIRS = [[-1, 0], [0, -1], [0, 1], [1, 0]]; // tie order: towards the fruit side first
 const INF = 1e9;
@@ -16,7 +16,7 @@ export function createGame(levelIndex, seed = 1) {
     grid: Array.from({ length: ROWS }, () => Array(COLS).fill(null)),
     entry: [COLS - 1, L.entry], fruit: L.fruit.slice(),
     dew: L.dew, hp: FRUIT_HP, maxHp: FRUIT_HP,
-    wave: 0, waves: L.waves.length, phase: 'build',
+    wave: 0, waves: L.waves.length, phase: 'build', nextIn: null, // nextIn: seconds until the next wave starts by itself
     bugs: [], shots: [], drops: [], plants: [], events: [], queue: [],
     time: 0, waveTime: 0, powers: { frost: 1, rain: 1 }, nextId: 1, rand: mulberry32(seed),
     dist: null, stats: { kills: 0, bites: 0 },
@@ -116,8 +116,12 @@ export function removePlant(g, p, sold = true) {
   g.events.push({ t: sold ? 'sell' : 'plantDead', p });
 }
 
+// Dew for calling the next wave now instead of waiting for it.
+export const earlyBonus = (g) => (g.phase === 'build' && g.nextIn > 0 ? Math.round(g.nextIn * EARLY_DEW) : 0);
 export function startWave(g) {
   if (g.phase !== 'build' || g.wave >= g.waves) return false;
+  const bonus = earlyBonus(g); g.nextIn = null;
+  if (bonus) { g.dew += bonus; g.events.push({ t: 'early', bonus }); }
   const spec = g.L.waves[g.wave]; g.wave++; g.phase = 'wave'; g.waveTime = 0; g.queue = [];
   let t0 = 0;
   for (const [kind, count, gap, delay] of spec) { t0 += delay; for (let n = 0; n < count; n++) g.queue.push({ kind, at: t0 + n * gap }); t0 += count * gap * .5; }
@@ -251,6 +255,7 @@ export function step(g, dt) {
   g.time += dt;
   for (const d of g.drops) d.age += dt;
   for (let k = g.drops.length - 1; k >= 0; k--) if (g.drops[k].age > 5) { const d = g.drops[k]; g.drops.splice(k, 1); g.dew += d.value; g.events.push({ t: 'collect', d, tapped: false }); }
+  if (g.phase === 'build' && g.nextIn != null) { g.nextIn -= dt; if (g.nextIn <= 0) { g.nextIn = 0; startWave(g); } }
   if (g.phase === 'wave') {
     g.waveTime += dt;
     while (g.queue.length && g.queue[0].at <= g.waveTime) spawn(g, g.queue.shift().kind);
@@ -264,7 +269,7 @@ export function step(g, dt) {
   if (g.phase === 'lost') return;
   if (g.phase === 'wave' && !g.queue.length && !g.bugs.length) {
     if (g.wave >= g.waves) { g.phase = 'won'; g.events.push({ t: 'won' }); }
-    else { g.phase = 'build'; g.dew += g.L.waveBonus; g.events.push({ t: 'waveDone', n: g.wave, bonus: g.L.waveBonus }); }
+    else { g.phase = 'build'; g.nextIn = BREAK; g.dew += g.L.waveBonus; g.events.push({ t: 'waveDone', n: g.wave, bonus: g.L.waveBonus }); }
   }
 }
 

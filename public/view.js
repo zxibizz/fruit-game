@@ -2,12 +2,12 @@
 import * as A from './art.js';
 import {
   createGame, step, place, placeProblem, blockingCells, previewTrail, trail, upgrade, upgradeCost, removePlant, refund,
-  startWave, wavePreview, usePower, collectDrop, stars, COLS, ROWS,
+  startWave, earlyBonus, wavePreview, usePower, collectDrop, stars, COLS, ROWS, BREAK,
 } from './game.js';
 import { PLANTS, BUGS, LEVELS } from './data.js';
 
 const T = {
-  wave: (n, m) => `Волна ${n} / ${m}`, go: 'В бой!',
+  wave: (n, m) => `Волна ${n} / ${m}`, go: 'В бой!', soon: (n, s) => `Волна ${n} через ${s} с`,
   plant: { pumpkin: 'Тыква', rose: 'Шиповник', clover: 'Клевер', corn: 'Кукуруза', mint: 'Мята', pepper: 'Перец', dandelion: 'Одуванчик' },
   eaten: { pumpkin: 'съедена', rose: 'съеден', clover: 'съеден', corn: 'съедена', mint: 'съедена', pepper: 'съеден', dandelion: 'съеден' },
   about: {
@@ -29,16 +29,16 @@ const T = {
     butterfly: 'Летит напрямик над лабиринтом. Бьют её шиповник, мята и одуванчик.',
     rhino: 'Босс: огромный и в броне.',
   },
-  plantsHere: 'Растения', newPlants: 'Новые растения', newBugs: 'Новые жуки', bugsHere: 'Жуки', ok: 'Понятно', help: 'Справочник',
-  role: { pumpkin: 'стена, держит путь', rose: 'шипы, бьёт и летающих', clover: 'даёт росу', corn: 'зёрна навесом, по площади', mint: 'холод: замедляет', pepper: 'огонь вокруг себя', dandelion: 'снайпер, вдвое по летающим' },
+  fresh: (list) => `Новое: ${list.join(', ')}. Зажми, чтобы узнать подробнее`, lvl: (n) => `уровень ${n}`,
   problem: { busy: 'Здесь занято', bug: 'Здесь жук', blocks: 'Нельзя закрыть жукам путь', poor: 'Не хватает росы' },
   gain: (n) => (n > 0 ? `путь +${n}` : n < 0 ? `путь ${n}` : 'путь тот же'),
-  hint1: 'Тапни по траве и выбери растение — жуки пойдут в обход',
+  hint1: 'Тапни по траве и выбери растение — жуки пойдут в обход. Готов — тапни ▶ у муравейника',
+  holdHint: 'Зажми растение или жука — узнаешь, кто это',
   pick: 'Что посадить?',
-  hint2: 'Посадки удлиняют путь. Когда готов — «В\u00a0бой!»',
+  hint2: 'Дальше волны придут сами. Тапнешь ▶ раньше — получишь росу',
   zoomHint: 'Поле можно приблизить двумя пальцами',
   won: 'Яблоко спасено!', lost: 'Жуки съели яблоко', retry: 'Ещё раз', levels: 'Уровни', nextLevel: 'Дальше', resume: 'Продолжить',
-  pause: 'Пауза', restart: 'Заново', waveDone: (b) => `Волна пройдена  +${b}`, newPlant: 'Новое растение',
+  pause: 'Пауза', restart: 'Заново', waveDone: (b) => `Волна пройдена  +${b}`, early: (b) => `+${b} за смелость`,
 };
 
 const CELL = 42, M = 10, MAXPX = 8e6; // M: world margin kept around the grid; MAXPX: field layer cap
@@ -165,7 +165,6 @@ function buildTerrain() {
     else if (o.type) A.hdSoil(x, cx, cy + 15);
   }
   const [fx0, fy0] = cellCenter(...game.fruit); A.hdStump(x, fx0, fy0 + 12, 23);
-  fieldEdge(x);
   const [ex, ey] = cellCenter(...game.entry); if (PORT) A.hdAnthill(x, ex, ey - 14, 1); else A.hdAnthill(x, ex + 16, ey + 4, 1);
   x.setTransform(k, 0, 0, k, 0, 0);
   A.hdDapple(x); A.hdSun2(x); A.hdGrade(x); A.hdVignette(x);
@@ -174,21 +173,15 @@ function buildTerrain() {
   if ('filter' in x) { const [pop, y] = layer(VB[2], VB[3], k); y.filter = 'saturate(1.12) contrast(1.04)'; y.drawImage(cnv, 0, 0, VB[2], VB[3]); free(cnv); terrain = pop; } else terrain = cnv;
   terrainDirty = false; blockCache = null;
 }
-// Shade the grass outside the grid and outline it, so the plantable field reads as a board.
-function fieldEdge(x) {
-  const w = FW(), h = FH(), r = 14;
-  x.save(); x.beginPath(); x.rect(VB[0], VB[1], VB[2], VB[3]); A.rrect(x, -3, -3, w + 6, h + 6, r);
-  x.fillStyle = 'rgba(30,60,15,.26)'; x.fill('evenodd');
-  for (const [d, a] of [[3, .1], [6, .07], [10, .05]]) { x.beginPath(); A.rrect(x, -3 - d, -3 - d, w + 6 + 2 * d, h + 6 + 2 * d, r + d); x.lineWidth = 6; x.strokeStyle = `rgba(30,60,15,${a})`; x.stroke(); }
-  x.beginPath(); A.rrect(x, -3, -3, w + 6, h + 6, r); x.lineWidth = 2; x.strokeStyle = 'rgba(255,255,220,.45)'; x.stroke();
-  x.restore();
-}
 
 // ---------- sprites ----------
 const plantSprite = (type, lvl) => sprite(`p:${type}:${lvl}`, 70, 84, (x) => A.hdPlant(x, type, 35, 66, 1, { noShadow: true, lvl: lvl > 1 ? lvl : 0 }));
-const BUG_SIZE = { rhino: 2.1, snail: 1.25, beetle: 1.15 };
+const BUG_SIZE = { rhino: 2.1, snail: 1.25, beetle: 1.15 }, BUG_K = .78;
+// Walking bugs keep a small fixed offset from the trail's middle, so a faster bug visibly passes a slower one.
+const LANE = [-.17, .17, 0, -.09, .09];
+function bugPos(b) { if (b.fly) return sp(b.x, b.y); const a = LANE[b.id % 5], d = LANE[(b.id * 3 + 1) % 5]; return sp(b.x + d, b.y + a); }
 function bugSprite(kind, frame) {
-  const s = (BUG_SIZE[kind] || 1) * 1.12, box = Math.ceil(64 * s);
+  const s = (BUG_SIZE[kind] || 1) * BUG_K, box = Math.ceil(64 * s);
   return sprite(`b:${kind}:${frame}`, box, box, (x) => {
     A.setLeg(frame ? .8 : -.8);
     const k = kind === 'rhino' ? 'beetle' : kind;
@@ -208,40 +201,34 @@ function startLevel(n) {
   grassLayer = null; terrainDirty = true; paused = false;
   showHome(false); showModal(null); ufx = []; zoom = 1; applyCam(); dropLayers();
   if (zmax > 1.4 && matchMedia('(pointer: coarse)').matches && !localStorage.getItem('fruit.zoomHint')) { banner(T.zoomHint, 5, true); localStorage.setItem('fruit.zoomHint', '1'); }
-  if (n === 0) banner(T.hint1, 8, true);
-  const plants = n ? LEVELS[n].plants.filter((p) => !LEVELS[n - 1].plants.includes(p)) : LEVELS[n].plants;
-  const seen = new Set(LEVELS.slice(0, n).flatMap(bugsOf)), bugs = bugsOf(LEVELS[n]).filter((b) => !seen.has(b));
-  if (plants.length || bugs.length) openGuide(plants, bugs, n ? T.newPlants : T.plantsHere, n ? T.newBugs : T.bugsHere);
+  if (n === 0) banner(T.hint1, 9, true);
+  else {
+    const plants = LEVELS[n].plants.filter((p) => !LEVELS[n - 1].plants.includes(p));
+    const seen = new Set(LEVELS.slice(0, n).flatMap(bugsOf)), bugs = bugsOf(LEVELS[n]).filter((b) => !seen.has(b));
+    if (plants.length || bugs.length) banner(T.fresh([...plants.map((p) => T.plant[p]), ...bugs.map((b) => T.bug[b])].map((w) => w.toLowerCase())), 7, true);
+  }
+  if (!localStorage.getItem('fruit.holdHint')) { banner(T.holdHint, 7, true); localStorage.setItem('fruit.holdHint', '1'); }
 }
 const bugsOf = (L) => [...new Set(L.waves.flat().map((w) => w[0]))];
-function statLine(type) {
-  const P = PLANTS[type], out = [];
-  if (P.dmg) out.push(`урон ${P.dmg[0]}`);
-  if (P.range) out.push(`дальность ${P.range[0]}`);
-  if (P.rate) out.push(P.rate[0] >= 1 ? `${P.rate[0]} выстр./с` : `раз в ${(1 / P.rate[0]).toFixed(1)} с`);
-  if (P.slow) out.push(`замедляет на ${Math.round(P.slow[0] * 100)}%`);
-  if (P.value) out.push(`+${P.value[0]} росы раз в ${P.period[0]} с`);
-  if (type === 'pumpkin') out.push(`прочность ${P.hp[0]}`);
-  if (P.range && !P.slow) out.push(P.air ? 'бьёт летающих' : 'летающих не бьёт');
+function bugStats(kind, b) {
+  const B = BUGS[kind], out = [];
+  out.push(b ? `здоровье ${Math.ceil(b.hp)} / ${b.maxHp}` : `здоровье ${Math.round(B.hp * (1 + game.L.hpGrowth * game.wave))}`); // as in the next wave
+  out.push(B.speed >= 1.3 ? 'быстрый' : B.speed <= .5 ? 'очень медленный' : B.speed < .8 ? 'медленный' : 'обычная скорость');
+  if (B.armor) out.push(`броня ${B.armor}`);
+  if (B.fly) out.push('летает');
+  out.push(`кусает на ${B.bite}`, `+${B.reward} росы`);
   return out;
 }
-function iconURL(kind, draw) {
-  const key = 'url:' + kind; if (sprites.has(key)) return sprites.get(key);
-  const k = 2, cnv = document.createElement('canvas'); cnv.width = cnv.height = 64 * k; const x = cnv.getContext('2d'); x.scale(k, k); draw(x);
-  const url = cnv.toDataURL(); sprites.set(key, url); return url;
-}
-const plantURL = (t) => iconURL('p' + t, (x) => { A.hdSoil(x, 32, 52); A.hdPlant(x, t, 32, 51, 1, { noShadow: true }); });
-const bugURL = (b) => iconURL('b' + b, (x) => A.hdBug(x, b === 'rhino' ? 'beetle' : b, 32, 32, -Math.PI / 2 + .3, b === 'rhino' ? 1.25 : 1.15, { noShadow: true, color: b === 'rhino' ? '#8a3ad0' : undefined }));
-function guideRows(plants, bugs, pt, bt) {
-  let h = '';
-  if (plants.length) h += `<h3>${pt}</h3>` + plants.map((p) => `<div class="gi"><img src="${plantURL(p)}" alt=""><div><b>${T.plant[p]}</b> <span class="cost"><i class="drop"></i>${PLANTS[p].cost}</span><p>${T.about[p]}</p><small>${statLine(p).join(' · ')}</small></div></div>`).join('');
-  if (bugs.length) h += `<h3>${bt}</h3>` + bugs.map((b) => `<div class="gi"><img src="${bugURL(b)}" alt=""><div><b>${T.bug[b]}</b><p>${T.bugAbout[b]}</p></div></div>`).join('');
-  return h;
-}
-function openGuide(plants, bugs, pt, bt, back = null) {
-  paused = true;
-  showModal(`<div class="guide">${guideRows(plants, bugs, pt, bt)}</div><div class="row"><button class="btn" id="mOk">${T.ok}</button></div>`);
-  $('mOk').onclick = () => { if (back) back(); else { showModal(null); paused = false; } };
+function statLine(type, l = 1) {
+  const P = PLANTS[type], out = [], v = (a) => a[l - 1];
+  if (P.dmg) out.push(`урон ${v(P.dmg)}`);
+  if (P.range) out.push(`дальность ${v(P.range)}`);
+  if (P.rate) out.push(v(P.rate) >= 1 ? `${v(P.rate)} выстр./с` : `раз в ${(1 / v(P.rate)).toFixed(1)} с`);
+  if (P.slow) out.push(`замедляет на ${Math.round(v(P.slow) * 100)}%`);
+  if (P.value) out.push(`+${v(P.value)} росы раз в ${v(P.period)} с`);
+  if (type === 'pumpkin') out.push(`прочность ${v(P.hp)}`);
+  if (P.range && !P.slow) out.push(P.air ? 'бьёт летающих' : 'летающих не бьёт');
+  return out;
 }
 function banner(text, life = 2, top = false) { banners.push({ text, t: 0, life, top }); }
 // Planting: tap a free cell, a menu of plants pops up next to it. Picking a plant shows it on the cell with the new
@@ -276,8 +263,8 @@ function confirmGhost() {
 function handleEvents() {
   for (const e of game.events) {
     switch (e.t) {
-      case 'hit': if (e.src !== 'burn') { const [x, y] = sp(e.b.x, e.b.y); fx.push({ k: 'dmg', x: x + (Math.random() - .5) * 10, y: y - 18, t: 0, life: .7, txt: `-${Math.round(e.dmg)}` }); fx.push({ k: 'star', x, y: y - 4, t: 0, life: .18, r: 9 }); } break;
-      case 'kill': { const [x, y] = sp(e.b.x, e.b.y); for (let n = 0; n < 7; n++) fx.push({ k: 'puff', x, y, vx: (Math.random() - .5) * 60, vy: (Math.random() - .5) * 60 - 10, t: 0, life: .45, r: 3 + Math.random() * 3 }); fx.push({ k: 'gain', x, y: y - 10, t: 0, life: .8, txt: `+${e.reward}` }); angles.delete(e.b.id); break; }
+      case 'hit': if (e.src !== 'burn') { const [x, y] = bugPos(e.b); fx.push({ k: 'dmg', x: x + (Math.random() - .5) * 10, y: y - 18, t: 0, life: .7, txt: `-${Math.round(e.dmg)}` }); fx.push({ k: 'star', x, y: y - 4, t: 0, life: .18, r: 9 }); } break;
+      case 'kill': { const [x, y] = bugPos(e.b); for (let n = 0; n < 7; n++) fx.push({ k: 'puff', x, y, vx: (Math.random() - .5) * 60, vy: (Math.random() - .5) * 60 - 10, t: 0, life: .45, r: 3 + Math.random() * 3 }); fx.push({ k: 'gain', x, y: y - 10, t: 0, life: .8, txt: `+${e.reward}` }); angles.delete(e.b.id); break; }
       case 'splash': { const [x, y] = sp(e.x, e.y); for (let n = 0; n < 8; n++) fx.push({ k: 'kern', x, y, vx: (Math.random() - .5) * 90, vy: -30 - Math.random() * 50, t: 0, life: .4 }); break; }
       case 'fire': { const [x, y] = cellCenter(e.p.i, e.p.j); fx.push({ k: 'fire', x, y, t: 0, life: .45, r: PLANTS.pepper.range[e.p.lvl - 1] * CELL }); bump(e.p, .2); break; }
       case 'shoot': bump(e.p, .12); break;
@@ -288,7 +275,8 @@ function handleEvents() {
       case 'sell': case 'plantDead': dust(e.p); terrainDirty = true; if (pop === e.p) pop = null; if (e.t === 'plantDead') banner(`${T.plant[e.p.type]} ${T.eaten[e.p.type]}!`, 1.4); break;
       case 'chew': { const [x, y] = cellCenter(e.p.i, e.p.j); for (let n = 0; n < 6; n++) fx.push({ k: 'crumb', x, y: y - 6, vx: (Math.random() - .5) * 50, vy: -20 - Math.random() * 30, t: 0, life: .5, col: e.p.type === 'pumpkin' ? '#f7a23a' : '#6cc04a' }); bump(e.p, .2); break; }
       case 'wave': banner(T.wave(e.n, game.waves), 1.4); break;
-      case 'waveDone': banner(T.waveDone(e.bonus), 1.8); if (levelIdx === 0 && e.n === 1) banner(T.hint2, 5, true); break;
+      case 'waveDone': banner(T.waveDone(e.bonus), 1.8); if (levelIdx === 0 && e.n === 1) banner(T.hint2, 6, true); break;
+      case 'early': ufx.push({ k: 'gain', x: GO[0], y: GO[1] - 30, t: 0, life: 1.2, txt: T.early(e.bonus) }); break;
       case 'power': if (e.kind === 'frost') ufx.push({ k: 'flash', t: 0, life: .6, col: 'rgba(190,240,255,' }); else for (let n = 0; n < 70; n++) ufx.push({ k: 'rain', x: Math.random() * UW, y: -Math.random() * UH, t: 0, life: 1.2 }); break;
       case 'won': case 'lost': { const g = game; setTimeout(() => { if (game === g) endScreen(e.t === 'won'); }, 900); break; }
     }
@@ -328,7 +316,7 @@ function draw(dt) {
   // depth-sorted things on the ground
   const items = [];
   for (const p of game.plants) items.push([cellCenter(p.i, p.j)[1] + 14, () => drawPlant(p, t)]);
-  for (const b of game.bugs) if (!b.fly) items.push([sp(b.x, b.y)[1], () => drawBug(b, t, dt)]);
+  for (const b of game.bugs) if (!b.fly) items.push([bugPos(b)[1], () => drawBug(b, t, dt)]);
   const [fxx, fyy] = cellCenter(...game.fruit); items.push([fyy + 12, () => drawApple(fxx, fyy, dt)]);
   items.sort((a, b) => a[0] - b[0]); for (const [, f] of items) f();
   for (const p of game.plants) if (p.hp < p.maxHp) { const [x, y] = cellCenter(p.i, p.j); A.hdHp(c, x, y - 32, 28, p.hp / p.maxHp, '#ffb03a'); }
@@ -336,14 +324,16 @@ function draw(dt) {
   for (const d of game.drops) drawDrop(d, t);
   for (const s of game.shots) drawShot(s);
   for (const b of game.bugs) if (b.fly) drawBug(b, t, dt);
-  for (const b of game.bugs) if (b.hp < b.maxHp) A.hdHp(c, sp(b.x, b.y)[0], sp(b.x, b.y)[1] - (b.kind === 'rhino' ? 44 : 24), b.kind === 'rhino' ? 56 : 26, b.hp / b.maxHp, b.kind === 'rhino' ? '#ff5a5a' : '#7be05a');
+  for (const b of game.bugs) if (b.hp < b.maxHp) { const [x, y] = bugPos(b); A.hdHp(c, x, y - (b.kind === 'rhino' ? 34 : 18), b.kind === 'rhino' ? 44 : 20, b.hp / b.maxHp, b.kind === 'rhino' ? '#ff5a5a' : '#7be05a'); }
   drawFx(dt, fx);
   setUI();
   drawFx(dt, ufx);
   drawHud(t);
   drawBanners(dt);
+  if (game.phase === 'build') goIcon(t); // over the hints: they talk about it
   if (ghost) drawPicker(t);
   if (pop) drawPop();
+  if (tip) drawTip();
 }
 function vignette() { const g = c.createRadialGradient(UW / 2, UH / 2, Math.min(UW, UH) * .45, UW / 2, UH / 2, Math.max(UW, UH) * .62); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(20,40,10,.3)'); c.fillStyle = g; c.fillRect(0, 0, UW, UH); }
 function ring(x, y, r) { c.save(); c.beginPath(); c.arc(x, y, r, 0, A.TAU); c.fillStyle = 'rgba(255,255,255,.13)'; c.fill(); c.setLineDash([8, 6]); c.lineWidth = 2.2; c.strokeStyle = 'rgba(255,255,255,.85)'; c.stroke(); c.restore(); }
@@ -369,11 +359,11 @@ function drawPlant(p, t) {
   c.save(); c.translate(x, base); c.transform(sx, 0, sway, sy, 0, 0); blit(s, -35, -66); c.restore();
 }
 function drawBug(b, t, dt) {
-  const [x, y] = sp(b.x, b.y), target = screenAngle(b.vx, b.vy);
+  const [x, y] = bugPos(b), target = screenAngle(b.vx, b.vy);
   let a = angles.get(b.id); if (a == null) a = target;
   let d = target - a; while (d > Math.PI) d -= A.TAU; while (d < -Math.PI) d += A.TAU; a += d * Math.min(1, dt * 10); angles.set(b.id, a);
   const moving = !(b.frozen > 0) && !(b.chew > 0), fr = moving ? Math.floor(t * (b.kind === 'butterfly' ? 10 : 7) + b.id) % 2 : 0;
-  const s = bugSprite(b.kind, fr), sc = (BUG_SIZE[b.kind] || 1);
+  const s = bugSprite(b.kind, fr), sc = (BUG_SIZE[b.kind] || 1) * BUG_K / 1.12;
   const lift = b.fly ? 16 : 0;
   c.save(); c.globalAlpha = b.fly ? .18 : .25; c.beginPath(); c.ellipse(x + 3 + lift * .6, y + 5 + lift, 15 * sc, 8 * sc, 0, 0, A.TAU); c.fillStyle = '#183008'; c.fill(); c.restore();
   if (b.slow < 1 && !b.fly) { c.save(); c.beginPath(); c.ellipse(x, y + 4, 17 * sc, 10 * sc, 0, 0, A.TAU); c.fillStyle = 'rgba(170,235,255,.35)'; c.fill(); c.restore(); }
@@ -396,7 +386,13 @@ function drawDrop(d, t) {
   const r = Math.max(22, 22 / ws); ui.push({ x: x - r, y: y - r - 2, w: r * 2, h: r * 2, fn: () => collectDrop(game, d.id), s: 'w' });
 }
 function drawShot(s) {
-  const [x, y] = sp(s.x, s.y), [tx, ty] = sp(s.tx, s.ty), ang = Math.atan2(ty - y, tx - x);
+  // shots fly to the bug as drawn, in its lane: blend in the lane offset as the shot gets closer
+  let [x, y] = sp(s.x, s.y), [tx, ty] = sp(s.tx, s.ty);
+  if (s.target && !s.target.fly) {
+    const [bx, by] = bugPos(s.target), [cx, cy] = sp(s.target.x, s.target.y), tot = Math.hypot(s.tx - s.sx, s.ty - s.sy) || 1, k = clamp(1 - Math.hypot(s.tx - s.x, s.ty - s.y) / tot, 0, 1);
+    x += (bx - cx) * k; y += (by - cy) * k; tx += bx - cx; ty += by - cy;
+  }
+  const ang = Math.atan2(ty - y, tx - x);
   if (s.kind === 'thorn') A.fxThorn(c, x, y, ang, 22);
   else if (s.kind === 'kernel') { const tot = Math.hypot(s.tx - s.sx, s.ty - s.sy) || 1, done = 1 - Math.hypot(s.tx - s.x, s.ty - s.y) / tot; A.hdBall(c, x, y - Math.sin(Math.max(0, Math.min(1, done)) * Math.PI) * 34, 4.4, 4.4, '#ffd23f', { olk: .7 }); }
   else { c.save(); c.translate(x, y); c.rotate(ang); c.strokeStyle = 'rgba(255,255,255,.9)'; c.lineWidth = 1.2; for (let k = 0; k < 7; k++) { c.beginPath(); c.moveTo(0, 0); c.lineTo(Math.cos(k) * 6, Math.sin(k) * 6); c.stroke(); } A.hdLine(c, [0, 0, -12, 0], 'rgba(230,225,210,.9)', 1.4); c.restore(); }
@@ -510,7 +506,8 @@ function drawFx(dt, list) {
   if (list === fx) fx = fx.filter((f) => f.t < f.life); else ufx = ufx.filter((f) => f.t < f.life);
 }
 function drawBanners(dt) {
-  let topY = PORT ? PTOP + 20 : 26; const midX = (FA[0] + FA[2] / 2) / uk;
+  // portrait: below the anthill and its start button
+  let topY = PORT ? PTOP + 84 : 26; const midX = (FA[0] + FA[2] / 2) / uk;
   for (const b of banners) {
     b.t += dt; const k = b.t / b.life; if (k >= 1) continue;
     const a = Math.min(1, b.t * 5, (1 - k) * 5); const text = typeof b.text === 'function' ? b.text() : b.text;
@@ -528,23 +525,44 @@ function drawBanners(dt) {
 
 // ---------- HUD ----------
 function drawHud(t) {
-  const build = game.phase === 'build', zb = zmax > 1.15;
-  if (PORT) { // top: dew, fruit, wave or start, pause; bottom: powers, next wave, zoom, speed
+  const build = game.phase === 'build', waveText = build && game.nextIn != null ? T.soon(game.wave + 1, Math.ceil(game.nextIn)) : T.wave(build ? game.wave + 1 : game.wave, game.waves);
+  if (PORT) { // top: dew, fruit, wave, pause; bottom: powers, next wave, speed
     const by = UH - PBOT / 2;
     dewPill(6, 7, 86, 32); hpPill(98, 7, 70, 32);
-    if (build) goButton(174, 7, UW - 174 - 46, 32, t); else waveBar(174, 9, UW - 174 - 46, 28, T.wave(game.wave, game.waves), 12);
+    waveBar(174, 9, UW - 174 - 46, 28, waveText, 12);
     pauseBtn(UW - 22, 23);
     powerBtns([28, by], [74, by]);
-    speedBtn(UW - 24, by); if (zb) zoomBtn(UW - 62, by);
-    if (build) previewRow(102, by, UW - (zb ? 82 : 44) - 102);
-  } else { // left: dew, fruit, wave, next wave, start; right: pause, speed, zoom, powers
+    speedBtn(UW - 24, by);
+    if (build) previewRow(102, by, UW - 44 - 102);
+  } else { // left: dew, fruit, wave, next wave; right: pause, speed, powers
     const x = 8, w = LLEFT - 16, cx = UW - LRIGHT / 2;
     dewPill(x, 8, w, 32); hpPill(x, 46, w, 32);
-    waveBar(x, 86, w, 26, build ? `${game.wave + 1} / ${game.waves}` : T.wave(game.wave, game.waves), 12);
-    if (build) { previewColumn(x, 120, w, UH - 120 - 58); goButton(x, UH - 50, w, 42, t); }
-    pauseBtn(cx, 24); speedBtn(cx, 64); if (zb) zoomBtn(cx, 104);
+    waveBar(x, 86, w, 26, build && game.nextIn != null ? `${game.wave + 1}/${game.waves} · ${Math.ceil(game.nextIn)} с` : `${build ? game.wave + 1 : game.wave} / ${game.waves}`, 12);
+    if (build) previewColumn(x, 120, w, UH - 128);
+    pauseBtn(cx, 24); speedBtn(cx, 64);
     powerBtns([cx, UH - 74], [cx, UH - 28]);
   }
+}
+// The next wave is called from a round button by the anthill; it shows the countdown and the dew for starting early.
+let GO = [0, 0];
+function goIcon(t) {
+  // right on the anthill: its cell can't be planted, so the button takes no taps meant for the grass
+  const [wx, wy] = cellCenter(...game.entry);
+  const [fx0, fy0, fw, fh] = faUI(), r = 21;
+  let [x, y] = toUI(wx, wy); x = clamp(x, fx0 + r + 4, fx0 + fw - r - 4); y = clamp(y, fy0 + r + 4, fy0 + fh - r - 22); GO = [x, y];
+  const k = game.nextIn != null ? game.nextIn / BREAK : 1, p = 1 + Math.sin(t * 5) * .05, bonus = earlyBonus(game);
+  c.save(); c.translate(x, y); c.scale(p, p);
+  c.shadowColor = 'rgba(80,200,40,.8)'; c.shadowBlur = 12; c.beginPath(); c.arc(0, 0, r, 0, A.TAU); c.fillStyle = '#5cc23e'; c.fill(); c.shadowBlur = 0;
+  c.lineWidth = 2.5; c.strokeStyle = '#1f6a17'; c.stroke();
+  if (game.nextIn != null) { c.beginPath(); c.arc(0, 0, r - 4, -Math.PI / 2, -Math.PI / 2 + A.TAU * k); c.lineWidth = 3.5; c.lineCap = 'round'; c.strokeStyle = '#eaffd8'; c.stroke(); }
+  c.beginPath(); c.moveTo(-5, -9); c.lineTo(10, 0); c.lineTo(-5, 9); c.closePath(); c.fillStyle = '#fff'; c.fill(); c.lineWidth = 2; c.lineJoin = 'round'; c.strokeStyle = '#1f5a14'; c.stroke();
+  c.restore();
+  const label = bonus ? `+${bonus}` : T.go; c.save(); c.font = '900 12px Nunito'; const lw = c.measureText(label).width + (bonus ? 26 : 16); c.restore();
+  const lx = x - lw / 2, ly = y + r + 2;
+  A.uiPanel(c, lx, ly, lw, 18, 9, bonus ? '#fff3d6' : '#5cc23e', { ol: bonus ? '#2a6fa8' : '#1f6a17', olw: 2 });
+  if (bonus) { A.hdDrop(c, lx + 9, ly + 9.5, 4.5); A.hdText(c, label, lx + lw / 2 + 5, ly + 9.5, 12, '#2a6fa8', { stroke: null }); }
+  else A.hdText(c, label, x, ly + 9.5, 12, '#fff', { stroke: '#1f5a14', sw: 3 });
+  ui.push({ x: x - r - 2, y: y - r - 2, w: r * 2 + 4, h: r * 2 + 4, fn: () => { ghost = null; pop = null; startWave(game); }, s: 'u' });
 }
 function dewPill(x, y, w, h) {
   DEW = [x + 18, y + h / 2];
@@ -559,14 +577,9 @@ function hpPill(x, y, w, h) {
   c.beginPath(); A.rrect(c, bx, y + h / 2 - 7, Math.max(10, bw * k), 14, 7); const g = c.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, '#ff8a8a'); g.addColorStop(1, '#e02c3a'); c.fillStyle = g; c.fill(); c.restore();
   A.hdText(c, String(game.hp), bx + bw / 2, y + h / 2 + 1, 11, '#fff', { stroke: '#7a1010', sw: 3 });
 }
-function goButton(x, y, w, h, t) {
-  const pulse = 1 + Math.sin(t * 5) * .03;
-  c.save(); c.translate(x + w / 2, y + h / 2); c.scale(pulse, pulse); c.shadowColor = 'rgba(80,200,40,.7)'; c.shadowBlur = 10; A.uiPanel(c, -w / 2, -h / 2, w, h, Math.min(h / 2, 16), '#5cc23e', { ol: '#1f6a17', olw: 2.5 }); c.restore();
-  A.hdText(c, T.go, x + w / 2, y + h / 2 + .5, 16, '#fff', { stroke: '#1f5a14', sw: 4 });
-  ui.push({ x: x - 4, y: y - 4, w: w + 8, h: h + 8, fn: () => { ghost = null; pop = null; startWave(game); }, s: 'u' });
-}
 function bugChip(k, n, cx, cy) {
-  const s = bugSprite(k, 0), sc = k === 'rhino' ? .3 : .5;
+  const s = bugSprite(k, 0), sc = (k === 'rhino' ? 46 : 38) / s.w;
+  ui.push({ x: cx - 14, y: cy - 14, w: 40, h: 28, fn: () => {}, s: 'u', info: { bug: k } });
   c.save(); c.translate(cx, cy); c.rotate(-Math.PI / 2); c.scale(sc, sc); blit(s, -s.w / 2, -s.h / 2); c.restore();
   A.hdText(c, '×' + n, cx + 12, cy + 3, 12, '#fff', { stroke: '#4a2a12', sw: 3.5, align: 'left' });
 }
@@ -583,23 +596,11 @@ function previewColumn(x, y, w, hmax) {
 }
 function pauseBtn(x, y) { button(x, y, 16, '#7ac8ff', (bx, by) => { c.save(); c.fillStyle = '#fff'; c.strokeStyle = '#1f5a8a'; c.lineWidth = 1.5; for (const dx of [-5, 2]) { c.beginPath(); A.rrect(c, bx + dx, by - 6, 4, 12, 1.5); c.fill(); c.stroke(); } c.restore(); }, openPause); }
 function speedBtn(x, y) { button(x, y, 16, speed > 1 ? '#ff9a2a' : '#ffcf3a', (bx, by) => A.hdText(c, '×' + speed, bx, by + 1, 13, '#fff', { stroke: '#8a5a00', sw: 3.5 }), () => { speed = speed > 1 ? 1 : 2; }); }
-function zoomBtn(x, y) {
-  const inn = zoom < 1.05;
-  button(x, y, 16, '#fff3d6', (bx, by) => zoomIcon(bx, by, inn), () => { const cx = FA[0] + FA[2] / 2, cy = FA[1] + FA[3] / 2; zoomTo(inn ? Math.min(2, zmax) : 1, cx, cy); });
-}
 function powerBtns([fx0, fy0], [rx, ry]) {
   button(fx0, fy0, 19, '#8fd6ff', (x, y) => A.iconFrost(x, y, c), () => usePower(game, 'frost'), !game.powers.frost || game.phase !== 'wave');
   badge(fx0, fy0, 19, game.powers.frost);
   button(rx, ry, 19, '#4aa8ee', (x, y) => A.iconRain(x, y, c), () => usePower(game, 'rain'), !game.powers.rain);
   badge(rx, ry, 19, game.powers.rain);
-}
-// magnifier with a plus (zoom in) or a minus (back to the whole field)
-function zoomIcon(x, y, plus) {
-  c.save(); c.lineCap = 'round'; c.strokeStyle = '#6a3e1c';
-  c.lineWidth = 4; c.beginPath(); c.moveTo(x + 4, y + 4); c.lineTo(x + 9, y + 9); c.stroke();
-  c.lineWidth = 2.5; c.beginPath(); c.arc(x - 2, y - 2, 7, 0, A.TAU); c.fillStyle = '#ffffff'; c.fill(); c.stroke();
-  c.lineWidth = 2.2; c.beginPath(); c.moveTo(x - 5.5, y - 2); c.lineTo(x + 1.5, y - 2); if (plus) { c.moveTo(x - 2, y - 5.5); c.lineTo(x - 2, y + 1.5); } c.stroke();
-  c.restore();
 }
 function badge(x, y, r, n) { if (!n) return; c.save(); c.beginPath(); c.arc(x + r * .72, y - r * .68, 9, 0, A.TAU); c.fillStyle = '#ff4646'; c.fill(); c.lineWidth = 2; c.strokeStyle = '#fff'; c.stroke(); c.restore(); A.hdText(c, String(n), x + r * .72, y - r * .68 + .5, 11, '#fff', { stroke: null }); }
 // One line: wave progress, and while building also who comes next and the start button.
@@ -615,6 +616,34 @@ function drawPop() {
   button(x - 30, by, 18, up == null ? '#c8b070' : '#5cc23e', (bx, yy) => { if (up == null) A.hdText(c, '★', bx, yy + 1, 16, '#fff', { stroke: '#8a6a10', sw: 3 }); else { A.hdText(c, '⬆', bx, yy - 4, 13, '#fff', { stroke: '#1f5a14', sw: 3 }); A.hdText(c, String(up), bx, yy + 8, 10, '#fff', { stroke: '#1f5a14', sw: 3 }); } }, () => { upgrade(game, p); }, up == null || game.dew < up);
   button(x + 30, by, 18, '#e0884a', (bx, yy) => { A.hdText(c, '✕', bx, yy - 4, 12, '#fff', { stroke: '#7a3a10', sw: 3 }); A.hdText(c, '+' + refund(p), bx, yy + 8, 10, '#fff', { stroke: '#7a3a10', sw: 3 }); }, () => { removePlant(game, p); pop = null; });
   labelPill(T.plant[p.type], x, ly, '#8a5a32', '#4a2a12');
+}
+
+// ---------- long-press info ----------
+// Holding a finger on a plant (on the field or in the plant menu) or on a bug (on the field or in the next-wave list)
+// shows what it is; letting go hides it.
+let tip = null, lpTimer = 0;
+const plantInfo = (type, p) => ({ title: T.plant[type] + (p ? ` · ${T.lvl(p.lvl)}` : ''), text: T.about[type], stats: statLine(type, p ? p.lvl : 1).join(' · ') });
+const bugInfo = (kind, b) => ({ title: T.bug[kind], text: T.bugAbout[kind], stats: bugStats(kind, b).join(' · ') });
+function infoAt(px, py) {
+  const u = hit(ui.filter((q) => q.s === 'u'), px / uk, py / uk);
+  if (u) return u.card ? plantInfo(u.card) : u.info?.bug ? bugInfo(u.info.bug) : null;
+  if (px < FA[0] || py < FA[1] || px > FA[0] + FA[2] || py > FA[1] + FA[3]) return null;
+  const wx = (px - ox) / ws, wy = (py - oy) / ws;
+  let best = null, bd = Math.max(CELL * .7, 22 / ws);
+  for (const b of game.bugs) { const [x, y] = bugPos(b), d = Math.hypot(x - wx, y - wy); if (d < bd) { bd = d; best = b; } }
+  if (best) return bugInfo(best.kind, best);
+  const [i, j] = cellAt(wx, wy), p = game.grid[j]?.[i];
+  return p?.type ? plantInfo(p.type, p) : null;
+}
+function drawTip() {
+  const w = Math.min(UW - 16, 300);
+  c.save(); c.font = '800 12px Nunito'; const lines = wrap(tip.text, w - 24); c.font = '900 11px Nunito'; const st = wrap(tip.stats, w - 24); c.restore();
+  const h = 32 + lines.length * 15 + st.length * 14 + 6, x = clamp(tip.x - w / 2, 8, UW - w - 8);
+  let y = tip.y - 56 - h; if (y < 4) y = Math.min(tip.y + 44, UH - h - 4);
+  c.save(); c.shadowColor = 'rgba(0,0,0,.35)'; c.shadowBlur = 12; A.uiPanel(c, x, y, w, h, 16, '#fff3d6', { ol: '#6a3e1c', olw: 2.5 }); c.restore();
+  A.hdText(c, tip.title, x + 12, y + 17, 15, '#6a3e1c', { stroke: null, align: 'left' });
+  lines.forEach((l, k) => A.hdText(c, l, x + 12, y + 35 + k * 15, 12, '#8a5a32', { stroke: null, align: 'left', weight: 800 }));
+  st.forEach((l, k) => A.hdText(c, l, x + 12, y + 38 + lines.length * 15 + k * 14, 11, '#3f8a2a', { stroke: null, align: 'left' }));
 }
 
 // ---------- input ----------
@@ -640,8 +669,12 @@ cv.addEventListener('pointerdown', (e) => {
   if (e.isPrimary) { ptrs.clear(); pinch = null; press = null; } // a first finger: forget pointers that never came up
   try { cv.setPointerCapture(e.pointerId); } catch { /* not capturable */ }
   ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  if (ptrs.size === 1) startPress(e.pointerId, e.clientX, e.clientY);
-  else startPinch();
+  clearTimeout(lpTimer); tip = null;
+  if (ptrs.size === 1) {
+    startPress(e.pointerId, e.clientX, e.clientY);
+    const pr = press;
+    lpTimer = setTimeout(() => { if (press !== pr || pr.moved || pinch || paused) return; const inf = infoAt(pr.x, pr.y); if (inf) { tip = { ...inf, x: pr.x / uk, y: pr.y / uk }; pr.tip = true; navigator.vibrate?.(8); } }, 420);
+  } else startPinch();
 });
 cv.addEventListener('pointermove', (e) => {
   const q = ptrs.get(e.pointerId); if (!q) return; q.x = e.clientX; q.y = e.clientY;
@@ -651,17 +684,19 @@ cv.addEventListener('pointermove', (e) => {
     zoomTo(pinch.z0 * Math.hypot(a.x - b.x, a.y - b.y) / pinch.d0, (a.x + b.x) / 2, (a.y + b.y) / 2, pinch.wx, pinch.wy);
     return;
   }
-  if (!press || e.pointerId !== press.id || press.onUI) return;
+  if (!press || e.pointerId !== press.id || press.onUI || press.tip) return;
   const dx = e.clientX - press.x, dy = e.clientY - press.y;
   if (!press.moved && Math.hypot(dx, dy) > 10) press.moved = true;
   if (press.moved && zoom > 1) { camX = press.cx - dx / ws; camY = press.cy - dy / ws; applyCam(); }
 });
 const release = (e) => {
   if (!ptrs.delete(e.pointerId)) return;
+  clearTimeout(lpTimer); tip = null;
   if (pinch) { if (ptrs.size >= 2) startPinch(); else { pinch = null; zoomT = performance.now(); const [id, q] = [...ptrs.entries()][0] || []; press = null; if (q) startPress(id, q.x, q.y, true); } return; }
-  if (press && e.pointerId === press.id) { const p = press; press = null; if (e.type === 'pointerup' && !p.moved && game && !paused) tap(p.x, p.y); }
+  if (press && e.pointerId === press.id) { const p = press; press = null; if (e.type === 'pointerup' && !p.moved && !p.tip && game && !paused) tap(p.x, p.y); }
 };
 cv.addEventListener('pointerup', release);
+cv.addEventListener('contextmenu', (e) => e.preventDefault()); // a long press is ours, not the browser's menu
 cv.addEventListener('pointercancel', release);
 // Safari would zoom the whole page on a pinch: keep that gesture for the field
 cv.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
@@ -692,10 +727,9 @@ const LOCK = '<svg width="18" height="20" viewBox="0 0 18 20"><rect x="2" y="8" 
 function showModal(html) { $('modal').hidden = !html; if (html) $('card').innerHTML = html; }
 function openPause() {
   paused = true;
-  showModal(`<h2>${T.pause}</h2><div class="row"><button class="btn" id="mResume">${T.resume}</button><button class="btn alt" id="mHelp">${T.help}</button><button class="btn alt" id="mRestart">${T.restart}</button><button class="btn alt" id="mHome">${T.levels}</button></div>`);
+  showModal(`<h2>${T.pause}</h2><div class="row"><button class="btn" id="mResume">${T.resume}</button><button class="btn alt" id="mRestart">${T.restart}</button><button class="btn alt" id="mHome">${T.levels}</button></div>`);
   $('mResume').onclick = () => { showModal(null); paused = false; };
   $('mRestart').onclick = () => startLevel(levelIdx);
-  $('mHelp').onclick = () => openGuide(game.L.plants, bugsOf(game.L), T.plantsHere, T.bugsHere, openPause);
   $('mHome').onclick = () => { showModal(null); showHome(true); };
 }
 function endScreen(won) {
@@ -725,7 +759,7 @@ async function boot() {
   resize(); drawLogo(); showHome(true);
   game = createGame(0); paused = true; // a field behind the menu
   requestAnimationFrame(frame);
-  if (new URLSearchParams(location.search).has('dev')) window.__fd = { get game() { return game; }, startLevel, set speed(v) { speed = v; }, cell: (i, j) => { const [x, y] = cellCenter(i, j); return [ox + x * ws, oy + y * ws]; }, scroll: () => {}, zoom: (z, x = innerWidth / 2, y = innerHeight / 2) => zoomTo(z, x, y), get view() { return { zoom, zmax, cell: CELL * ws, FA }; }, layout: () => ({ card: ui.filter((u) => u.card).map((u) => [(u.x + u.w / 2) * uk, (u.y + u.h / 2) * uk]) }) };
+  if (new URLSearchParams(location.search).has('dev')) window.__fd = { get game() { return game; }, startLevel, set speed(v) { speed = v; }, cell: (i, j) => { const [x, y] = cellCenter(i, j); return [ox + x * ws, oy + y * ws]; }, scroll: () => {}, zoom: (z, x = innerWidth / 2, y = innerHeight / 2) => zoomTo(z, x, y), get view() { return { zoom, zmax, cell: CELL * ws, FA }; }, layout: () => ({ card: ui.filter((u) => u.card).map((u) => [(u.x + u.w / 2) * uk, (u.y + u.h / 2) * uk]), chips: ui.filter((u) => u.info).map((u) => [(u.x + 14) * uk, (u.y + u.h / 2) * uk]), go: [GO[0] * uk, GO[1] * uk] }) };
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 boot();

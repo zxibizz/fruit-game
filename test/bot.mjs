@@ -43,10 +43,12 @@ export function playLevel(level, { seed = 7, verbose = false } = {}) {
     for (const p of shooters) { const c = upgradeCost(p); if (c != null && g.dew >= c + 20) upgrade(g, p); }
   };
   let t = 0;
-  while (g.phase !== 'won' && g.phase !== 'lost' && t < 3600) {
-    if (g.phase === 'build') { if (verbose && g.wave) console.log(`  after wave ${g.wave}: hp ${g.hp} dew ${g.dew} plants ${g.plants.length}`); tryBuild(); startWave(g); }
+  while (g.phase !== 'won' && g.phase !== 'lost' && t < 7200) {
+    // the bot only calls the first wave; the others come by themselves (no early-start dew)
+    if (g.phase === 'build' && g.wave === 0) { tryBuild(); startWave(g); }
     for (let n = 0; n < 15; n++) step(g, 1 / 30);
     t += .5; tryBuild();
+    if (verbose && g.events.some((e) => e.t === 'waveDone')) console.log(`  after wave ${g.wave}: hp ${g.hp} dew ${g.dew} plants ${g.plants.length}`);
     g.events.length = 0;
   }
   const res = { level, won: g.phase === 'won', hp: g.hp, wave: g.wave, plants: g.plants.length, time: Math.round(t) };
