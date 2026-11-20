@@ -387,7 +387,7 @@ function newBugs(n) {
 }
 function bugStats(kind, b) {
   const B = BUGS[kind], out = [];
-  out.push(b ? `здоровье ${Math.ceil(b.hp)} / ${b.maxHp}` : game && !paused ? `здоровье ${bugHp(game, kind, Math.min(game.waves, game.wave + 1))}` : `здоровье ${B.hp}`); // as in the next wave
+  out.push(b ? `здоровье ${Math.ceil(b.hp)} / ${b.maxHp}` : game && $('home').hidden ? `здоровье ${bugHp(game, kind, Math.min(game.waves, game.wave + 1))}` : `здоровье ${B.hp}`); // as in the next wave
   out.push(B.speed >= 1.3 ? 'быстрый' : B.speed <= .5 ? 'очень медленный' : B.speed < .8 ? 'медленный' : 'обычная скорость');
   if (B.armor) out.push(`броня ${B.armor}`);
   if (B.fly) out.push('летает');
@@ -395,7 +395,7 @@ function bugStats(kind, b) {
   if (B.chew) out.push('кусает растения');
   if (B.mend) out.push('лечит жуков');
   if (b && tired(b) >= 1.1) out.push(`устал: урон +${Math.round((tired(b) - 1) * 100)}%`);
-  out.push(`кусает яблоко на ${B.bite}`, `+${game && !paused ? bugReward(game, kind) : B.reward} росы`);
+  out.push(`кусает яблоко на ${B.bite}`, `+${game && $('home').hidden ? bugReward(game, kind) : B.reward} росы`);
   return out;
 }
 // The numbers of a plant: [label, value at this level, value at the next one or null]. On the field (p given) they

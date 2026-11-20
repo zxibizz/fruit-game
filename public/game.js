@@ -271,7 +271,7 @@ function kill(g, b, how) {
 }
 // Health lost for any reason other than a hit (fire, nettles, thorns): no armor, no floor.
 // how much more damage a bug takes for the way it has walked
-export const tired = (b) => 1 + FATIGUE * (b.walk || 0);
+export const tired = (b) => (b.fly ? 1 : 1 + FATIGUE * (b.walk || 0));
 function lose(g, b, amount, how) { if (b.hp <= 0) return; b.hp -= amount; if (b.hp <= 0) kill(g, b, how); }
 function damage(g, b, amount, src) {
   if (b.hp <= 0) return;
@@ -410,7 +410,7 @@ function updatePlant(g, p, dt) {
     for (const b of g.bugs) if (inRange(b, air) && (!best || b.hp > best.hp)) best = b;
     if (!best) return;
     p.cd = pstat(g, p, 'eat') / quick; p.busy = 1.2;
-    const whole = best.hp <= pstat(g, p, 'chomp') && !BUGS[best.kind].boss;
+    const whole = best.hp <= pstat(g, p, 'chomp') * tired(best) && !BUGS[best.kind].boss;
     g.events.push({ t: 'eat', p, b: best, whole });
     damage(g, best, pstat(g, p, 'chomp') + best.armor, whole ? 'eat' : p.type);
     return;
