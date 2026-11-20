@@ -82,7 +82,7 @@ function resize() {
   UW = vw / uk; UH = vh / uk;
   const n = document.createElement('canvas'); n.id = 'cv';
   n.width = Math.round(vw * dpr); n.height = Math.round(vh * dpr); n.style.width = vw + 'px'; n.style.height = vh + 'px';
-  c = n.getContext('2d'); cv.replaceWith(n); cv = n; bindCanvas();
+  c = n.getContext('2d'); cv.replaceWith(n); free(cv); cv = n; bindCanvas();
   const fl = PORT ? 4 : TRAY * uk, ft = (PORT ? PTOP : LTOP) * uk, aw = vw - fl - (PORT ? 4 : 6), ah = vh - ft - (PORT ? PBOT * uk : 4);
   FBOX = [fl, ft, aw, ah];
   const fw = FW(), fh = FH(), cross = PORT ? aw / fw : ah / fh, long = PORT ? ah / fh : aw / fw;
