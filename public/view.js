@@ -2,7 +2,7 @@
 import * as A from './art.js';
 import {
   createGame, step, place, placeProblem, blockingCells, previewTrail, trail, upgrade, upgradeCost, removePlant, refund,
-  startWave, wavePreview, usePower, collectDrop, stars, COLS, ROWS,
+  startWave, wavePreview, usePower, collectDrop, stars, COLS, ROWS, VERSION,
 } from './game.js';
 import { PLANTS, BUGS, LEVELS } from './data.js';
 
@@ -66,7 +66,7 @@ function cellAt(x, y) { const a = Math.floor(x / CELL), b = Math.floor(y / CELL)
 const screenAngle = (vx, vy) => (PORT ? Math.atan2(-vx, vy) : Math.atan2(vy, vx));
 const offEntry = (first) => (PORT ? [first[0], -60] : [FW() + 40, first[1]]);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const PTOP = 66, PBOT = 92, LTOP = 46, MIN_CELL = 38; // portrait: HUD rows on top, card shelf below; smallest cell in CSS px
+const PTOP = 66, PBOT = 88, LTOP = 46, MIN_CELL = 38; // portrait: HUD rows on top, card shelf below; smallest cell in CSS px
 const toUI = (wx, wy) => [(ox + wx * ws) / uk, (oy + wy * ws) / uk];
 function applyCam() { ox = BASE[0] - (PORT ? 0 : cam); oy = BASE[1] - (PORT ? cam : 0); }
 // world rect of the field area that is on screen now
@@ -74,8 +74,8 @@ const visField = () => [(FBOX[0] - ox) / ws, (FBOX[1] - oy) / ws, FBOX[2] / ws, 
 function resize() {
   const vw = innerWidth, vh = innerHeight, was = PORT;
   PORT = vh > vw;
-  dpr = Math.min(devicePixelRatio || 1, 3);
-  uk = PORT ? clamp(Math.min(vw / 300, vh / 520), 1, 1.8) : clamp(Math.min(vw / 720, vh / 330), 1, 1.8);
+  dpr = Math.min(devicePixelRatio || 1, 4); seen = [vw, vh, devicePixelRatio];
+  uk = PORT ? clamp(Math.min(vw / 340, vh / 560), 1, 1.8) : clamp(Math.min(vw / 740, vh / 340), 1, 1.8);
   UW = vw / uk; UH = vh / uk;
   cv.width = Math.round(vw * dpr); cv.height = Math.round(vh * dpr); cv.style.width = vw + 'px'; cv.style.height = vh + 'px';
   const fl = PORT ? 4 : TRAY * uk, ft = (PORT ? PTOP : LTOP) * uk, aw = vw - fl - (PORT ? 4 : 6), ah = vh - ft - (PORT ? PBOT * uk : 4);
@@ -90,8 +90,11 @@ function resize() {
   const xs = [], ys = [];
   for (const cc of [0, camMax]) { const x0 = BASE[0] - (PORT ? 0 : cc), y0 = BASE[1] - (PORT ? cc : 0); xs.push(-x0 / ws, (vw - x0) / ws); ys.push(-y0 / ws, (vh - y0) / ws); }
   VB = [Math.min(...xs) - 4, Math.min(...ys) - 4, Math.max(...xs) - Math.min(...xs) + 8, Math.max(...ys) - Math.min(...ys) + 8];
-  sprites.clear(); grassLayer = null; terrainDirty = true;
+  for (const v of sprites.values()) free(v.cnv); sprites.clear(); free(grassLayer); grassLayer = null; terrainDirty = true;
 }
+// iOS counts canvas memory until garbage collection, so give the pixels back right away
+function free(cnv) { if (cnv && cnv.width) { cnv.width = 0; cnv.height = 0; } }
+let seen = [0, 0, 0];
 function layer(w, h, k = Math.max(ws, uk) * dpr) {
   const cnv = document.createElement('canvas');
   cnv.width = Math.ceil(w * k); cnv.height = Math.ceil(h * k);
@@ -133,7 +136,8 @@ function buildTerrain() {
   x.setTransform(k, 0, 0, k, 0, 0);
   A.hdDapple(x); A.hdSun2(x); A.hdGrade(x);
   // a little more colour; done here, not as a CSS filter on the canvas: Safari renders filtered canvases blurry
-  if ('filter' in x) { const [pop, y] = layer(VB[2], VB[3], k); y.filter = 'saturate(1.12) contrast(1.04)'; y.drawImage(cnv, 0, 0, VB[2], VB[3]); terrain = pop; } else terrain = cnv;
+  free(terrain);
+  if ('filter' in x) { const [pop, y] = layer(VB[2], VB[3], k); y.filter = 'saturate(1.12) contrast(1.04)'; y.drawImage(cnv, 0, 0, VB[2], VB[3]); free(cnv); terrain = pop; } else terrain = cnv;
   terrainDirty = false; blockCache = null;
 }
 
@@ -251,6 +255,7 @@ function frame(ts) {
     let acc = dt * speed; while (acc > 1e-6) { const h = Math.min(acc, 1 / 60); step(game, h); acc -= h; }
     handleEvents();
   }
+  if (innerWidth !== seen[0] || innerHeight !== seen[1] || devicePixelRatio !== seen[2]) resize();
   if (game) draw(paused ? 0 : dt);
   requestAnimationFrame(frame);
 }
@@ -415,16 +420,16 @@ function drawFx(dt, list) {
   if (list === fx) fx = fx.filter((f) => f.t < f.life); else ufx = ufx.filter((f) => f.t < f.life);
 }
 function drawBanners(dt) {
-  let topY = PORT ? PTOP + (game.phase === 'build' && !sel ? 84 : 22) : 64; const midX = PORT ? UW / 2 : TRAY + (UW - TRAY) / 2;
+  let topY = PORT ? PTOP + (game.phase === 'build' && !sel ? 74 : 22) : 64; const midX = PORT ? UW / 2 : TRAY + (UW - TRAY) / 2;
   for (const b of banners) {
     b.t += dt; const k = b.t / b.life; if (k >= 1) continue;
     if (b.top && sel && !ghost) continue; // the plant info panel is in that spot
     const a = Math.min(1, b.t * 5, (1 - k) * 5); const text = typeof b.text === 'function' ? b.text() : b.text;
     c.save(); c.globalAlpha = a;
     if (b.top) {
-      c.font = '900 14px Nunito'; const lines = wrap(text, UW - 44), w = Math.min(UW - 12, Math.max(...lines.map((l) => c.measureText(l).width)) + 30), h = 12 + lines.length * 18, x = midX;
+      const fs = PORT ? 13 : 14; c.font = `900 ${fs}px Nunito`; const lines = wrap(text, UW - 44), w = Math.min(UW - 12, Math.max(...lines.map((l) => c.measureText(l).width)) + 30), h = 12 + lines.length * 18, x = midX;
       A.uiPanel(c, x - w / 2, topY - 15, w, h, 15, '#fff3d6', { ol: '#6a3e1c' });
-      lines.forEach((l, k) => A.hdText(c, l, x, topY + k * 18 - 1 + (lines.length > 1 ? 2 : 0), 14, '#6a3e1c', { stroke: null })); topY += h + 8;
+      lines.forEach((l, k) => A.hdText(c, l, x, topY + k * 18 - 1 + (lines.length > 1 ? 2 : 0), fs, '#6a3e1c', { stroke: null })); topY += h + 8;
     }
     else { const s = 1 + Math.max(0, .3 - b.t) * 1.5; c.translate(midX, UH * .42); if (PORT) c.scale(.8, .8); c.scale(s, s); A.hdText(c, text, 0, 0, 30, '#fff', { stroke: '#6a3a00', sw: 8, grad: ['#fff6a0', '#ffb02e'] }); }
     c.restore();
@@ -470,25 +475,29 @@ function drawHud(t) {
 }
 function badge(x, y, r, n) { if (!n) return; c.save(); c.beginPath(); c.arc(x + r * .72, y - r * .68, 9, 0, A.TAU); c.fillStyle = '#ff4646'; c.fill(); c.lineWidth = 2; c.strokeStyle = '#fff'; c.stroke(); c.restore(); A.hdText(c, String(n), x + r * .72, y - r * .68 + .5, 11, '#fff', { stroke: null }); }
 function drawCards() {
-  const list = game.L.plants, n = list.length, gap = 5;
+  const list = game.L.plants, n = list.length, gap = 6;
   let cw, ch, pos;
   if (PORT) {
-    const top = UH - PBOT + 10; cw = Math.min(62, (UW - 12 - gap * (n - 1)) / n); ch = 66;
-    const x0 = (UW - (n * cw + (n - 1) * gap)) / 2; pos = (k, on) => [x0 + k * (cw + gap), on ? top - 6 : top];
-    shelf(-14, top - 10, UW + 28, PBOT + 20, 0, 0, 0, top + 90);
+    cw = Math.min(64, (UW - 16 - gap * (n - 1)) / n); ch = Math.min(72, cw + 10);
+    const top = UH - PBOT + (PBOT - ch) / 2 + 2, x0 = (UW - (n * cw + (n - 1) * gap)) / 2; pos = (k, on) => [x0 + k * (cw + gap), on ? top - 6 : top];
+    shelf(-14, UH - PBOT, UW + 28, PBOT + 20, 0, 0, 0, UH + 20);
   } else {
-    const top = 46; ch = Math.min(52, (UH - top - 8 - gap * (n - 1)) / n); cw = 62; pos = (k, on) => [on ? 10 : 5, top + k * (ch + gap)];
+    const top = 46; ch = Math.min(56, (UH - top - 8 - (gap - 1) * (n - 1)) / n); cw = 62; pos = (k, on) => [on ? 10 : 5, top + k * (ch + gap - 1)];
     shelf(-14, top - 6, TRAY - 2, UH - top + 20, 0, 0, TRAY, 0);
   }
   list.forEach((type, k) => {
     const P = PLANTS[type], on = sel === type, [x, y] = pos(k, on), poor = game.dew < P.cost;
     c.save(); if (on) { c.shadowColor = 'rgba(255,220,60,.95)'; c.shadowBlur = 14; }
-    A.uiPanel(c, x, y, cw, ch, 11, on ? '#fff0b8' : '#fbe7c2', { ol: on ? '#c88a10' : '#7a4a22', olw: on ? 3 : 2 }); c.restore();
-    c.save(); c.beginPath(); A.rrect(c, x + 2, y + 2, cw - 4, ch - 4, 9); c.clip(); const s = cardSprite(type), k2 = Math.min(1, ch / 52, (cw + 4) / 62); c.translate(x + (cw - 50 * k2) / 2 - 4 * k2, y + ch - 52 * k2 - (PORT ? 6 : 0)); c.scale(k2, k2); blit(s, 0, 0); c.restore();
-    c.save(); c.beginPath(); A.rrect(c, x + cw - 31, y + ch - 17, 29, 15, 7.5); c.fillStyle = 'rgba(40,25,10,.8)'; c.fill(); c.restore();
-    A.hdText(c, String(P.cost), x + cw - 16, y + ch - 9.5, 11, poor ? '#ff9a8a' : '#fff', { stroke: null }); A.hdDrop(c, x + cw - 35, y + ch - 10, 4);
-    if (poor) { c.save(); c.beginPath(); A.rrect(c, x, y, cw, ch, 11); c.fillStyle = 'rgba(60,40,30,.35)'; c.fill(); c.restore(); }
-    ui.push(PORT ? { x: x - gap / 2, y: y - 8, w: cw + gap, h: ch + 20, fn: () => selectCard(type), s: 'u' } : { x: 0, y, w: TRAY, h: ch + gap, fn: () => selectCard(type), s: 'u' });
+    A.uiPanel(c, x, y, cw, ch, 12, on ? '#fff0b8' : '#fbe7c2', { ol: on ? '#c88a10' : '#7a4a22', olw: on ? 3 : 2 }); c.restore();
+    // the plant sprite is 70x84 with its base at (35, 66); fit it above the price
+    const s = plantSprite(type, 1), k2 = Math.min((cw - 6) / 44, (ch - 14) / 46);
+    c.save(); c.beginPath(); A.rrect(c, x + 2, y + 2, cw - 4, ch - 4, 10); c.clip(); c.translate(x + cw / 2, y + ch - 13); c.scale(k2, k2); blit(s, -35, -64); c.restore();
+    const label = String(P.cost); c.save(); c.font = '900 12px Nunito'; const bw = c.measureText(label).width + 22; c.restore();
+    const bx = x + cw / 2 - bw / 2, by = y + ch - 15;
+    c.save(); c.beginPath(); A.rrect(c, bx, by, bw, 16, 8); c.fillStyle = 'rgba(40,25,10,.82)'; c.fill(); c.restore();
+    A.hdDrop(c, bx + 8, by + 8.5, 4.2); A.hdText(c, label, bx + bw / 2 + 5, by + 8.5, 12, poor ? '#ff9a8a' : '#fff', { stroke: null });
+    if (poor) { c.save(); c.beginPath(); A.rrect(c, x, y, cw, ch, 12); c.fillStyle = 'rgba(60,40,30,.35)'; c.fill(); c.restore(); }
+    ui.push(PORT ? { x: x - gap / 2, y: y - 8, w: cw + gap, h: ch + 16, fn: () => selectCard(type), s: 'u' } : { x: 0, y, w: TRAY, h: ch + gap, fn: () => selectCard(type), s: 'u' });
   });
 }
 function shelf(x, y, w, h, gx0_, gy0_, gx1, gy1) {
@@ -497,12 +506,12 @@ function shelf(x, y, w, h, gx0_, gy0_, gx1, gy1) {
   c.save(); c.beginPath(); A.rrect(c, x, y, w, h, 16); c.lineWidth = 2.5; c.strokeStyle = '#4a2a12'; c.stroke(); c.restore();
 }
 function drawWavePanel(t) {
-  const prev = wavePreview(game), step = PORT ? 54 : 62, pw = Math.min(UW - 12, Math.max(250, 110 + prev.length * step)), ph = 56, x = (PORT ? UW / 2 : TRAY + (UW - TRAY) / 2) - pw / 2, y = PORT ? PTOP + 6 : UH - ph - 8;
+  const prev = wavePreview(game), step = PORT ? 52 : 62, pw = Math.min(UW - 12, Math.max(PORT ? 220 : 250, (PORT ? 100 : 110) + prev.length * step)), ph = PORT ? 48 : 56, x = (PORT ? UW / 2 : TRAY + (UW - TRAY) / 2) - pw / 2, y = PORT ? PTOP + 6 : UH - ph - 8;
   c.save(); c.shadowColor = 'rgba(0,0,0,.35)'; c.shadowBlur = 12; A.uiPanel(c, x, y, pw, ph, 18, '#fff3d6', { ol: '#6a3e1c', olw: 2.5 }); c.restore();
-  prev.forEach(([k, n], i) => { const bx = x + 28 + i * step, by = y + ph / 2; const s = bugSprite(k === 'rhino' ? 'rhino' : k, 0); c.save(); c.translate(bx, by); c.rotate(-Math.PI / 2); const sc = k === 'rhino' ? .45 : .8; c.scale(sc, sc); blit(s, -s.w / 2, -s.h / 2); c.restore(); A.hdText(c, '×' + n, bx + 22, by + 12, 13, '#fff', { stroke: '#6a3e1c', sw: 4 }); });
-  const bw = 96, bx = x + pw - bw - 10, by = y + 12, pulse = 1 + Math.sin(t * 5) * .03;
+  prev.forEach(([k, n], i) => { const bx = x + 28 + i * step, by = y + ph / 2; const s = bugSprite(k === 'rhino' ? 'rhino' : k, 0); c.save(); c.translate(bx, by); c.rotate(-Math.PI / 2); const sc = (k === 'rhino' ? .45 : .8) * (PORT ? .82 : 1); c.scale(sc, sc); blit(s, -s.w / 2, -s.h / 2); c.restore(); A.hdText(c, '×' + n, bx + 22, by + 12, 13, '#fff', { stroke: '#6a3e1c', sw: 4 }); });
+  const bw = PORT ? 84 : 96, bx = x + pw - bw - 10, by = y + ph / 2 - 16, pulse = 1 + Math.sin(t * 5) * .03;
   c.save(); c.translate(bx + bw / 2, by + 16); c.scale(pulse, pulse); c.shadowColor = 'rgba(80,200,40,.7)'; c.shadowBlur = 12; A.uiPanel(c, -bw / 2, -16, bw, 32, 16, '#5cc23e', { ol: '#1f6a17', olw: 2.5 }); c.restore();
-  A.hdText(c, T.go, bx + bw / 2, by + 16, 17, '#fff', { stroke: '#1f5a14', sw: 4.5 });
+  A.hdText(c, T.go, bx + bw / 2, by + 16, PORT ? 15 : 17, '#fff', { stroke: '#1f5a14', sw: 4.5 });
   ui.push({ x: bx - 4, y: by - 4, w: bw + 8, h: 40, fn: () => { sel = null; ghost = null; pop = null; startWave(game); }, s: 'u' });
 }
 function drawPop() {
@@ -537,6 +546,7 @@ cv.addEventListener('pointerup', (e) => { if (!press || e.pointerId !== press.id
 cv.addEventListener('pointercancel', () => { press = null; });
 cv.addEventListener('wheel', (e) => { if (!camMax) return; cam = clamp(cam + (e.deltaY || e.deltaX), 0, camMax); applyCam(); }, { passive: true });
 addEventListener('resize', resize);
+visualViewport?.addEventListener('resize', resize);
 document.addEventListener('visibilitychange', () => { if (document.hidden && game && !paused && game.phase !== 'won' && game.phase !== 'lost') openPause(); });
 
 // ---------- screens (HTML) ----------
@@ -558,7 +568,7 @@ const LOCK = '<svg width="18" height="20" viewBox="0 0 18 20"><rect x="2" y="8" 
 function showModal(html) { $('modal').hidden = !html; if (html) $('card').innerHTML = html; }
 function openPause() {
   paused = true;
-  showModal(`<h2>${T.pause}</h2><div class="row"><button class="btn" id="mResume">${T.resume}</button><button class="btn alt" id="mRestart">${T.restart}</button><button class="btn alt" id="mHome">${T.levels}</button></div>`);
+  showModal(`<h2>${T.pause}</h2><div class="diag">${VERSION} · ${innerWidth}×${innerHeight} @${devicePixelRatio} · холст ${cv.width}×${cv.height} · ui ${uk.toFixed(2)} · поле ${ws.toFixed(2)}${visualViewport && visualViewport.scale !== 1 ? ' · зум ' + visualViewport.scale.toFixed(2) : ''}</div><div class="row"><button class="btn" id="mResume">${T.resume}</button><button class="btn alt" id="mRestart">${T.restart}</button><button class="btn alt" id="mHome">${T.levels}</button></div>`);
   $('mResume').onclick = () => { showModal(null); paused = false; };
   $('mRestart').onclick = () => startLevel(levelIdx);
   $('mHome').onclick = () => { showModal(null); showHome(true); };
