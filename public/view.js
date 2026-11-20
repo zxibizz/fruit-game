@@ -275,7 +275,9 @@ function frame(ts) {
 function draw(dt) {
   if (terrainDirty) buildTerrain();
   ui.length = 0;
-  setWorld(); c.drawImage(terrain, VB[0], VB[1], VB[2], VB[3]);
+  // the field layer is copied pixel for pixel at a whole-pixel offset: any resampling would soften it
+  c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(terrain, Math.round(dpr * (ox + VB[0] * ws)), Math.round(dpr * (oy + VB[1] * ws)));
+  setWorld();
   const t = now / 1000;
   if (sel) drawGrid();
   if (pop && PLANTS[pop.type].range) ring(...cellCenter(pop.i, pop.j), PLANTS[pop.type].range[pop.lvl - 1] * CELL);
