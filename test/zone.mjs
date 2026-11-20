@@ -1,11 +1,11 @@
 // A garden without a maze, for the balance tests: shooters packed along the straight trail from the anthill on, each upgraded to the
 // top before the next is planted (or, with wide, all planted first). It must lose: node test/zone.mjs [maxPlants] [wide]
-import { createGame, step, place, upgrade, upgradeCost, startWave, placeProblem, trail, regrow, regrowCost, COLS, ROWS } from '../public/game.js';
+import { createGame, step, place, upgrade, upgradeCost, startWave, placeProblem, trails, regrow, regrowCost, COLS, ROWS } from '../public/game.js';
 import { LEVELS } from '../public/data.js';
 const cap = Number(process.argv[2] || 99), wide = process.argv[3] === 'wide';
 export function run(level, cap, wide) {
   const g = createGame(level, 7), L = LEVELS[level];
-  const tr = trail(g), on = new Set(tr.map(([i, j]) => i + ',' + j)), cells = [];
+  const tr = trails(g).flat(), on = new Set(tr.map(([i, j]) => i + ',' + j)), cells = [];
   for (let i = 0; i < COLS; i++) for (let j = 0; j < ROWS; j++) if (!g.grid[j][i] && !on.has(i + ',' + j)) {
     const d = Math.min(...tr.map(([a, b]) => Math.hypot(a - i, b - j))); if (d > 2.1) continue;
     cells.push([i, j, d, COLS - i]);

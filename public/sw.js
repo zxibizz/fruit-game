@@ -1,11 +1,15 @@
 // Offline: every game file goes into the cache on install and is served from it from then on.
 // When any file in public/ changes, bump VERSION here and in game.js — otherwise devices stay on the old version.
+// The music (public/music/) is not in the list: a track goes into its own cache when it is first played, and that
+// cache outlives the versions, so an update does not download the music again.
 // A new version installs in the background and takes over at once; the running page offers a reload on the home screen.
-const VERSION = '0.12.0';
+const VERSION = '0.13.0';
 const CACHE = `fruit-v${VERSION}`;
+const MUSIC = 'fruit-music-1';
 const ASSETS = [
   './',
   'art.js',
+  'audio.js',
   'data.js',
   'game.js',
   'icons/apple-touch-icon.png',
@@ -25,7 +29,7 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k.startsWith('fruit-') && k !== CACHE).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k.startsWith('fruit-') && k !== CACHE && k !== MUSIC).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   );
 });
@@ -34,6 +38,16 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   const url = new URL(req.url);
   if (req.method !== 'GET' || url.origin !== location.origin || url.pathname.endsWith('/healthz')) return;
+  if (url.pathname.includes('/music/')) {
+    e.respondWith(caches.open(MUSIC).then(async (c) => {
+      const hit = await c.match(req, { ignoreSearch: true });
+      if (hit) return hit;
+      const res = await fetch(req);
+      if (res.ok && res.status === 200) c.put(req, res.clone());
+      return res;
+    }));
+    return;
+  }
   e.respondWith(
     caches.open(CACHE).then(async (c) => {
       const hit = await c.match(req, { ignoreSearch: true });

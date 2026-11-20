@@ -15,7 +15,7 @@ test('every file the game needs offline is precached', () => {
   const listed = new Set([...sw.matchAll(/^\s+'([^']+)',$/gm)].map((m) => m[1]));
   const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]));
   for (const f of walk(pub).map((f) => path.relative(pub, f))) {
-    if (f === 'sw.js') continue;
+    if (f === 'sw.js' || f.startsWith('music/')) continue; // the music is cached when played
     assert.ok(listed.has(f), `${f} is missing from ASSETS in sw.js`);
   }
   for (const f of listed) if (f !== './') assert.ok(fs.existsSync(pub + f), `${f} is listed but does not exist`);

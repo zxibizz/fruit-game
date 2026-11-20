@@ -8,7 +8,7 @@ const PUBLIC = path.resolve(fileURLToPath(new URL('../public/', import.meta.url)
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.webmanifest': 'application/manifest+json', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml',
-  '.glb': 'model/gltf-binary', '.woff2': 'font/woff2',
+  '.glb': 'model/gltf-binary', '.woff2': 'font/woff2', '.mp3': 'audio/mpeg',
 };
 const log = (...a) => console.log(new Date().toISOString(), ...a);
 

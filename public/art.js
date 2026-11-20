@@ -107,6 +107,65 @@ const HS = {
 let S = HS.juicy;
 let SUN = { dx: 3, dy: 4, sx: 1, a: .28 }; // shadow offset and stretch
 
+// ---------- themes: the colours of the ground, trail, hedge and light; gameplay objects keep their own ----------
+// patch: light / dark soft spots (rgb) with their alphas; dapple: shade rgb, alpha, light rgb, alpha; sun: cast shadows.
+const THEMES = {
+  meadow: {
+    grass: ['#97d968', '#72c24a'], patch: ['230,255,170', '40,110,30'], patchA: [.22, .16],
+    blades: ['rgba(50,120,30,.45)', 'rgba(170,230,110,.5)', 'rgba(110,190,70,.6)'],
+    flowers: ['#ffffff', '#ffe0f0', '#fff3a0', '#d8e8ff'], flowerN: 34, clover: ['#6fc54c', '#5bb341'], tuft: ['#5aa83e', '#86d05c'],
+    daisyN: 14, leafN: 9, leaves: ['#e8b040', '#d47a2c', '#c8542a'], shroomN: 4, petalN: 0, dampN: 0,
+    path: { glow: '30,70,15', edge: '#6e4426', fill: '#c08852', mid: '238,200,145', blades: ['#4f9e36', '#79c652'] },
+    bush: { shade: '20,60,15', shadeA: .45, back: '#2f7a26', front: ['#45a036', '#3d952f'], leaf: '#5cb446', flowers: ['#ff6f91', '#fff07a', '#ffffff', '#b38cff'] },
+    dapple: ['70,110,90', .42, '255,250,200', .12], grade: ['rgba(255,225,160,.32)', 'rgba(70,120,190,.28)'], sun2: ['255,248,200', .26],
+    sun: { dx: 3, dy: 4, sx: 1, a: .28 },
+  },
+  forest: {
+    grass: ['#62b24c', '#3f8c3c'], patch: ['200,240,140', '10,55,30'], patchA: [.15, .26],
+    blades: ['rgba(20,78,30,.5)', 'rgba(125,200,100,.45)', 'rgba(64,146,66,.6)'],
+    flowers: ['#ffffff', '#d8c8ff', '#bfe0ff', '#fff3a0'], flowerN: 16, clover: ['#4fa648', '#3f9240'], tuft: ['#3a8436', '#68b656'],
+    daisyN: 4, leafN: 16, leaves: ['#b8862e', '#9a5a24', '#7c4a22'], shroomN: 12, petalN: 0, dampN: 0,
+    path: { glow: '10,45,15', edge: '#573620', fill: '#b98a58', mid: '236,204,156', blades: ['#35802f', '#5fae4c'] },
+    bush: { shade: '8,40,18', shadeA: .6, back: '#1f5c2a', front: ['#2f8038', '#297434'], leaf: '#48994a', flowers: ['#ffffff', '#d0b8ff', '#ffe98a'] },
+    dapple: ['24,74,64', .62, '226,255,186', .2], grade: ['rgba(206,236,170,.2)', 'rgba(16,64,104,.38)'], sun2: ['222,255,200', .16],
+    sun: { dx: 3, dy: 4, sx: 1, a: .34 },
+  },
+  orchard: {
+    grass: ['#c6dc60', '#9fc646'], patch: ['255,240,150', '112,128,26'], patchA: [.26, .15],
+    blades: ['rgba(108,136,28,.45)', 'rgba(238,236,120,.5)', 'rgba(172,200,66,.6)'],
+    flowers: ['#ffffff', '#ffd0d8', '#ffe27a', '#ffc0a0'], flowerN: 26, clover: ['#9cc646', '#86b43c'], tuft: ['#86ae38', '#c8dc68'],
+    daisyN: 9, leafN: 30, leaves: ['#f0b83a', '#e0822a', '#d2542a', '#c23a2a'], shroomN: 2, petalN: 46, dampN: 0,
+    path: { glow: '80,70,10', edge: '#73421f', fill: '#c2804a', mid: '246,206,150', blades: ['#84ac38', '#bcd660'] },
+    bush: { shade: '60,70,10', shadeA: .4, back: '#58882a', front: ['#7aaa36', '#6c9c30'], leaf: '#9cc24a', flowers: ['#ff4f44', '#ffd23f', '#ff4f44', '#ff9a5a'] },
+    dapple: ['130,120,60', .26, '255,240,170', .16], grade: ['rgba(255,214,120,.4)', 'rgba(150,118,86,.22)'], sun2: ['255,236,170', .32],
+    sun: { dx: 3.5, dy: 4, sx: 1.05, a: .27 },
+  },
+  marsh: {
+    grass: ['#5cc898', '#35a380'], patch: ['190,255,224', '8,78,80'], patchA: [.18, .24],
+    blades: ['rgba(12,92,80,.5)', 'rgba(146,236,194,.5)', 'rgba(56,170,130,.6)'],
+    flowers: ['#ffffff', '#c8f0ff', '#fff3a0', '#e0d0ff'], flowerN: 22, clover: ['#3fb088', '#2f9a76'], tuft: ['#2a8a6a', '#70d2a6'],
+    daisyN: 5, leafN: 4, leaves: ['#b8a040', '#8a9a3a', '#6a7a3a'], shroomN: 6, petalN: 0, dampN: 11,
+    path: { glow: '6,60,50', edge: '#5a3e26', fill: '#ba8a5a', mid: '234,206,160', blades: ['#2c8e6e', '#62c69a'] },
+    bush: { shade: '6,56,50', shadeA: .5, back: '#1f6a56', front: ['#2f9070', '#288466'], leaf: '#52b890', flowers: ['#ffffff', '#bfe8ff', '#fff07a', '#ffb0d8'] },
+    dapple: ['26,88,98', .5, '212,255,240', .14], grade: ['rgba(190,240,220,.24)', 'rgba(26,86,150,.34)'], sun2: ['216,255,240', .2],
+    sun: { dx: 3, dy: 4, sx: 1, a: .3 },
+  },
+  sunset: {
+    grass: ['#c0d06a', '#86b056'], patch: ['255,206,160', '74,70,96'], patchA: [.3, .14],
+    blades: ['rgba(66,94,48,.5)', 'rgba(244,222,140,.5)', 'rgba(150,182,80,.6)'],
+    flowers: ['#fff0e0', '#ffc8d8', '#ffe08a', '#f0c8ff'], flowerN: 30, clover: ['#88b450', '#74a048'], tuft: ['#6c9844', '#b6d06a'],
+    daisyN: 10, leafN: 8, leaves: ['#e8a040', '#d4702c', '#c0502a'], shroomN: 3, petalN: 0, dampN: 0,
+    path: { glow: '60,40,60', edge: '#693a2a', fill: '#cc8858', mid: '252,202,150', blades: ['#6c9844', '#aaca62'] },
+    bush: { shade: '50,30,60', shadeA: .5, back: '#3a6a3a', front: ['#5a9040', '#4f8438'], leaf: '#7aaa4a', flowers: ['#ff8aa8', '#ffd27a', '#fff0e0', '#d8a0ff'] },
+    dapple: ['128,92,128', .3, '255,198,160', .2], grade: ['rgba(255,150,136,.4)', 'rgba(120,80,170,.3)'], sun2: ['255,188,150', .38],
+    sun: { dx: 7, dy: 5, sx: 1.3, a: .3 },
+  },
+};
+export const THEME_NAMES = Object.keys(THEMES);
+let T = THEMES.meadow;
+// Pick the look of the level before building the terrain; unknown names fall back to 'meadow'. Returns the name in use.
+export function setTheme(name) { const n = THEMES[name] ? name : 'meadow'; T = THEMES[n]; SUN = T.sun; return n; }
+
 const olOf = col => mix(darken(col, .5), '#2a1430', .2);
 
 // ---------- volume primitives ----------
@@ -160,6 +219,42 @@ function hdText(c, s, x, y, size, col = '#ffffff', o = {}) {
   c.fillText(s, x, y); c.restore();
 }
 
+// Shared pieces of the newer bugs.
+// A little crown seen from above: a golden star ring with a gem.
+function crownTop(c, x, y, r) {
+  c.save(); c.translate(x, y);
+  hdBlob(c, cc => { for (let i = 0; i < 10; i++) { const a = i * Math.PI / 5, q = i % 2 ? r * .6 : r; cc.lineTo(Math.cos(a) * q, Math.sin(a) * q); } cc.closePath(); }, '#ffc928', 0, 0, r, { olk: .7 });
+  for (let i = 0; i < 5; i++) { const a = i * TAU / 5; c.beginPath(); c.arc(Math.cos(a) * r * .92, Math.sin(a) * r * .92, r * .2, 0, TAU); c.fillStyle = '#fff6c0'; c.fill(); c.lineWidth = .7; c.strokeStyle = '#8a5a10'; c.stroke(); }
+  hdBall(c, 0, 0, r * .36, r * .36, '#ff4a6a', { olk: .55, noBounce: true });
+  c.restore();
+}
+// Half-closed eyelid: a grumpy, funny look for the bosses.
+function hdLid(c, x, y, r, sg, col) {
+  c.save(); c.translate(x, y); c.rotate(sg * .7); c.beginPath(); c.arc(0, 0, r + .5, Math.PI * .78, Math.PI * 1.42); c.closePath();
+  c.fillStyle = col; c.fill(); c.lineWidth = 1.1; c.strokeStyle = '#2a1430'; c.stroke(); c.restore();
+}
+// Striped flyer (wasp, hornet): P = { body, stripe, thorax, head, sting, ant, grumpy }.
+function waspLike(c, o, P) {
+  const f = o.flap ?? 1, legC = '#3a1f14';
+  const abd = cc => { cc.moveTo(0, 0); cc.bezierCurveTo(0, -8.4, -12, -7.6, -20, 0); cc.bezierCurveTo(-12, 7.6, 0, 8.4, 0, 0); };
+  hdBlob(c, cc => { cc.moveTo(-17, -1.8); cc.lineTo(-17 - P.sting, 0); cc.lineTo(-17, 1.8); cc.closePath(); }, '#4a2c22', -19, 0, 4, { olk: .7 });
+  hdBlob(c, abd, P.body, -8, 0, 11);
+  c.save(); c.beginPath(); abd(c); c.clip(); c.strokeStyle = P.stripe; c.lineWidth = 2.7;
+  for (const sx of [-4.5, -9.6, -14.6]) { c.beginPath(); c.moveTo(sx + 1.6, -9); c.quadraticCurveTo(sx - 1.6, 0, sx + 1.6, 9); c.stroke(); }
+  c.restore();
+  hdSpec(c, -8, -3.5, 5, 1.2, .1, .8);
+  for (const sg of [-1, 1]) for (const [len, wd, sweep, rx] of [[12, 3.8, .7, -1], [18, 5.4, 1.2, 2]]) {
+    c.save(); c.translate(rx, sg * 2.5); c.rotate(sg * (Math.PI - sweep * f)); c.beginPath(); c.ellipse(len / 2 + 1, 0, len / 2, wd * (.7 + .3 * f), 0, 0, TAU);
+    const g = c.createLinearGradient(0, 0, len, 0); g.addColorStop(0, 'rgba(255,255,255,.8)'); g.addColorStop(1, 'rgba(196,232,255,.6)'); c.fillStyle = g; c.fill();
+    c.lineWidth = 1.1; c.strokeStyle = 'rgba(50,90,140,.85)'; c.stroke();
+    c.beginPath(); c.moveTo(2, 0); c.lineTo(len * .85, 0); c.strokeStyle = 'rgba(255,255,255,.85)'; c.lineWidth = .8; c.stroke(); c.restore();
+  }
+  hdBall(c, 3.5, 0, 5.4, 5.2, P.thorax);
+  hdBall(c, 10.5, 0, 4.8, 5.2, P.head);
+  hdAntennae(c, 13.5, P.ant, legC);
+  hdEye(c, 12, -3.1, 2.5, [1, -.2]); hdEye(c, 12, 3.1, 2.5, [1, .2]);
+  if (P.grumpy) for (const sg of [-1, 1]) hdLid(c, 12, sg * 3.1, 2.5, sg, P.head);
+}
 // ---------- bugs: top-down, facing +x ----------
 function hdLegs(c, xs, len, col, w = 1.7) {
   for (const x of xs) for (const s of [-1, 1]) {
@@ -168,9 +263,12 @@ function hdLegs(c, xs, len, col, w = 1.7) {
   }
 }
 function hdAntennae(c, x, len, col) { for (const s of [-1, 1]) { hdCurve(c, [x, s * 2, x + len * .6, s * len * .2, x + len, s * len * .55], col, 1.3); c.beginPath(); c.arc(x + len, s * len * .55, 1.6, 0, TAU); c.fillStyle = col; c.fill(); } }
+const BUG_SHADOW = { aphid: .6, rhino: 1.8, queen: 1.8, spider: 1.75, slugking: 1.9, hornet: 1.6 };
+// o: { color, ph (animation phase), flap (wing openness .55..1 for flyers), fly, crumb, noShadow }.
+// Regular kinds stay within 24 px of the centre at s = 1, bosses (rhino, queen, spider, slugking, hornet) within 32 px.
 function hdBug(c, kind, x, y, a = 0, s = 1, o = {}) {
   c.save(); c.translate(x, y);
-  if (!o.noShadow) { const fly = o.fly ? 14 : 0; c.save(); c.translate(fly * .6, fly); hdShadow(c, 0, 4, 15 * s, 8 * s, o.fly ? .55 : .8); c.restore(); }
+  if (!o.noShadow) { const fly = o.fly ? 14 : 0, k = s * (BUG_SHADOW[kind] || 1); c.save(); c.translate(fly * .6, fly); hdShadow(c, 0, 4, 15 * k, 8 * k, o.fly ? .55 : .8); c.restore(); }
   c.rotate(a); c.scale(s, s);
   const legC = '#3a1f14';
   switch (kind) {
@@ -261,11 +359,150 @@ function hdBug(c, kind, x, y, a = 0, s = 1, o = {}) {
       hdEye(c, 14, -3.2, 2.5); hdEye(c, 14, 3.2, 2.5);
       break;
     }
+    case 'aphid': {
+      // tiny pale pear: narrow head end, plump rear with two little tubes
+      const col = o.color || '#bfe98c';
+      hdLegs(c, [-3, 0, 3], 5.2, legC, 1);
+      for (const sg of [-1, 1]) hdLine(c, [-7, sg * 2.6, -11, sg * 4.6], darken(col, .4), 1.7);
+      hdBlob(c, cc => { cc.moveTo(8.5, 0); cc.bezierCurveTo(8.5, -4.4, 3, -4.2, -1, -6.4); cc.bezierCurveTo(-6, -8.6, -10.5, -4.5, -10.5, 0); cc.bezierCurveTo(-10.5, 4.5, -6, 8.6, -1, 6.4); cc.bezierCurveTo(3, 4.2, 8.5, 4.4, 8.5, 0); }, col, -2, 0, 9.5);
+      hdSpec(c, -5, -3.4, 2.6, 1.2, -.3);
+      for (const sg of [-1, 1]) hdCurve(c, [7, sg * 1.5, 10, sg * 2, 11.5, sg * 4.5], legC, 1.1);
+      hdEye(c, 5.6, -2.5, 2.2, [1, -.2]); hdEye(c, 5.6, 2.5, 2.2, [1, .2]);
+      c.save(); c.globalAlpha = .5; for (const sg of [-1, 1]) { c.beginPath(); c.ellipse(1.5, sg * 4, 1.6, 1, 0, 0, TAU); c.fillStyle = '#ff8a9a'; c.fill(); } c.restore();
+      break;
+    }
+    case 'wasp': {
+      waspLike(c, o, { body: o.color || '#ffd22e', stripe: '#2a1c1a', thorax: '#3a2a26', head: '#ffcf2a', sting: 5.5, ant: 6 });
+      break;
+    }
+    case 'hornet': {
+      // boss: the same build, bigger, orange, with a long stinger and heavy eyelids
+      c.translate(3, 0); c.scale(1.4, 1.4);
+      waspLike(c, o, { body: o.color || '#ff8a1c', stripe: '#2a1614', thorax: '#5a2a1a', head: '#ff9c2a', sting: 7, ant: 5, grumpy: true });
+      hdBall(c, 3.5, 0, 2.6, 3.4, '#ffb347', { noSpec: true, olk: .6, noBounce: true });
+      break;
+    }
+    case 'firefly': {
+      // dark wing covers in front, a glowing lantern behind
+      const col = o.color || '#4a3a56', pulse = .8 + .2 * Math.sin((o.ph || 0) * 1.3);
+      c.save(); const g = c.createRadialGradient(-10, 0, 2, -10, 0, 21); g.addColorStop(0, `rgba(236,255,120,${.75 * pulse})`); g.addColorStop(.45, `rgba(210,255,90,${.34 * pulse})`); g.addColorStop(1, 'rgba(210,255,90,0)'); c.fillStyle = g; c.beginPath(); c.arc(-10, 0, 21, 0, TAU); c.fill(); c.restore();
+      hdLegs(c, [-2, 2, 6], 8, legC, 1.4); hdAntennae(c, 14, 7, legC);
+      hdBall(c, -10, 0, 7.6, 6.6, '#e4ff52', { olk: .9 });
+      c.save(); const g2 = c.createRadialGradient(-11, -1, .5, -11, -1, 5); g2.addColorStop(0, 'rgba(255,255,235,.95)'); g2.addColorStop(1, 'rgba(255,255,235,0)'); c.fillStyle = g2; c.beginPath(); c.arc(-11, -1, 5, 0, TAU); c.fill(); c.restore();
+      for (const sg of [-1, 1]) {
+        hdBlob(c, cc => { cc.moveTo(7, 0); cc.bezierCurveTo(7, sg * 8.5, -5, sg * 9, -9, sg * 1.2); cc.lineTo(-9, 0); cc.closePath(); }, col, 0, sg * 3, 10);
+        hdSpec(c, -1, sg * 4.6, 4.5, 1.1, 0, .7);
+      }
+      hdBall(c, 8.5, 0, 4.2, 6.2, '#ff7d4a', { olk: .9 });
+      hdBall(c, 13.5, 0, 3.8, 4.2, darken(col, .2));
+      hdEye(c, 15, -2.7, 2.3, [1, -.2]); hdEye(c, 15, 2.7, 2.3, [1, .2]);
+      break;
+    }
+    case 'pillbug': {
+      // woodlouse: a row of overlapping grey plates, many short legs
+      const col = o.color || '#8e97a8';
+      for (let i = 0; i < 7; i++) for (const sg of [-1, 1]) { const lx = -13 + i * 4.2, sw = ((i + (sg > 0 ? 1 : 0)) % 2 ? 1 : -1) * LEG * 1.6; hdLine(c, [lx, sg * 7, lx + sw, sg * 12.6], '#22100a', 3.2); hdLine(c, [lx, sg * 7, lx + sw, sg * 12.6], '#6a4a3a', 1.5); }
+      for (const sg of [-1, 1]) hdLine(c, [-16, sg * 2, -20, sg * 3.6], darken(col, .45), 2.2);
+      hdAntennae(c, 16, 6, legC);
+      hdBall(c, 14.5, 0, 4.6, 5.8, darken(col, .3));
+      for (let i = 0; i < 7; i++) { const t = i / 6, ry = 6.4 + 4.4 * Math.sin(Math.PI * (.14 + .72 * t)); hdBall(c, -14 + i * 4.3, 0, 4.7, ry, i % 2 ? col : lighten(col, .14), { olk: .9, specA: .75, noBounce: true }); }
+      c.save(); c.globalAlpha = .5; hdLine(c, [-15, 0, 10, 0], darken(col, .45), 1.1); c.restore();
+      for (const sg of [-1, 1]) for (let i = 1; i < 6; i += 2) { c.beginPath(); c.arc(-14 + i * 4.3, sg * 6.6, .9, 0, TAU); c.fillStyle = alpha(darken(col, .55), .7); c.fill(); }
+      hdEye(c, 16, -3, 2.2, [1, -.2]); hdEye(c, 16, 3, 2.2, [1, .2]);
+      break;
+    }
+    case 'rhino': {
+      // boss: armoured beetle with a forked horn
+      const col = o.color || '#84406e', dk = darken(col, .42);
+      c.translate(-6.6, 0); c.scale(1.38, 1.38);
+      hdLegs(c, [-7, 0, 6], 12.5, legC, 2.3);
+      hdBlob(c, cc => { cc.moveTo(13, -3.2); cc.lineTo(20, -2.2); cc.lineTo(24.4, -6.4); cc.lineTo(27, -3.6); cc.lineTo(23.8, 0); cc.lineTo(27, 3.6); cc.lineTo(24.4, 6.4); cc.lineTo(20, 2.2); cc.lineTo(13, 3.2); cc.closePath(); }, '#e0b98c', 20, -1, 9, { olk: .9 });
+      hdSpec(c, 18.5, -1, 3.6, .7, 0, .8);
+      hdBall(c, 12.5, 0, 5.2, 5.8, darken(col, .25));
+      hdBall(c, 5.5, 0, 6.6, 9.8, darken(col, .22), { olk: .95 });
+      for (const sg of [-1, 1]) {
+        c.save(); c.beginPath(); c.moveTo(4, 0); c.bezierCurveTo(4, sg * 14.5, -14, sg * 15.5, -17, sg * 1); c.lineTo(-17, 0); c.closePath();
+        const g = c.createLinearGradient(0, sg * 15, 0, 0); g.addColorStop(0, darken(col, .38)); g.addColorStop(.45, lighten(col, .28)); g.addColorStop(1, col);
+        c.fillStyle = g; c.fill(); if (S.ol) { c.lineWidth = S.olw; c.strokeStyle = olOf(col); c.stroke(); } c.restore();
+        hdSpec(c, -5, sg * 7.2, 7.5, 1.6, 0, .9);
+        for (const [px, py] of [[-11, 4.6], [-4, 10.4], [1, 5]]) { c.beginPath(); c.arc(px, sg * py, .95, 0, TAU); c.fillStyle = alpha(darken(col, .5), .55); c.fill(); }
+      }
+      hdBall(c, 8.2, 0, 1.9, 2.6, lighten(col, .22), { noSpec: true, olk: .6, noBounce: true });
+      hdEye(c, 14.6, -3.7, 2.6, [1, -.1]); hdEye(c, 14.6, 3.7, 2.6, [1, .1]);
+      for (const sg of [-1, 1]) hdLid(c, 14.6, sg * 3.7, 2.6, sg, dk);
+      c.translate(-.6, 0);
+      break;
+    }
+    case 'queen': {
+      // boss: ant queen with a swollen striped abdomen, small wings and a crown
+      const col = o.color || '#b8452a';
+      c.translate(-1.5, 0);
+      hdLegs(c, [4, 8.5, 13], 13, legC, 2.1); hdAntennae(c, 24, 6.5, legC);
+      hdBall(c, -12.5, 0, 16, 13, col);
+      c.save(); c.beginPath(); c.ellipse(-12.5, 0, 16, 13, 0, 0, TAU); c.clip(); c.strokeStyle = alpha('#ffd9a8', .42); c.lineWidth = 3;
+      for (const sx of [-23, -16, -9, -2]) { c.beginPath(); c.moveTo(sx + 2, -14); c.quadraticCurveTo(sx - 2.5, 0, sx + 2, 14); c.stroke(); }
+      c.restore();
+      hdBall(c, 3.6, 0, 3, 2.7, darken(col, .2), { noSpec: true, olk: .7 });
+      for (const sg of [-1, 1]) {
+        c.save(); c.translate(8, sg * 3.5); c.rotate(sg * 2.55); c.beginPath(); c.ellipse(7.5, 0, 7.5, 3.4, 0, 0, TAU);
+        c.fillStyle = 'rgba(235,248,255,.7)'; c.fill(); c.lineWidth = 1.1; c.strokeStyle = 'rgba(50,90,140,.85)'; c.stroke(); c.restore();
+      }
+      hdBall(c, 9.5, 0, 6.6, 5.8, col, { olk: .9 });
+      hdBall(c, 20.5, 0, 7.4, 7.2, lighten(col, .05));
+      hdEye(c, 23.2, -4, 3, [1, -.2]); hdEye(c, 23.2, 4, 3, [1, .2]);
+      for (const sg of [-1, 1]) for (const da of [-.5, 0, .5]) { const a = sg * (1.75 + da); hdLine(c, [23.2 + Math.cos(a) * 3, sg * 4 + Math.sin(a) * 3, 23.2 + Math.cos(a) * 5, sg * 4 + Math.sin(a) * 5], '#2a1430', 1); }
+      crownTop(c, 16.5, 0, 6);
+      break;
+    }
+    case 'spider': {
+      // boss: fat round spider, eight striped legs, many eyes, a pattern on the back
+      const col = o.color || '#70509a', A8 = [.7, 1.25, 1.85, 2.45], B8 = [-.5, -.25, .3, .55];
+      c.translate(-3, 0);
+      for (const pass of [0, 1, 2]) for (const sg of [-1, 1]) A8.forEach((a0, i) => {
+        const a = a0 + ((i + (sg > 0 ? 1 : 0)) % 2 ? 1 : -1) * LEG * .13, bx = 9 - i * 2.6, by = sg * 4;
+        const kx = bx + Math.cos(a) * 13, ky = by + sg * Math.sin(a) * 13, fx = kx + Math.cos(a + B8[i]) * 12.5, fy = ky + sg * Math.sin(a + B8[i]) * 12.5;
+        c.save(); c.beginPath(); c.moveTo(bx, by); c.lineTo(kx, ky); c.lineTo(fx, fy); c.lineJoin = 'round'; c.lineCap = pass === 2 ? 'butt' : 'round';
+        if (pass === 2) { c.setLineDash([2.6, 4.2]); c.lineDashOffset = -3; }
+        c.lineWidth = [5.4, 3.3, 3.3][pass]; c.strokeStyle = ['#22100a', darken(col, .3), '#f6d868'][pass]; c.stroke(); c.restore();
+      });
+      hdBall(c, -8, 0, 14.5, 13.6, col);
+      c.save(); c.fillStyle = '#f6d868'; c.strokeStyle = alpha(darken(col, .55), .8); c.lineWidth = .9;
+      for (const [px, r] of [[-1.5, 2.2], [-7, 3.6], [-14, 2.8]]) { c.beginPath(); c.moveTo(px + r, 0); c.lineTo(px, -r * .9); c.lineTo(px - r, 0); c.lineTo(px, r * .9); c.closePath(); c.fill(); c.stroke(); }
+      for (const sg of [-1, 1]) for (const [px, py, r] of [[-4, 6, 1.5], [-11, 7.4, 1.7], [-17, 4.6, 1.3]]) { c.beginPath(); c.arc(px, sg * py, r, 0, TAU); c.fill(); c.stroke(); }
+      c.restore();
+      hdBall(c, 9, 0, 8.2, 7.8, lighten(col, .1));
+      for (const sg of [-1, 1]) { hdEye(c, 9.6, sg * 5.7, 1.9, [1, sg * .3]); c.beginPath(); c.arc(16.4, sg * 1.3, 1.1, 0, TAU); c.fillStyle = '#1c1020'; c.fill(); }
+      hdEye(c, 13.2, -3.1, 3, [1, -.1]); hdEye(c, 13.2, 3.1, 3, [1, .1]);
+      break;
+    }
+    case 'slugking': {
+      // boss: a fat glossy slug without a shell, eyes on stalks, a crown, slime all around
+      const col = o.color || '#e6c545', w = Math.sin(o.ph || 0) * 1.6;
+      const body = (cc, g) => { cc.moveTo(23 + g, 0); cc.bezierCurveTo(23 + g, -14 - g, 5, -16.5 - g, -8, -14 - g); cc.bezierCurveTo(-19, -12 - g, -27, -5 - g + w, -29 - g, w * 1.4); cc.bezierCurveTo(-27, 5 + g + w, -19, 12 + g, -8, 14 + g); cc.bezierCurveTo(5, 16.5 + g, 23 + g, 14 + g, 23 + g, 0); };
+      c.save(); c.beginPath(); body(c, 1.4); c.fillStyle = 'rgba(214,246,255,.6)'; c.fill(); c.lineWidth = 1; c.strokeStyle = 'rgba(255,255,255,.75)'; c.stroke(); c.restore();
+      for (const sg of [-1, 1]) { hdLine(c, [19, sg * 5, 27, sg * 10], '#2a1430', 5.2); hdLine(c, [19, sg * 5, 27, sg * 10], lighten(col, .12), 3); hdLine(c, [22, sg * 2, 28, sg * 3], '#2a1430', 3.4); hdLine(c, [22, sg * 2, 28, sg * 3], lighten(col, .12), 1.6); }
+      hdBlob(c, cc => body(cc, -1.2), col, -2, 0, 27);
+      c.save(); c.beginPath(); body(c, -1.2); c.clip();
+      for (const [px, py, r] of [[-22, 2, 1.6], [-17, -5, 2], [-13, 6, 2.3], [-8, -9, 1.7], [-5, 9, 1.5], [-19, 7 + w, 1.3]]) { c.beginPath(); c.arc(px, py, r, 0, TAU); c.fillStyle = alpha(darken(col, .32), .6); c.fill(); }
+      c.restore();
+      c.save(); c.globalAlpha = .55; hdCurve(c, [-27, w, -12, -1.5, -4, 0], darken(col, .3), 1.6); c.restore();
+      hdBlob(c, cc => { cc.moveTo(19, 0); cc.bezierCurveTo(19, -11, 4, -12.5, -3, -9); cc.quadraticCurveTo(-7, 0, -3, 9); cc.bezierCurveTo(4, 12.5, 19, 11, 19, 0); }, mix(col, '#d8963a', .45), 8, 0, 13, { olk: .8 });
+      c.beginPath(); c.arc(2, 6.5, 1.3, 0, TAU); c.fillStyle = alpha(darken(col, .55), .7); c.fill();
+      hdSpec(c, 6, -6.5, 6, 1.5, .05, .85);
+      hdSpec(c, -13, -7.5, 8, 1.7, .16, .85); hdSpec(c, -22, -3 + w * .5, 3, 1.1, .5, .7);
+      for (const sg of [-1, 1]) hdEye(c, 27.6, sg * 10.4, 3.3, [1, sg * .1]);
+      crownTop(c, 13, 0, 6.2);
+      break;
+    }
   }
   c.restore();
 }
 
 // ---------- plants: side view, base at x,y ----------
+// Levels 1..3 differ by count, size and gold accents, so they read at a glance.
+// At s = 1 every plant of any level stays inside x -36..36, y -72..12 around its base point.
+const GOLD = '#ffc928';
+const LVL_K = [1, 1.1, 1.2];
 function rosette(c, x, y, r, col) {
   hdBall(c, x, y, r, r * .92, col);
   c.save(); c.strokeStyle = alpha(darken(col, .35), .85); c.lineWidth = 1.2; c.beginPath();
@@ -275,78 +512,258 @@ function rosette(c, x, y, r, col) {
 function bushBase(c, col, w = 1) {
   for (const [dx, dy, r] of [[-9, -9, 9], [9, -10, 9], [0, -6, 10], [-5, -18, 9.5], [6, -19, 9.5], [0, -26, 8]]) hdBall(c, dx * w, dy, r * w, r, dy < -15 ? lighten(col, .08) : col, { specA: .4 });
 }
+function bush(c, col, u) { c.save(); c.scale(u, u); bushBase(c, col); c.restore(); }
+function sparkle(c, x, y, r, col = '#fff3a8') {
+  c.save(); c.beginPath(); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4, q = i % 2 ? r * .32 : r; c.lineTo(x + Math.cos(a) * q, y + Math.sin(a) * q); } c.closePath();
+  c.fillStyle = col; c.fill(); c.lineWidth = .7; c.strokeStyle = 'rgba(140,90,10,.65)'; c.stroke(); c.restore();
+}
+function snowflake(c, x, y, r) {
+  for (const [col, w] of [['#3f9fd2', 3.4], ['#ffffff', 1.7]]) {
+    c.save(); c.strokeStyle = col; c.lineWidth = w; c.lineCap = 'round';
+    for (let i = 0; i < 3; i++) { const a = i * Math.PI / 3; c.beginPath(); c.moveTo(x - Math.cos(a) * r, y - Math.sin(a) * r); c.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); c.stroke(); }
+    c.restore();
+  }
+}
+function iceCrystal(c, x, y, u) {
+  c.save(); c.translate(x, y); c.scale(u, u);
+  c.beginPath(); c.moveTo(0, -8); c.lineTo(4.8, -2.5); c.lineTo(0, 7); c.lineTo(-4.8, -2.5); c.closePath();
+  const g = c.createLinearGradient(-4, -8, 4, 7); g.addColorStop(0, '#ffffff'); g.addColorStop(.5, '#bfeaff'); g.addColorStop(1, '#5fbcf0'); c.fillStyle = g; c.fill();
+  c.lineJoin = 'round'; c.lineWidth = 1.3; c.strokeStyle = '#2f86bd'; c.stroke();
+  c.beginPath(); c.moveTo(-4.8, -2.5); c.lineTo(4.8, -2.5); c.moveTo(-1.6, -2.5); c.lineTo(0, 7); c.moveTo(1.6, -2.5); c.lineTo(0, -8); c.strokeStyle = 'rgba(255,255,255,.85)'; c.lineWidth = .8; c.stroke();
+  c.restore();
+}
+function healCross(c, x, y, u, glow) {
+  c.save(); c.translate(x, y);
+  if (glow) { const g = c.createRadialGradient(0, 0, 1, 0, 0, 8.5 * u); g.addColorStop(0, 'rgba(255,255,255,.85)'); g.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = g; c.beginPath(); c.arc(0, 0, 8.5 * u, 0, TAU); c.fill(); }
+  c.scale(u, u); c.fillStyle = '#ffffff'; c.strokeStyle = glow ? '#d0343c' : '#3f9a5a'; c.lineWidth = 1.5; c.lineJoin = 'round';
+  c.beginPath(); rrect(c, -1.8, -5, 3.6, 10, 1.4); rrect(c, -5, -1.8, 10, 3.6, 1.4); c.stroke(); c.fill();
+  if (glow) { c.fillStyle = '#ff5a5f'; c.beginPath(); rrect(c, -.9, -4, 1.8, 8, .8); rrect(c, -4, -.9, 8, 1.8, .8); c.fill(); }
+  c.restore();
+}
+function pumpkinOne(c, x, u, o = {}) {
+  c.save(); c.translate(x, 0); c.scale(u, u);
+  const [a, b, m] = o.rich ? ['#dd6410', '#f17c1a', '#ff9a2a'] : ['#e2771a', '#f08a24', '#f7a23a'];
+  if (!o.bare) { hdLeaf(c, -4, -16, 14, -2.5, '#4fae3a'); hdLeaf(c, 4, -18, 12, -.6, '#5fbf45'); }
+  hdBall(c, -11, -11, 9, 10, a, { specA: .5 }); hdBall(c, 11, -11, 9, 10, a, { specA: .5 });
+  hdBall(c, -5, -11, 9, 11, b, { specA: .6 }); hdBall(c, 5, -11, 9, 11, b, { specA: .6 });
+  hdBall(c, 0, -11, 8, 11.5, m);
+  c.save(); c.strokeStyle = 'rgba(150,60,10,.55)'; c.lineWidth = 1.3; c.lineCap = 'round';
+  for (const dx of [-3.5, 3.5]) { c.beginPath(); c.moveTo(dx * .6, -21); c.quadraticCurveTo(dx * 1.4, -11, dx * .6, -1); c.stroke(); }
+  c.restore();
+  hdSpec(c, -4, -17, 2.4, 4.5, .2, .8);
+  if (o.face) {
+    // friendly carved face with a warm light inside
+    c.save();
+    const h = c.createRadialGradient(0, -11, 1, 0, -11, 11.5); h.addColorStop(0, 'rgba(255,238,130,.6)'); h.addColorStop(1, 'rgba(255,238,130,0)'); c.fillStyle = h; c.beginPath(); c.arc(0, -11, 11.5, 0, TAU); c.fill();
+    const g = c.createLinearGradient(0, -18, 0, -2); g.addColorStop(0, '#fffbb0'); g.addColorStop(1, '#ffb01a'); c.fillStyle = g; c.strokeStyle = '#743004'; c.lineWidth = 1.25; c.lineJoin = 'round';
+    for (const sg of [-1, 1]) { c.beginPath(); c.moveTo(sg * 3, -12.4); c.lineTo(sg * 10, -12.8); c.lineTo(sg * 6.6, -18.4); c.closePath(); c.fill(); c.stroke(); }
+    c.beginPath(); c.moveTo(-11, -9); c.quadraticCurveTo(0, -5.5, 11, -9); c.quadraticCurveTo(0, 3.5, -11, -9); c.closePath(); c.fill(); c.stroke();
+    c.fillStyle = m; c.beginPath(); c.rect(-3.4, -8, 3.2, 2.8); c.rect(2.2, -3.7, 3, 2.6); c.fill(); c.stroke();
+    c.restore();
+  }
+  if (o.crown) for (const [an, l] of [[-2.8, 11], [-.34, 11], [-2.25, 10], [-.9, 10]]) hdLeaf(c, 0, -21, l, an, '#74d44c', { w: .5 });
+  hdBlob(c, cc => { cc.moveTo(-2, -21); cc.quadraticCurveTo(-3, -28, 3, -30); cc.lineTo(4, -27); cc.quadraticCurveTo(1, -26, 2, -21); cc.closePath(); }, '#7a5a2a', 1, -25, 5);
+  if (!o.crown && !o.bare) hdCurve(c, [3, -27, 12, -34, 9, -26], '#5aa53e', 1.4);
+  c.restore();
+}
+// One flytrap head: hinge at (x, y), mouth towards ang.
+function trapHead(c, x, y, ang, u, shut, lip) {
+  const G1 = '#6cc44a';
+  c.save(); c.translate(x, y); c.rotate(ang); c.scale(u, u);
+  if (shut) {
+    hdBlob(c, cc => { cc.moveTo(-1, 0); cc.bezierCurveTo(-3, -14, 21, -13.5, 23, 0); cc.bezierCurveTo(21, 13.5, -3, 14, -1, 0); }, G1, 10, 0, 14);
+    hdBall(c, 8, 5.5, 4.4, 3.4, lighten(G1, .1), { noSpec: true, olk: .6 }); hdBall(c, 13, -6, 3.6, 2.8, lighten(G1, .1), { noSpec: true, olk: .6 });
+    c.save(); c.beginPath(); c.moveTo(1, 0); for (let i = 0; i < 6; i++) c.lineTo(4 + i * 3.4, i % 2 ? 1.8 : -1.8); c.lineTo(22.4, 0);
+    c.lineJoin = 'round'; c.lineCap = 'round'; c.lineWidth = 3.6; c.strokeStyle = lip; c.stroke(); c.lineWidth = 1.3; c.strokeStyle = '#fff6d8'; c.stroke(); c.restore();
+    hdSpec(c, 6, -7.5, 4.5, 1.6, -.15, .9);
+  } else {
+    const open = .52;
+    c.save(); c.beginPath(); c.moveTo(0, 0); c.arc(0, 0, 18, -open, open); c.closePath();
+    const g = c.createRadialGradient(2, 0, 1, 2, 0, 20); g.addColorStop(0, '#8c1238'); g.addColorStop(.55, '#e23a66'); g.addColorStop(1, '#ff86a2'); c.fillStyle = g; c.fill(); c.restore();
+    for (const sg of [-1, 1]) {
+      c.save(); c.rotate(sg * open);
+      hdBlob(c, cc => { cc.moveTo(-1.5, 0); cc.bezierCurveTo(-3, sg * 13.5, 20, sg * 13, 22.5, 0); cc.closePath(); }, G1, 10, sg * 5, 13);
+      c.fillStyle = '#fff6d8'; c.strokeStyle = '#8a7a4a'; c.lineWidth = .7; c.lineJoin = 'round';
+      for (let i = 0; i < 5; i++) { const tx = 4.5 + i * 3.9; c.beginPath(); c.moveTo(tx - 1.6, 0); c.lineTo(tx, -sg * 4.6); c.lineTo(tx + 1.6, 0); c.closePath(); c.fill(); c.stroke(); }
+      hdLine(c, [.5, 0, 21.5, 0], lip, 2.8);
+      for (const [px, py, r] of [[6, 6.2, 1.3], [12, 7.4, 1.5], [17, 4.6, 1.1]]) { c.beginPath(); c.arc(px, sg * py, r, 0, TAU); c.fillStyle = alpha(darken(G1, .35), .55); c.fill(); }
+      if (sg < 0) hdSpec(c, 8, -8.6, 4.5, 1.4, -.1, .85);
+      c.restore();
+    }
+  }
+  c.restore();
+}
+// One hanging bell: top at (x, y), opening down.
+function bellOne(c, x, y, u, rot, gold) {
+  const col = gold ? '#6f5cf0' : '#7f74f4';
+  const rim = cc => { cc.moveTo(-7.8, 12); cc.quadraticCurveTo(-4.4, 10.2, -2.6, 13.6); cc.quadraticCurveTo(0, 11.4, 2.6, 13.6); cc.quadraticCurveTo(4.4, 10.2, 7.8, 12); };
+  c.save(); c.translate(x, y); c.rotate(rot); c.scale(u, u);
+  hdLine(c, [0, 10, 0, 15], '#c98a10', 1.6); hdBall(c, 0, 15.6, 1.9, 1.9, '#ffd84a', { noSpec: true, olk: .6, noBounce: true });
+  hdBlob(c, cc => { rim(cc); cc.bezierCurveTo(5, 7.5, 4.4, 2, 2.6, 0); cc.lineTo(-2.6, 0); cc.bezierCurveTo(-4.4, 2, -5, 7.5, -7.8, 12); }, col, 0, 6, 10);
+  c.save(); c.beginPath(); rim(c); c.lineCap = 'round'; c.lineJoin = 'round';
+  if (gold) { c.lineWidth = 3; c.strokeStyle = '#8a5a10'; c.stroke(); c.lineWidth = 1.7; c.strokeStyle = GOLD; c.stroke(); } else { c.lineWidth = 1.2; c.strokeStyle = alpha(lighten(col, .55), .9); c.stroke(); }
+  c.restore();
+  hdSpec(c, -2.2, 4.5, 1.1, 3, .25, .9);
+  hdBall(c, 0, -.4, 3, 1.9, '#4fae3a', { noSpec: true, olk: .7, noBounce: true });
+  c.restore();
+}
+function tinyNote(c, x, y, u) {
+  c.save(); c.translate(x, y); c.scale(u, u); c.lineCap = 'round'; c.lineJoin = 'round';
+  for (const [col, w, g] of [['#8a5a10', 2.6, .8], [GOLD, 1.3, 0]]) {
+    c.strokeStyle = col; c.fillStyle = col; c.lineWidth = w;
+    c.beginPath(); c.moveTo(1.6, 2); c.lineTo(1.6, -5); c.lineTo(5, -3.6); c.stroke();
+    c.beginPath(); c.ellipse(0, 2.2, 2 + g, 1.5 + g, -.3, 0, TAU); c.fill();
+  }
+  c.restore();
+}
+// o: { lvl: 1..3 (0 or none = 1), stage: 0 | 1 for a freshly planted or regrowing sprout, frame: 0 | 1, noShadow }.
 function hdPlant(c, kind, x, y, s = 1, o = {}) {
-  c.save(); c.translate(x, y); if (!o.noShadow) hdShadow(c, 0, 1, 15 * s, 5 * s); c.scale(s, s);
-  const G = '#4fae3a';
+  const L = Math.max(1, Math.min(3, o.lvl | 0)), young = o.stage === 0 || o.stage === 1, k = young ? 1 : LVL_K[L - 1];
+  c.save(); c.translate(x, y); if (!o.noShadow) hdShadow(c, 0, 1, 15 * s * k, 5 * s * k); c.scale(s * k, s * k);
   if (o.stage === 0) { hdBall(c, 0, -3, 10, 5, '#8a5a34', { specA: .3 }); hdLeaf(c, 0, -6, 8, -2.3, '#7fd05a'); hdLeaf(c, 0, -6, 8, -.8, '#5fbf45'); c.restore(); return; }
   if (o.stage === 1) { hdLine(c, [0, 0, 0, -12], '#4a9a32', 2.6); hdLeaf(c, 0, -11, 12, -2.6, '#5fbf45'); hdLeaf(c, 0, -11, 12, -.5, '#7fd05a'); c.restore(); return; }
   switch (kind) {
-    case 'rose': {
-      bushBase(c, '#3f9a36');
-      for (const [dx, dy, a] of [[-14, -8, 3.3], [14, -10, -.1], [-12, -22, 3.6], [13, -24, -.4]]) hdLeaf(c, dx * .6, dy, 9, a, '#56b346');
-      rosette(c, -7, -17, 6, '#ec3a5c'); rosette(c, 7, -22, 6.5, '#f24d6e'); rosette(c, 1, -9, 5.5, '#e0304f');
-      // thorn launcher bud
-      hdBlob(c, cc => { cc.moveTo(9, -10); cc.lineTo(19, -12); cc.lineTo(10, -15); cc.closePath(); }, '#f6e6b0', 14, -12, 6);
+    case 'pumpkin': {
+      if (L === 1) pumpkinOne(c, 0, .78);
+      else if (L === 2) { pumpkinOne(c, -5, .93); pumpkinOne(c, 13.5, .5, { bare: true }); }
+      else { pumpkinOne(c, 0, 1.06, { face: true, crown: true, rich: true }); }
       break;
     }
-    case 'pumpkin': {
-      hdLeaf(c, -4, -16, 14, -2.5, '#4fae3a'); hdLeaf(c, 4, -18, 12, -.6, '#5fbf45');
-      hdBall(c, -11, -11, 9, 10, '#e2771a', { specA: .5 }); hdBall(c, 11, -11, 9, 10, '#e2771a', { specA: .5 });
-      hdBall(c, -5, -11, 9, 11, '#f08a24', { specA: .6 }); hdBall(c, 5, -11, 9, 11, '#f08a24', { specA: .6 });
-      hdBall(c, 0, -11, 8, 11.5, '#f7a23a');
-      hdBlob(c, cc => { cc.moveTo(-2, -21); cc.quadraticCurveTo(-3, -28, 3, -30); cc.lineTo(4, -27); cc.quadraticCurveTo(1, -26, 2, -21); cc.closePath(); }, '#7a5a2a', 1, -25, 5);
-      hdCurve(c, [3, -27, 12, -34, 9, -26], '#5aa53e', 1.4);
+    case 'rose': {
+      const bu = [.72, .92, 1.06][L - 1], red = L === 3 ? '#cc1440' : '#ee3d60';
+      bush(c, L === 3 ? '#37902f' : '#3f9a36', bu);
+      for (const [dx, dy, a] of [[-14, -8, 3.3], [14, -10, -.1], [-12, -22, 3.6], [13, -24, -.4]]) hdLeaf(c, dx * .6 * bu, dy * bu, 9 * bu, a, '#56b346');
+      if (L > 1) for (const [tx, ty, a] of [[-17, -8, 3.3], [17, -9, -.15], [-14, -21, 3.75], [15, -22, -.6]].concat(L === 3 ? [[-8, -31, 4.1], [9, -32, -1]] : [])) {
+        c.save(); c.translate(tx * bu, ty * bu); c.rotate(a); hdBlob(c, cc => { cc.moveTo(0, -1.9); cc.lineTo(5, 0); cc.lineTo(0, 1.9); cc.closePath(); }, '#fff0b8', 2, 0, 4, { olk: .45 }); c.restore();
+      }
+      for (const [lx, ly, sg, u] of [[[9, -9, 1, .85]], [[14, -12, 1, 1]], [[16, -13, 1, 1.15], [-16, -15, -1, 1.15]]][L - 1]) {
+        c.save(); c.translate(lx, ly); c.scale(sg * u, u); c.rotate(-.18);
+        hdBlob(c, cc => { cc.moveTo(0, -3.6); cc.quadraticCurveTo(5, -3.2, 10, 0); cc.quadraticCurveTo(5, 3.2, 0, 3.6); cc.closePath(); }, L === 3 ? '#ffd95a' : '#f6e6b0', 4, 0, 6, { olk: .7 });
+        hdBall(c, -.5, 0, 2.6, 3.4, '#3f8f2c', { noSpec: true, olk: .7, noBounce: true }); c.restore();
+      }
+      for (const [bx, by, r] of [[[0, -17, 8]], [[-8, -15, 7.6], [7, -24, 8]], [[-10, -17, 8.4], [10, -20, 8.4], [0, -32, 9]]][L - 1]) {
+        rosette(c, bx, by, r, red);
+        if (L === 3) hdBall(c, bx, by, r * .26, r * .26, GOLD, { olk: .6, noBounce: true });
+      }
+      if (L === 3) { sparkle(c, -17, -30, 3.2, GOLD); sparkle(c, 14, -35, 2.6, GOLD); } else sparkle(c, -12 * bu, -29 * bu, 2.6, '#ffffff');
       break;
     }
     case 'corn': {
-      hdLine(c, [0, 0, 0, -40], '#3f8f2c', 5); hdLine(c, [0, 0, 0, -40], '#6cc04a', 2.5);
-      hdLeaf(c, 0, -6, 22, -2.75, '#4fae3a', { w: .25 }); hdLeaf(c, 0, -12, 22, -.35, '#5fbf45', { w: .25 }); hdLeaf(c, 0, -30, 16, -2.9, '#6cc04a', { w: .25 });
-      c.save(); c.translate(5, -26); c.rotate(.22);
-      hdBall(c, 0, 0, 5.6, 11.5, '#ffd23f', { specA: .3 });
-      for (let i = -3; i <= 3; i++) for (const dx of [-2.4, 0, 2.4]) { c.beginPath(); c.arc(dx, i * 3, 1.15, 0, TAU); c.fillStyle = 'rgba(200,130,10,.55)'; c.fill(); }
-      hdSpec(c, -2.4, -4, 1.4, 4, 0);
-      hdLeaf(c, -1, 9, 13, -1.9, '#8ccf5a', { w: .3 }); hdLeaf(c, 1, 9, 13, -1.25, '#7cc44e', { w: .3 });
-      c.restore();
+      const H = [33, 40, 44][L - 1], rich = L === 3;
+      const cob = (cx, cy, rot, len) => {
+        const q = len / 11.5; c.save(); c.translate(cx, cy); c.rotate(rot);
+        if (rich) for (const dx of [-1, 0, 1]) hdCurve(c, [0, -len + 1, dx * 2, -len - 3, dx * 3.4, -len - 6], '#ffe07a', 1.4);
+        hdBall(c, 0, 0, 5.6 * q, len, rich ? '#ffc21a' : '#ffd23f', { specA: .3 });
+        for (let i = -3; i <= 3; i++) for (const dx of [-2.4, 0, 2.4]) { c.beginPath(); c.arc(dx * q, i * 3 * q, 1.15 * q, 0, TAU); c.fillStyle = 'rgba(200,130,10,.55)'; c.fill(); }
+        hdSpec(c, -2.4 * q, -4 * q, 1.4 * q, 4 * q, 0);
+        hdLeaf(c, -1, len - 2.5, 13 * q, -1.9, '#8ccf5a', { w: .3 }); hdLeaf(c, 1, len - 2.5, 13 * q, -1.25, '#7cc44e', { w: .3 });
+        c.restore();
+      };
+      hdLine(c, [0, 0, 0, -H], '#3f8f2c', 5); hdLine(c, [0, 0, 0, -H], '#6cc04a', 2.5);
+      hdLeaf(c, 0, -6, 19 + L * 1.5, -2.75, '#4fae3a', { w: .25 }); hdLeaf(c, 0, -12, 19 + L * 1.5, -.35, '#5fbf45', { w: .25 });
+      if (L < 3) { hdLeaf(c, 0, -H + 3, 13, -2.25, '#6cc04a', { w: .28 }); hdLeaf(c, 0, -H + 3, 13, -.9, '#6cc04a', { w: .28 }); }
+      if (L === 1) cob(5, -21, .22, 10.5);
+      else if (L === 2) { cob(-6.5, -27, -.26, 10.5); cob(6.5, -21, .26, 11.5); }
+      else { cob(0, -40, 0, 11); cob(-8, -26, -.32, 11.5); cob(8, -21, .32, 11.5); sparkle(c, -13, -43, 3, GOLD); sparkle(c, 15, -37, 2.4, GOLD); }
       break;
     }
     case 'pepper': {
-      bushBase(c, '#3f9a36', .95);
-      for (const [dx, dy, r] of [[-8, -10, .35], [6, -12, -.3], [-1, -20, .1], [10, -22, -.5]]) {
-        c.save(); c.translate(dx, dy); c.rotate(r);
-        hdBlob(c, cc => { cc.moveTo(-3.6, -2); cc.bezierCurveTo(-5, 6, -1, 12, 1.5, 14); cc.bezierCurveTo(4, 8, 4.5, 3, 3.6, -2); cc.closePath(); }, '#ee3a24', 0, 5, 7);
+      const bu = [.72, .92, 1.06][L - 1];
+      bush(c, '#3f9a36', bu);
+      const pep = (dx, dy, r, u, flame) => {
+        c.save(); c.translate(dx, dy); c.rotate(r); c.scale(u, u);
+        if (flame) {
+          hdBlob(c, cc => { cc.moveTo(-2.6, 12.5); cc.bezierCurveTo(-4.4, 16, -.5, 17.5, 1.5, 22.5); cc.bezierCurveTo(3, 18.5, 5.6, 16, 3.6, 12.5); cc.closePath(); }, '#ff8a14', 1, 16, 6, { olk: .7 });
+          c.beginPath(); c.moveTo(-.4, 13.5); c.quadraticCurveTo(-.4, 16.5, 1.4, 19); c.quadraticCurveTo(2.6, 16, 2, 13.5); c.closePath(); c.fillStyle = '#fff07a'; c.fill();
+        }
+        hdBlob(c, cc => { cc.moveTo(-3.6, -2); cc.bezierCurveTo(-5, 6, -1, 12, 1.5, 14); cc.bezierCurveTo(4, 8, 4.5, 3, 3.6, -2); cc.closePath(); }, flame ? '#e3261c' : '#ee3a24', 0, 5, 7);
         hdSpec(c, -1.4, 3, 1.1, 4, 0); hdBall(c, 0, -2.5, 3.6, 2, '#3f8f2c', { noSpec: true, olk: .7 });
         c.restore();
-      }
+      };
+      if (L === 1) pep(-1, -17, .12, 1.2);
+      else if (L === 2) { pep(-9, -12, .38, 1.05); pep(8, -14, -.32, 1.05); pep(-1, -24, .08, 1.05); }
+      else { pep(-11, -13, Math.PI - .5, 1.15, true); pep(11, -13, Math.PI + .5, 1.15, true); pep(-4.5, -21, Math.PI - .2, 1.3, true); pep(5.5, -22, Math.PI + .22, 1.3, true); }
+      if (L < 3) sparkle(c, -12 * bu, -29 * bu, 2.6, '#ffffff');
       break;
     }
     case 'mint': {
-      c.save(); const g = c.createRadialGradient(0, -10, 2, 0, -10, 30); g.addColorStop(0, 'rgba(190,245,255,.55)'); g.addColorStop(1, 'rgba(190,245,255,0)'); c.fillStyle = g; c.beginPath(); c.arc(0, -10, 30, 0, TAU); c.fill(); c.restore();
-      for (const [dx, dy, a, l] of [[-2, -2, -2.7, 15], [2, -2, -.45, 15], [-2, -10, -2.2, 14], [2, -11, -.95, 14], [0, -14, -1.57, 13]]) hdLeaf(c, dx, dy, l, a, a === -1.57 ? '#a6efd6' : '#72d6b4', { w: .55 });
-      for (const [dx, dy, r] of [[-13, -24, 3.5], [13, -22, 3], [0, -31, 4]]) { c.save(); c.strokeStyle = '#ffffff'; c.lineWidth = 1.5; c.lineCap = 'round'; for (let i = 0; i < 3; i++) { const aa = i * Math.PI / 3; c.beginPath(); c.moveTo(dx - Math.cos(aa) * r, dy - Math.sin(aa) * r); c.lineTo(dx + Math.cos(aa) * r, dy + Math.sin(aa) * r); c.stroke(); } c.restore(); }
+      const gr = [20, 23, 25][L - 1], gy = [-10, -13, -18][L - 1];
+      c.save(); const g = c.createRadialGradient(0, gy, 2, 0, gy, gr); g.addColorStop(0, 'rgba(190,245,255,.6)'); g.addColorStop(1, 'rgba(190,245,255,0)'); c.fillStyle = g; c.beginPath(); c.arc(0, gy, gr, 0, TAU); c.fill(); c.restore();
+      const leaves = [
+        [[-2, -2, -2.55, 15], [2, -2, -.6, 15], [0, -5, -1.57, 15]],
+        [[-2, -2, -2.7, 15], [2, -2, -.45, 15], [-2, -10, -2.2, 14], [2, -11, -.95, 14], [0, -14, -1.57, 13]],
+        [[-3, -1, -2.95, 18], [3, -1, -.2, 18], [-2, -5, -2.5, 18], [2, -5, -.65, 18], [-2, -13, -2.1, 17], [2, -13, -1.05, 17], [0, -17, -1.57, 15]],
+      ][L - 1];
+      for (const [dx, dy, a, l] of leaves) hdLeaf(c, dx, dy, l, a, a === -1.57 ? '#a6efd6' : L === 3 && dy > -10 ? '#55c9a2' : '#72d6b4', { w: .55 });
+      if (L === 1) snowflake(c, 9, -24, 4);
+      else if (L === 2) { snowflake(c, -13, -26, 4); snowflake(c, 13, -25, 4); }
+      else { iceCrystal(c, 0, -38, 1.05); snowflake(c, -19, -27, 4.2); snowflake(c, 19, -26, 4.2); snowflake(c, 11, -41, 3.4); }
       break;
     }
     case 'aloe': {
-      // thick pointed leaves in a fan, pale spots on them, a healing sparkle on top
-      const leaf = (ang, len, col) => {
+      // thick pointed leaves in a fan with pale spots; the healing cross grows with the level
+      const leaf = (ang, len, col, w = 4.6) => {
         c.save(); c.translate(0, -3); c.rotate(ang);
-        hdBlob(c, cc => { cc.moveTo(-4.6, 0); cc.quadraticCurveTo(-5, -len * .55, 0, -len); cc.quadraticCurveTo(5, -len * .55, 4.6, 0); cc.closePath(); }, col, 0, -len * .45, len * .6);
+        hdBlob(c, cc => { cc.moveTo(-w, 0); cc.quadraticCurveTo(-w - .4, -len * .55, 0, -len); cc.quadraticCurveTo(w + .4, -len * .55, w, 0); cc.closePath(); }, col, 0, -len * .45, len * .6);
         for (const t of [.25, .45, .65]) { c.beginPath(); c.arc(t > .4 && t < .5 ? 1.4 : -1.2, -len * t, 1.05, 0, TAU); c.fillStyle = 'rgba(235,255,225,.8)'; c.fill(); }
         c.restore();
       };
-      leaf(-1.25, 19, '#3f9f6a'); leaf(1.25, 19, '#3f9f6a'); leaf(-.68, 25, '#4bb478'); leaf(.68, 25, '#4bb478'); leaf(0, 30, '#62c98a');
+      if (L === 1) { leaf(-.85, 17, '#3f9f6a'); leaf(.85, 17, '#3f9f6a'); leaf(0, 23, '#62c98a'); }
+      else if (L === 2) { leaf(-1.25, 19, '#3f9f6a'); leaf(1.25, 19, '#3f9f6a'); leaf(-.68, 25, '#4bb478'); leaf(.68, 25, '#4bb478'); leaf(0, 30, '#62c98a'); }
+      else { leaf(-1.32, 22, '#35966a', 5.6); leaf(1.32, 22, '#35966a', 5.6); leaf(-.72, 29, '#45b078', 5.6); leaf(.72, 29, '#45b078', 5.6); leaf(0, 26, '#62c98a', 5.6); }
       hdBall(c, 0, -3, 7, 4, '#3a8f5e', { noSpec: true, olk: .7 });
-      c.save(); c.translate(11, -31); c.fillStyle = '#ffffff'; c.strokeStyle = '#3f9a5a'; c.lineWidth = 1.3; c.beginPath(); rrect(c, -1.8, -5, 3.6, 10, 1.4); rrect(c, -5, -1.8, 10, 3.6, 1.4); c.stroke(); c.fill(); c.restore();
+      if (L === 3) {
+        // flower spike
+        hdCurve(c, [0, -10, 2.5, -30, 0, -50], '#7a3a1c', 4); hdCurve(c, [0, -10, 2.5, -30, 0, -50], '#d98a4a', 2.2);
+        for (let i = 0; i < 8; i++) { const sd = i % 2 ? 1 : -1, fy = -35 - i * 2.4; hdBall(c, .8 + sd * (3.4 - i * .22), fy, 2.1, 3.5, i > 5 ? '#ffb23a' : i > 2 ? '#ff7a2a' : '#f2482a', { rot: sd * -.55, olk: .65, noSpec: i % 3 > 0, noBounce: true }); }
+        hdBall(c, .4, -55.5, 1.9, 2.6, '#ffc94a', { olk: .65, noBounce: true });
+      }
+      if (L === 1) healCross(c, 9.5, -25, .8); else if (L === 2) healCross(c, 12, -32, 1.05); else healCross(c, 16, -35, 1.5, true);
       break;
     }
     case 'dandelion': {
-      hdLine(c, [0, 0, 0, -30], '#4a9a32', 2.4); hdLeaf(c, 0, -2, 15, -2.8, '#4fae3a', { w: .25 }); hdLeaf(c, 0, -2, 15, -.35, '#5fbf45', { w: .25 });
-      c.save(); const g = c.createRadialGradient(0, -36, 1, 0, -36, 15); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(.6, 'rgba(255,255,255,.85)'); g.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = g; c.beginPath(); c.arc(0, -36, 15, 0, TAU); c.fill();
-      for (let i = 0; i < 26; i++) { const a = i / 26 * TAU; c.beginPath(); c.moveTo(0, -36); c.lineTo(Math.cos(a) * 11, -36 + Math.sin(a) * 11); c.strokeStyle = 'rgba(210,205,190,.9)'; c.lineWidth = .8; c.stroke(); c.beginPath(); c.arc(Math.cos(a) * 11.5, -36 + Math.sin(a) * 11.5, 1.2, 0, TAU); c.fillStyle = '#ffffff'; c.fill(); }
-      c.restore(); hdBall(c, 0, -36, 3, 3, '#cdbf90', { noSpec: true, olk: .6 });
+      const head = (hx, hy, r, gold) => {
+        c.save(); const q = r * 1.28, g = c.createRadialGradient(hx, hy, 1, hx, hy, q); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(.6, gold ? 'rgba(255,248,214,.88)' : 'rgba(255,255,255,.85)'); g.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = g; c.beginPath(); c.arc(hx, hy, q, 0, TAU); c.fill();
+        for (let i = 0; i < 24; i++) { const a = i / 24 * TAU; c.beginPath(); c.moveTo(hx, hy); c.lineTo(hx + Math.cos(a) * r * .95, hy + Math.sin(a) * r * .95); c.strokeStyle = gold ? 'rgba(214,170,70,.9)' : 'rgba(210,205,190,.9)'; c.lineWidth = .8; c.stroke(); c.beginPath(); c.arc(hx + Math.cos(a) * r, hy + Math.sin(a) * r, 1.2, 0, TAU); c.fillStyle = '#ffffff'; c.fill(); }
+        c.restore();
+        if (gold) hdBall(c, hx, hy, r * .4, r * .4, GOLD, { olk: .7, noBounce: true }); else hdBall(c, hx, hy, 3, 3, '#cdbf90', { noSpec: true, olk: .6 });
+      };
+      const heads = [[[0, -36, 11.5]], [[-10, -29, 10.5], [8, -42, 11.5]], [[-14, -29, 10.5], [14, -32, 10.5], [0, -44, 11.5]]][L - 1];
+      for (const [hx, hy] of heads) hdCurve(c, [0, 0, hx * .15, hy * .6, hx, hy + 5], '#4a9a32', 2.4);
+      hdLeaf(c, 0, -2, 14 + L, -2.8, '#4fae3a', { w: .25 }); hdLeaf(c, 0, -2, 14 + L, -.35, '#5fbf45', { w: .25 });
+      for (const [hx, hy, r] of heads) head(hx, hy, r, L === 3);
+      break;
+    }
+    case 'flytrap': {
+      // open jaws wait for a bug; frame 1 = shut and chewing
+      const shut = o.frame === 1, lip = L === 3 ? '#a8102e' : '#ff5c80';
+      const heads = [
+        [[-4, -21, -.62, .95]],
+        [[9, -10, -.05, .66], [-6, -25, -.72, 1.12]],
+        [[-6, -13, -2.55, .82], [9, -10, 0, .8], [-1, -28, -.9, 1.1]],
+      ][L - 1];
+      for (const [hx, hy] of heads) { hdCurve(c, [0, 0, hx * .1, hy * .7, hx, hy], '#2f6f22', 5); hdCurve(c, [0, 0, hx * .1, hy * .7, hx, hy], '#62b344', 2.8); }
+      hdLeaf(c, 0, -1, 12 + L, -2.9, '#4fae3a', { w: .4 }); hdLeaf(c, 0, -1, 12 + L, -.25, '#5fbf45', { w: .4 });
+      for (const [hx, hy, a, u] of heads) trapHead(c, hx, hy, a, u, shut, lip);
+      break;
+    }
+    case 'bell': {
+      const gold = L === 3;
+      const bells = [
+        [[8, -29, 1.25, -.12]],
+        [[-13, -21, 1, .28], [13, -24, 1, -.25], [0, -37, 1.08, 0]],
+        [[-16, -17, .95, .3], [16, -19, .95, -.3], [-10, -31, 1, .2], [10, -33, 1, -.2], [0, -45, 1.1, 0]],
+      ][L - 1];
+      for (const [bx, by] of bells) { const mx = bx * .25 - Math.sign(bx || -1) * 3, my = by - 9; hdCurve(c, [0, 0, mx, my, bx, by], '#2f6f22', 3.6); hdCurve(c, [0, 0, mx, my, bx, by], '#62b344', 1.8); }
+      hdLeaf(c, 0, -1, 13 + L, -2.85, '#4fae3a', { w: .34 }); hdLeaf(c, 0, -1, 13 + L, -.3, '#5fbf45', { w: .34 });
+      if (L === 1) hdLeaf(c, 0, -4, 11, -2.1, '#5fbf45', { w: .34 });
+      for (const [bx, by, u, r] of bells) bellOne(c, bx, by, u, r, gold);
+      if (L === 1) { sparkle(c, -6, -26, 2.6, GOLD); tinyNote(c, -9, -14, .9); }
+      else if (L === 2) { sparkle(c, -12, -34, 2.6, GOLD); tinyNote(c, 14, -37, .95); sparkle(c, 1, -14, 2.2, GOLD); }
+      else { sparkle(c, -15, -43, 3, GOLD); tinyNote(c, 16, -44, 1.05); sparkle(c, 0, -22, 2.4, GOLD); tinyNote(c, -22, -36, .9); sparkle(c, 23, -35, 2.4, GOLD); }
       break;
     }
   }
-  if (o.lvl) { for (let i = 0; i < o.lvl; i++) { const sx = -(o.lvl - 1) * 5 + i * 10; c.save(); c.beginPath(); star5(sx, 6, 4.6)(c); c.fillStyle = '#ffd23f'; c.fill(); c.lineWidth = 1.2; c.strokeStyle = '#8a5a10'; c.stroke(); c.restore(); } }
   c.restore();
 }
 
@@ -398,15 +815,15 @@ function hdLog(c, x, y, w) {
 
 // ---------- terrain ----------
 function hdGrass(c, o = {}) {
-  const base = o.base || ['#97d968', '#72c24a'];
+  const base = o.base || T.grass;
   const g = c.createLinearGradient(0, 0, 0, LH); g.addColorStop(0, base[0]); g.addColorStop(1, base[1]); c.fillStyle = g; c.fillRect(0, 0, LW, LH);
   const R = rng(o.seed ?? 5);
-  for (let i = 0; i < 26; i++) { const x = R() * LW, y = R() * LH, r = 30 + R() * 70, light = R() > .5; const gg = c.createRadialGradient(x, y, 1, x, y, r); gg.addColorStop(0, light ? 'rgba(230,255,170,.22)' : 'rgba(40,110,30,.16)'); gg.addColorStop(1, 'rgba(0,0,0,0)'); c.fillStyle = gg; c.fillRect(x - r, y - r, r * 2, r * 2); }
+  for (let i = 0; i < 26; i++) { const x = R() * LW, y = R() * LH, r = 30 + R() * 70, light = R() > .5; const gg = c.createRadialGradient(x, y, 1, x, y, r); gg.addColorStop(0, light ? `rgba(${T.patch[0]},${T.patchA[0]})` : `rgba(${T.patch[1]},${T.patchA[1]})`); gg.addColorStop(1, 'rgba(0,0,0,0)'); c.fillStyle = gg; c.fillRect(x - r, y - r, r * 2, r * 2); }
   c.save(); c.lineCap = 'round';
-  for (let i = 0; i < 2600; i++) { const x = R() * LW, y = R() * LH, l = 3 + R() * 5, k = R(); c.strokeStyle = k < .45 ? 'rgba(50,120,30,.45)' : k < .8 ? 'rgba(170,230,110,.5)' : 'rgba(110,190,70,.6)'; c.lineWidth = 1.1; c.beginPath(); c.moveTo(x, y); c.lineTo(x + (R() - .5) * 3, y - l); c.stroke(); }
+  for (let i = 0; i < 2600; i++) { const x = R() * LW, y = R() * LH, l = 3 + R() * 5, k = R(); c.strokeStyle = k < .45 ? T.blades[0] : k < .8 ? T.blades[1] : T.blades[2]; c.lineWidth = 1.1; c.beginPath(); c.moveTo(x, y); c.lineTo(x + (R() - .5) * 3, y - l); c.stroke(); }
   c.restore();
   // little flowers and clover patches
-  for (let i = 0; i < 34; i++) { const x = R() * LW, y = R() * LH, col = ['#ffffff', '#ffe0f0', '#fff3a0', '#d8e8ff'][i % 4]; for (let k = 0; k < 5; k++) { const a = k / 5 * TAU + R(); c.beginPath(); c.ellipse(x + Math.cos(a) * 2.6, y + Math.sin(a) * 2.6, 2.3, 1.6, a, 0, TAU); c.fillStyle = col; c.fill(); } c.beginPath(); c.arc(x, y, 1.5, 0, TAU); c.fillStyle = '#ffcf3a'; c.fill(); }
+  for (let i = 0; i < T.flowerN; i++) { const x = R() * LW, y = R() * LH, col = T.flowers[i % T.flowers.length]; for (let k = 0; k < 5; k++) { const a = k / 5 * TAU + R(); c.beginPath(); c.ellipse(x + Math.cos(a) * 2.6, y + Math.sin(a) * 2.6, 2.3, 1.6, a, 0, TAU); c.fillStyle = col; c.fill(); } c.beginPath(); c.arc(x, y, 1.5, 0, TAU); c.fillStyle = '#ffcf3a'; c.fill(); }
 }
 function hdPath(c, pts, w = 30, seed = 1) {
   c.save(); c.filter = 'blur(4px)'; strokePts(c, pts, w + 12, 'rgba(40,80,20,.35)'); c.restore();
@@ -530,11 +947,11 @@ hdLegs = function (c, xs, len, col, w = 1.7) {
 hdPath = function (c, pts, w = 30, seed = 1) {
   const N = noise1(seed), total = pts.reduce((s, p, i) => i ? s + Math.hypot(p[0] - pts[i - 1][0], p[1] - pts[i - 1][1]) : 0, 0), step = 2.5;
   const stamp = (grow, col, blur) => { c.save(); if (blur) c.filter = `blur(${blur}px)`; c.fillStyle = col; c.beginPath(); for (let d = 0; d <= total; d += step) { const p = along(pts, d / total), r = w / 2 + N(d) * 3.2 + grow; c.moveTo(p.x + r, p.y); c.arc(p.x, p.y, r, 0, TAU); } c.fill(); c.restore(); };
-  if (CAN_BLUR) stamp(9, 'rgba(30,70,15,.30)', 5); else for (const g of [13, 9, 5]) stamp(g, 'rgba(30,70,15,.1)');
-  stamp(3, '#6e4426');
-  stamp(0, '#c08852');
-  if (CAN_BLUR) { c.save(); c.filter = 'blur(6px)'; strokePts(c, pts, w * .55, 'rgba(238,200,145,.8)'); c.restore(); }
-  else for (const k of [.7, .55, .4, .25]) strokePts(c, pts, w * k, 'rgba(238,200,145,.24)');
+  if (CAN_BLUR) stamp(9, `rgba(${T.path.glow},.30)`, 5); else for (const g of [13, 9, 5]) stamp(g, `rgba(${T.path.glow},.1)`);
+  stamp(3, T.path.edge);
+  stamp(0, T.path.fill);
+  if (CAN_BLUR) { c.save(); c.filter = 'blur(6px)'; strokePts(c, pts, w * .55, `rgba(${T.path.mid},.8)`); c.restore(); }
+  else for (const k of [.7, .55, .4, .25]) strokePts(c, pts, w * k, `rgba(${T.path.mid},.24)`);
   for (const off of [-.2, .2]) { const rut = []; for (let d = 0; d <= total; d += 6) { const p = along(pts, d / total); rut.push([p.x - Math.sin(p.a) * w * off, p.y + Math.cos(p.a) * w * off]); } c.save(); if (CAN_BLUR) c.filter = 'blur(1.5px)'; strokePts(c, rut, 2.4, 'rgba(110,65,30,.18)'); c.restore(); }
   const R = rng(seed + 7);
   for (let i = 0; i < total / 3; i++) { const p = along(pts, R()), ox = (R() - .5) * w * .85, oy = (R() - .5) * w * .85; c.beginPath(); c.arc(p.x + ox, p.y + oy, .6 + R() * 1.1, 0, TAU); c.fillStyle = R() > .5 ? 'rgba(100,60,28,.45)' : 'rgba(255,228,180,.55)'; c.fill(); }
@@ -545,7 +962,7 @@ hdPath = function (c, pts, w = 30, seed = 1) {
   for (let i = 0; i < total / 9; i++) {
     const d = R() * total, p = along(pts, d / total), nx = -Math.sin(p.a), ny = Math.cos(p.a), sg = R() > .5 ? 1 : -1, r = w / 2 + N(d) * 3.2 + 2;
     const bx = p.x + nx * sg * r, by = p.y + ny * sg * r;
-    for (let k = 0; k < 3; k++) { const l = 4 + R() * 5, tx = bx - nx * sg * l * .7 + (R() - .5) * 4, ty = by - ny * sg * l * .7 - l * .6; bladeTri(c, bx + (R() - .5) * 4, by, tx, ty, 1.6, k % 2 ? '#4f9e36' : '#79c652'); }
+    for (let k = 0; k < 3; k++) { const l = 4 + R() * 5, tx = bx - nx * sg * l * .7 + (R() - .5) * 4, ty = by - ny * sg * l * .7 - l * .6; bladeTri(c, bx + (R() - .5) * 4, by, tx, ty, 1.6, k % 2 ? T.path.blades[0] : T.path.blades[1]); }
   }
 };
 function bladeTri(c, x0, y0, x1, y1, w, col) {
@@ -559,34 +976,38 @@ const _grass0 = hdGrass;
 hdGrass = function (c, o = {}) {
   _grass0(c, o);
   const R = rng((o.seed ?? 5) + 40);
-  for (let i = 0; i < 26; i++) { const x = R() * LW, y = 40 + R() * (LH - 40); for (let k = 0; k < 3; k++) { const a = -1.57 + (k - 1) * .6 + (R() - .5) * .3; c.save(); c.translate(x + (k - 1) * 3, y); c.rotate(a); hdBlob(c, cc => { cc.moveTo(0, 6); cc.bezierCurveTo(-7, 0, -4, -6, 0, -2); cc.bezierCurveTo(4, -6, 7, 0, 0, 6); }, k === 1 ? '#6fc54c' : '#5bb341', 0, 1, 6, { noOl: true }); c.restore(); } }
-  for (let i = 0; i < 70; i++) { const x = R() * LW, y = 40 + R() * (LH - 40), n = 4 + (R() * 4 | 0); for (let k = 0; k < n; k++) bladeTri(c, x + (k - n / 2) * 2, y, x + (k - n / 2) * 3.4 + (R() - .5) * 3, y - 7 - R() * 7, 1.5, R() > .5 ? '#5aa83e' : '#86d05c'); }
-  for (let i = 0; i < 14; i++) { const x = R() * LW, y = 50 + R() * (LH - 60); for (let k = 0; k < 8; k++) { const a = k / 8 * TAU; c.save(); c.translate(x, y); c.rotate(a); c.beginPath(); c.ellipse(5, 0, 4, 1.8, 0, 0, TAU); c.fillStyle = '#ffffff'; c.fill(); c.lineWidth = .8; c.strokeStyle = 'rgba(120,120,140,.5)'; c.stroke(); c.restore(); } hdBall(c, x, y, 2.6, 2.6, '#ffc72a', { olk: .5, noBounce: true }); }
-  for (let i = 0; i < 9; i++) hdLeaf(c, R() * LW, 50 + R() * (LH - 60), 9, R() * 6, ['#e8b040', '#d47a2c', '#c8542a'][i % 3], { w: .5 });
-  for (let i = 0; i < 4; i++) { const x = R() * LW, y = 60 + R() * (LH - 80); hdBall(c, x, y + 2, 2, 4, '#f4ead6', { noSpec: true, olk: .6 }); hdBlob(c, cc => { cc.ellipse(x, y - 1, 6, 4.5, 0, Math.PI, TAU); cc.closePath(); }, '#c8743a', x, y - 2, 6, { olk: .7 }); }
+  for (let i = 0; i < 26; i++) { const x = R() * LW, y = 40 + R() * (LH - 40); for (let k = 0; k < 3; k++) { const a = -1.57 + (k - 1) * .6 + (R() - .5) * .3; c.save(); c.translate(x + (k - 1) * 3, y); c.rotate(a); hdBlob(c, cc => { cc.moveTo(0, 6); cc.bezierCurveTo(-7, 0, -4, -6, 0, -2); cc.bezierCurveTo(4, -6, 7, 0, 0, 6); }, k === 1 ? T.clover[0] : T.clover[1], 0, 1, 6, { noOl: true }); c.restore(); } }
+  for (let i = 0; i < 70; i++) { const x = R() * LW, y = 40 + R() * (LH - 40), n = 4 + (R() * 4 | 0); for (let k = 0; k < n; k++) bladeTri(c, x + (k - n / 2) * 2, y, x + (k - n / 2) * 3.4 + (R() - .5) * 3, y - 7 - R() * 7, 1.5, R() > .5 ? T.tuft[0] : T.tuft[1]); }
+  for (let i = 0; i < T.daisyN; i++) { const x = R() * LW, y = 50 + R() * (LH - 60); for (let k = 0; k < 8; k++) { const a = k / 8 * TAU; c.save(); c.translate(x, y); c.rotate(a); c.beginPath(); c.ellipse(5, 0, 4, 1.8, 0, 0, TAU); c.fillStyle = '#ffffff'; c.fill(); c.lineWidth = .8; c.strokeStyle = 'rgba(120,120,140,.5)'; c.stroke(); c.restore(); } hdBall(c, x, y, 2.6, 2.6, '#ffc72a', { olk: .5, noBounce: true }); }
+  for (let i = 0; i < T.leafN; i++) hdLeaf(c, R() * LW, 50 + R() * (LH - 60), 9, R() * 6, T.leaves[i % T.leaves.length], { w: .5 });
+  for (let i = 0; i < T.shroomN; i++) { const x = R() * LW, y = 60 + R() * (LH - 80); hdBall(c, x, y + 2, 2, 4, '#f4ead6', { noSpec: true, olk: .6 }); hdBlob(c, cc => { cc.ellipse(x, y - 1, 6, 4.5, 0, Math.PI, TAU); cc.closePath(); }, '#c8743a', x, y - 2, 6, { olk: .7 }); }
+  // theme extras: fallen petals, damp glossy spots
+  const E = rng((o.seed ?? 5) + 90);
+  for (let i = 0; i < T.petalN; i++) { const x = E() * LW, y = 40 + E() * (LH - 40); c.save(); c.translate(x, y); c.rotate(E() * 6); c.beginPath(); c.ellipse(0, 0, 3.2, 1.9, 0, 0, TAU); c.fillStyle = E() > .5 ? '#ffe4ec' : '#ffffff'; c.fill(); c.lineWidth = .7; c.strokeStyle = 'rgba(200,110,130,.55)'; c.stroke(); c.restore(); }
+  for (let i = 0; i < T.dampN; i++) { const x = E() * LW, y = 50 + E() * (LH - 60), r = 9 + E() * 9; c.save(); c.beginPath(); wobbly(c, x, y, r, r * .6, i + 3, .16, 9); c.fillStyle = 'rgba(14,92,110,.3)'; c.fill(); c.lineWidth = 1; c.strokeStyle = 'rgba(200,255,240,.35)'; c.stroke(); c.beginPath(); c.ellipse(x - r * .3, y - r * .18, r * .3, r * .08, -.2, 0, TAU); c.fillStyle = 'rgba(255,255,255,.5)'; c.fill(); c.restore(); }
 };
 
 // Dappled light under unseen trees plus a warm/cool grade.
 function hdDapple(c) {
   c.save(); c.globalCompositeOperation = 'multiply';
-  for (const [x, y, rx, ry] of [[760, 330, 120, 70], [820, 120, 70, 90], [230, 360, 110, 40], [450, 0, 160, 40], [90, 120, 90, 60]]) softBlob(c, x / 844 * LW, y / 390 * LH, rx + 22, ry + 22, .3, '70,110,90', .42);
+  for (const [x, y, rx, ry] of [[760, 330, 120, 70], [820, 120, 70, 90], [230, 360, 110, 40], [450, 0, 160, 40], [90, 120, 90, 60]]) softBlob(c, x / 844 * LW, y / 390 * LH, rx + 22, ry + 22, .3, T.dapple[0], T.dapple[1]);
   c.restore();
   c.save(); c.globalCompositeOperation = 'screen';
-  for (const [x, y, r] of [[330, 140, 34], [520, 260, 40], [690, 190, 28], [180, 270, 30]]) softBlob(c, x / 844 * LW, y / 390 * LH, r + 12, r + 12, 0, '255,250,200', .12);
+  for (const [x, y, r] of [[330, 140, 34], [520, 260, 40], [690, 190, 28], [180, 270, 30]]) softBlob(c, x / 844 * LW, y / 390 * LH, r + 12, r + 12, 0, T.dapple[2], T.dapple[3]);
   c.restore();
 }
 function hdGrade(c) {
-  c.save(); c.globalCompositeOperation = 'soft-light'; const g = c.createLinearGradient(0, 0, LW, LH); g.addColorStop(0, 'rgba(255,225,160,.32)'); g.addColorStop(1, 'rgba(70,120,190,.28)'); c.fillStyle = g; c.fillRect(0, 0, LW, LH); c.restore();
+  c.save(); c.globalCompositeOperation = 'soft-light'; const g = c.createLinearGradient(0, 0, LW, LH); g.addColorStop(0, T.grade[0]); g.addColorStop(1, T.grade[1]); c.fillStyle = g; c.fillRect(0, 0, LW, LH); c.restore();
 }
 
 // Top border: two layers of hedge with flowers and a soft cast shadow.
 hdBorderBushes = function (c, seed = 2) {
   const R = rng(seed);
-  c.save(); const sg = c.createLinearGradient(0, 0, 0, 40); sg.addColorStop(0, 'rgba(20,60,15,.45)'); sg.addColorStop(1, 'rgba(20,60,15,0)'); c.fillStyle = sg; c.fillRect(0, 0, LW, 40); c.restore();
-  for (let x = 40; x < LW + 30; x += 30 + R() * 16) { const r = 18 + R() * 9; hdBall(c, x, -8 + R() * 6, r, r * .75, '#2f7a26', { specA: .25, noBounce: true }); }
-  for (let x = 70; x < LW + 30; x += 36 + R() * 22) { const y = 4 + R() * 6, r = 13 + R() * 7; hdBall(c, x, y, r, r * .78, R() > .5 ? '#45a036' : '#3d952f', { specA: .35 });
-    for (let k = 0; k < 3; k++) hdLeaf(c, x + (R() - .5) * r, y + r * .4, 7 + R() * 4, .8 + R() * 1.5, '#5cb446', { w: .45 });
-    if (R() > .45) { const fx = x + (R() - .5) * r, fy = y + (R() - .5) * 6, col = ['#ff6f91', '#fff07a', '#ffffff', '#b38cff'][(R() * 4) | 0]; for (let k = 0; k < 5; k++) { const a = k / 5 * TAU; hdBall(c, fx + Math.cos(a) * 3.2, fy + Math.sin(a) * 3.2, 2.6, 2.6, col, { noSpec: true, olk: .5, noBounce: true }); } hdBall(c, fx, fy, 1.8, 1.8, '#ffb52a', { noSpec: true, noOl: true }); } }
+  c.save(); const sg = c.createLinearGradient(0, 0, 0, 40); sg.addColorStop(0, `rgba(${T.bush.shade},${T.bush.shadeA})`); sg.addColorStop(1, `rgba(${T.bush.shade},0)`); c.fillStyle = sg; c.fillRect(0, 0, LW, 40); c.restore();
+  for (let x = 40; x < LW + 30; x += 30 + R() * 16) { const r = 18 + R() * 9; hdBall(c, x, -8 + R() * 6, r, r * .75, T.bush.back, { specA: .25, noBounce: true }); }
+  for (let x = 70; x < LW + 30; x += 36 + R() * 22) { const y = 4 + R() * 6, r = 13 + R() * 7; hdBall(c, x, y, r, r * .78, R() > .5 ? T.bush.front[0] : T.bush.front[1], { specA: .35 });
+    for (let k = 0; k < 3; k++) hdLeaf(c, x + (R() - .5) * r, y + r * .4, 7 + R() * 4, .8 + R() * 1.5, T.bush.leaf, { w: .45 });
+    if (R() > .45) { const fx = x + (R() - .5) * r, fy = y + (R() - .5) * 6, col = T.bush.flowers[(R() * T.bush.flowers.length) | 0]; for (let k = 0; k < 5; k++) { const a = k / 5 * TAU; hdBall(c, fx + Math.cos(a) * 3.2, fy + Math.sin(a) * 3.2, 2.6, 2.6, col, { noSpec: true, olk: .5, noBounce: true }); } hdBall(c, fx, fy, 1.8, 1.8, '#ffb52a', { noSpec: true, noOl: true }); } }
 };
 
 // Rock with moss and a crack.
@@ -605,30 +1026,173 @@ function hdSoil(c, x, y) {
   hdBlob(c, cc => cc.ellipse(x, y, 17, 6.5, 0, 0, TAU), '#7a4a28', x, y - 2, 16, { olk: .9 });
   c.save(); c.beginPath(); c.ellipse(x, y, 17, 6.5, 0, 0, TAU); c.clip(); const R = rng(x * 7 + y | 0); for (let i = 0; i < 9; i++) { c.beginPath(); c.arc(x + (R() - .5) * 28, y + (R() - .5) * 9, .8 + R() * 1.4, 0, TAU); c.fillStyle = R() > .5 ? 'rgba(170,110,60,.8)' : 'rgba(60,30,12,.6)'; c.fill(); } c.restore();
 }
-// Plant details on top of the hd.js shapes.
-const _plant0 = hdPlant;
-hdPlant = function (c, kind, x, y, s = 1, o = {}) {
-  if (o.stage === 0 || o.stage === 1) return _plant0(c, kind, x, y, s, o);
-  if (kind === 'rose') { c.save(); c.translate(x, y); c.scale(s, s); for (const [x1, y1] of [[-13, -20], [12, -25], [2, -30]]) { hdCurve(c, [0, 0, x1 * .3, y1 * .6, x1, y1], '#3f6a2a', 2.4); for (let t = .3; t < 1; t += .25) { const px = x1 * t * .9, py = y1 * t; hdLine(c, [px, py, px + 3, py - 1.5], '#6a8a3a', 1.2); } } c.restore(); }
-  _plant0(c, kind, x, y, s, o);
-  c.save(); c.translate(x, y); c.scale(s, s);
-  if (kind === 'pumpkin') {
-    c.strokeStyle = 'rgba(150,60,10,.55)'; c.lineWidth = 1.3; c.lineCap = 'round';
-    for (const dx of [-3.5, 3.5]) { c.beginPath(); c.moveTo(dx * .6, -21); c.quadraticCurveTo(dx * 1.4, -11, dx * .6, -1); c.stroke(); }
-    hdSpec(c, -4, -17, 2.4, 4.5, .2, .8);
-  }
-  if (kind === 'rose' || kind === 'pepper') { fxStar(c, -12, -27, 2.6, '#ffffff'); }
-  if (kind === 'corn') { hdBall(c, -9, -18, 2.4, 2.8, '#bfeaff', { olk: .5 }); }
-  c.restore();
-};
 
 
 
-function hdSun2(c) { c.save(); c.globalCompositeOperation = 'screen'; const g = c.createRadialGradient(80, -40, 10, 80, -40, 480); g.addColorStop(0, 'rgba(255,248,200,.26)'); g.addColorStop(1, 'rgba(255,248,200,0)'); c.fillStyle = g; c.fillRect(0, 0, LW, LH); c.restore(); }
+function hdSun2(c) { c.save(); c.globalCompositeOperation = 'screen'; const g = c.createRadialGradient(80, -40, 10, 80, -40, 480); g.addColorStop(0, `rgba(${T.sun2[0]},${T.sun2[1]})`); g.addColorStop(1, `rgba(${T.sun2[0]},0)`); c.fillStyle = g; c.fillRect(0, 0, LW, LH); c.restore(); }
 function colorPop(c) {
   const cv = c.canvas, off = document.createElement('canvas'); off.width = cv.width; off.height = cv.height;
   const o = off.getContext('2d'); o.filter = 'saturate(1.14) contrast(1.06)'; o.drawImage(cv, 0, 0);
   c.save(); c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(off, 0, 0); c.restore();
 }
 
-export { hdBall, hdBlob, hdLeaf, hdShadow, hdLine, hdCurve, hdEye, hdText, hdBug, hdPlant, hdApple, hdStump, hdAnthill, hdRock, hdLog, hdGrass, hdPath, hdBorderBushes, hdForeground, hdVignette, hdMotes, fxThorn, fxKernel, fxStar, fxHit, fxDmg, fxFrost, fxIced, fxFire, hdDrop, hdHp, uiPanel, uiRound, iconFrost, iconRain, iconBirds, hdSoil, hdDapple, hdGrade, hdSun2, bladeTri, rrect, along, chaikin, rng, lighten, darken, alpha, mix, TAU, star5, strokePts };
+
+// ---------- ground tiles, pond, weeds, web (world units: one cell is 42 x 42, drawn centred) ----------
+function hash2(x, y) { return (Math.imul(Math.round(x) + 977, 73856093) ^ Math.imul(Math.round(y) + 331, 19349663)) >>> 0; }
+// Closed organic outline; sq > 0 pushes it towards a rounded square so a tile fills its cell.
+function wobbly(c, x, y, rx, ry, seed, wob = .1, n = 12, sq = 0) {
+  const R = rng(seed), P = []; R(); R();
+  for (let i = 0; i < n; i++) {
+    const a = i / n * TAU, ca = Math.cos(a), sa = Math.sin(a), q = 1 + (1 / Math.pow(ca ** 4 + sa ** 4, .25) - 1) * sq, k = (1 + (R() - .5) * 2 * wob) * q;
+    P.push([x + ca * rx * k, y + sa * ry * k]);
+  }
+  c.moveTo((P[n - 1][0] + P[0][0]) / 2, (P[n - 1][1] + P[0][1]) / 2);
+  for (let i = 0; i < n; i++) { const p = P[i], q = P[(i + 1) % n]; c.quadraticCurveTo(p[0], p[1], (p[0] + q[0]) / 2, (p[1] + q[1]) / 2); }
+  c.closePath();
+}
+// Flat serrated leaf seen from above.
+function jagLeaf(c, x, y, len, ang, col, o = {}) {
+  const w = o.w ?? .3, n = 5;
+  c.save(); c.translate(x, y); c.rotate(ang); c.beginPath(); c.moveTo(0, 0);
+  for (const sg of [-1, 1]) {
+    for (let i = 1; i <= n * 2; i++) { const j = sg < 0 ? i : n * 2 - i, t = j / (n * 2), hw = Math.sin(Math.PI * Math.pow(t, .8)) * len * w * (j % 2 ? 1 : .62); if (j > 0 && j < n * 2) c.lineTo(len * t, sg * hw); }
+    if (sg < 0) c.lineTo(len, 0);
+  }
+  c.closePath();
+  const g = c.createLinearGradient(0, -len * w, 0, len * w); g.addColorStop(0, lighten(col, .22)); g.addColorStop(1, darken(col, .2)); c.fillStyle = g; c.fill();
+  c.lineJoin = 'round'; c.lineWidth = o.ol ?? 1; c.strokeStyle = alpha(olOf(col), .85); c.stroke();
+  c.beginPath(); c.moveTo(len * .1, 0); c.lineTo(len * .85, 0); c.strokeStyle = alpha(lighten(col, .4), .7); c.lineWidth = .8; c.stroke();
+  c.restore();
+}
+function hdTile(c, kind, x, y) {
+  const seed = hash2(x, y), R = rng(seed + 3); R(); R();
+  c.save();
+  if (kind === 'fertile') {
+    // rich dark bed: furrows, crumbs, two sprouts and a glint: plants grow stronger here
+        const bed = cc => wobbly(cc, x, y, 19, 18.5, seed, .05, 14, .75);
+    c.beginPath(); bed(c); c.fillStyle = '#6e4526'; c.fill(); c.lineWidth = 1.6; c.strokeStyle = 'rgba(58,32,12,.55)'; c.stroke();
+    c.save(); c.beginPath(); bed(c); c.clip();
+    for (let i = -2; i <= 2; i++) { const fy = y + i * 7.4 + 1; c.beginPath(); c.moveTo(x - 20, fy); c.bezierCurveTo(x - 8, fy - 2.4, x + 8, fy + 2.4, x + 20, fy); c.lineWidth = 2.6; c.strokeStyle = 'rgba(38,20,8,.38)'; c.stroke(); c.beginPath(); c.moveTo(x - 20, fy - 2.6); c.bezierCurveTo(x - 8, fy - 5, x + 8, fy - .2, x + 20, fy - 2.6); c.lineWidth = 1.1; c.strokeStyle = 'rgba(190,130,70,.4)'; c.stroke(); }
+    for (let i = 0; i < 16; i++) { c.beginPath(); c.arc(x + (R() - .5) * 34, y + (R() - .5) * 34, .7 + R() * 1.3, 0, TAU); c.fillStyle = R() > .5 ? 'rgba(196,136,74,.75)' : 'rgba(34,18,6,.55)'; c.fill(); }
+    c.restore();
+    for (const [dx, dy, l] of [[-11, 9, 6.5], [11, -8, 5.5]]) { hdLine(c, [x + dx, y + dy, x + dx, y + dy - 3], '#3f8f2c', 1.6); hdLeaf(c, x + dx, y + dy - 3, l, -2.5, '#8fe060', { w: .5 }); hdLeaf(c, x + dx, y + dy - 3, l, -.65, '#74d04c', { w: .5 }); }
+    sparkle(c, x + 10, y + 10, 3, '#ffe98a'); sparkle(c, x - 11, y - 10, 2.4, '#ffe98a'); sparkle(c, x + 1, y - 1, 1.8, '#fff6c8');
+  } else if (kind === 'mud') {
+    // sticky glossy puddle: bugs get stuck here
+    c.beginPath(); wobbly(c, x, y, 19, 17.5, seed, .1, 11, .45); c.fillStyle = '#93663c'; c.fill(); c.lineWidth = 1.6; c.strokeStyle = 'rgba(70,42,18,.5)'; c.stroke();
+    c.beginPath(); wobbly(c, x + .5, y + 1, 14, 12, seed + 5, .14, 9, .3); c.fillStyle = 'rgba(74,44,20,.6)'; c.fill();
+    c.beginPath(); wobbly(c, x + 1, y + 2, 9, 7, seed + 9, .16, 8, .2); c.fillStyle = 'rgba(52,30,14,.45)'; c.fill();
+    c.save(); c.globalAlpha = .62; c.beginPath(); c.ellipse(x - 5.5, y - 6.5, 7.5, 2.1, -.3, 0, TAU); c.fillStyle = '#ffffff'; c.fill(); c.beginPath(); c.ellipse(x + 4.5, y - 8.6, 1.9, 1.2, -.2, 0, TAU); c.fill(); c.restore();
+    c.save(); c.beginPath(); c.arc(x + 1, y + 3, 9.5, .35, 1.5); c.lineWidth = 1.3; c.lineCap = 'round'; c.strokeStyle = 'rgba(214,170,120,.55)'; c.stroke(); c.restore();
+    for (const [dx, dy, r] of [[7, 3, 2.6], [-6, 6, 1.9], [1, -1, 1.4]]) { hdBall(c, x + dx, y + dy, r, r, '#a87648', { olk: .6, noBounce: true }); }
+    for (const [dx, dy, r] of [[-18, -13, 1.8], [18.5, 12, 2.1], [15, -15.5, 1.4]]) hdBall(c, x + dx, y + dy, r, r * .8, '#8a5c34', { olk: .6, noSpec: true, noBounce: true });
+  } else if (kind === 'nettle') {
+    // low stinging patch: flat jagged leaves and pale red-tipped thorns: it hurts the bugs that cross it
+    c.beginPath(); wobbly(c, x, y + 1.5, 20.5, 20, seed, .08, 13, .6); c.fillStyle = 'rgba(20,50,20,.28)'; c.fill();
+    hdBlob(c, cc => wobbly(cc, x, y, 19, 18.5, seed, .08, 13, .6), '#2f7a3a', x, y - 4, 26, { olk: .9, k: .6 });
+    const spots = [[-10, -9], [9, -10], [-9, 9], [10, 9], [0, 0]];
+    for (const [dx, dy] of spots) { const n = 5, a0 = R() * 6; for (let i = 0; i < n; i++) jagLeaf(c, x + dx, y + dy, 8.6 + R() * 1.6, a0 + i / n * TAU, i % 2 ? '#4aa645' : '#3c9440', { w: .34 }); }
+    for (const [dx, dy] of spots.concat([[0, -13], [0, 13], [-14, 0], [14, 0]])) {
+      const big = dx * dy !== 0 || (!dx && !dy), r = big ? 4.4 : 3.3, a0 = R() * 6;
+      c.save(); c.translate(x + dx, y + dy); c.rotate(a0);
+      c.beginPath(); for (let i = 0; i < 12; i++) { const a = i * Math.PI / 6, q = i % 2 ? r * .3 : r; c.lineTo(Math.cos(a) * q, Math.sin(a) * q); } c.closePath();
+      c.fillStyle = '#fbf3c4'; c.fill(); c.lineJoin = 'round'; c.lineWidth = .9; c.strokeStyle = '#5a2a1a'; c.stroke();
+      for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; c.beginPath(); c.arc(Math.cos(a) * r * .86, Math.sin(a) * r * .86, .85, 0, TAU); c.fillStyle = '#e8324a'; c.fill(); }
+      c.restore();
+    }
+  }
+  c.restore();
+}
+// Outline of one pond cell. Sides that touch another pond cell run to the cell edge, free sides get a wavy bank
+// (the wave depends on world coordinates only, so the banks of neighbouring cells meet exactly).
+function pondPts(x, y, mask, inset, diag) {
+  const H = 21, RC = 13, OV = .5, P = [];
+  const free = [!(mask & 1), !(mask & 2), !(mask & 4), !(mask & 8)]; // top, right, bottom, left
+  const dir = [[1, 0], [0, 1], [-1, 0], [0, -1]], nrm = [[0, -1], [1, 0], [0, 1], [-1, 0]], st = [[-H, -H], [H, -H], [H, H], [-H, H]];
+  const wob = (px, py) => inset + 2.2 + 1.5 * Math.sin(px * .21 + py * .33) * Math.sin(px * .12 - py * .16 + 1.3);
+  for (let k = 0; k < 4; k++) {
+    const pf = free[(k + 3) % 4], nf = free[(k + 1) % 4], d = dir[k], n = nrm[k];
+    if (!free[k]) {
+      if (nf) continue;
+      const j = (k + 1) % 4, d2 = dir[j], n2 = nrm[j], cx = x + st[j][0], cy = y + st[j][1];
+      if (diag === undefined || diag & [8, 1, 2, 4][j]) { P.push([cx + (n[0] + n2[0]) * OV, cy + (n[1] + n2[1]) * OV]); continue; }
+      // land pokes in at this corner: carry the bank around it
+      const w = wob(cx, cy), a0 = Math.atan2(-d[1], -d[0]);
+      P.push([cx - d[0] * w + n[0] * OV, cy - d[1] * w + n[1] * OV]);
+      for (let i = 0; i <= 5; i++) { const an = a0 - i / 5 * Math.PI / 2; P.push([cx + Math.cos(an) * w, cy + Math.sin(an) * w]); }
+      P.push([cx + d2[0] * w + n2[0] * OV, cy + d2[1] * w + n2[1] * OV]);
+      continue;
+    }
+    const a = pf ? RC : -OV, b = nf ? 2 * H - RC : 2 * H + OV, m = Math.ceil((b - a) / 3);
+    for (let i = 0; i <= m; i++) { const t = a + (b - a) * i / m, px = x + st[k][0] + d[0] * t, py = y + st[k][1] + d[1] * t, w = wob(px, py); P.push([px - n[0] * w, py - n[1] * w]); }
+    if (nf) {
+      const n2 = nrm[(k + 1) % 4], cx = x + st[(k + 1) % 4][0] - (n[0] + n2[0]) * RC, cy = y + st[(k + 1) % 4][1] - (n[1] + n2[1]) * RC, a0 = Math.atan2(n[1], n[0]);
+      for (let i = 1; i < 6; i++) { const an = a0 + i / 6 * Math.PI / 2, px = cx + Math.cos(an) * RC, py = cy + Math.sin(an) * RC, w = wob(px, py); P.push([px - Math.cos(an) * w, py - Math.sin(an) * w]); }
+    }
+  }
+  return P;
+}
+// mask: 1 = pond above (y-), 2 = right, 4 = below, 8 = left.
+// diag (optional): 1 = pond up-right, 2 = down-right, 4 = down-left, 8 = up-left; with it the bank also wraps the
+// inner corners of an L-shaped pond, without it those corners keep a small notch.
+function hdWater(c, x, y, mask = 0, diag) {
+  const seed = hash2(x, y), R = rng(seed + 11); R(); R();
+  const fill = (inset, col) => { const P = pondPts(x, y, mask, inset, diag); c.beginPath(); P.forEach((p, i) => i ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1])); c.closePath(); c.fillStyle = col; c.fill(); };
+  c.save(); c.lineJoin = 'round';
+  fill(-1.6, 'rgba(30,60,20,.3)'); fill(0, '#7a5a34'); fill(1.6, '#d8c890'); fill(3.4, '#bff0fb'); fill(5.2, '#4fb4e6');
+  c.lineCap = 'round';
+  for (let i = 0; i < 2; i++) {
+    const rx = x + (R() - .5) * 20, ry = y + (R() - .5) * 20, rr = 3.5 + R() * 3;
+    c.beginPath(); c.ellipse(rx, ry, rr, rr * .42, 0, Math.PI * 1.1, Math.PI * 1.9); c.lineWidth = 1.3; c.strokeStyle = 'rgba(255,255,255,.7)'; c.stroke();
+    c.beginPath(); c.ellipse(rx, ry + 2.2, rr * .6, rr * .26, 0, Math.PI * .15, Math.PI * .85); c.lineWidth = 1; c.strokeStyle = 'rgba(20,90,160,.35)'; c.stroke();
+  }
+  if (seed % 3 === 0) {
+    const px = x + (R() - .5) * 12, py = y + (R() - .5) * 12, a0 = R() * 6, r = 6.4;
+    c.save(); c.translate(px, py); c.rotate(a0);
+    c.beginPath(); c.ellipse(1.2, 1.6, r, r * .86, 0, 0, TAU); c.fillStyle = 'rgba(16,70,120,.3)'; c.fill();
+    hdBlob(c, cc => { cc.moveTo(0, 0); cc.arc(0, 0, r, .32, TAU - .32); cc.closePath(); }, '#5cc44a', -1, -1, r, { olk: .8 });
+    for (const a of [1.6, 2.6, 3.7, 4.7]) hdLine(c, [0, 0, Math.cos(a) * r * .8, Math.sin(a) * r * .8], 'rgba(210,255,170,.55)', .8);
+    c.restore();
+    if (seed % 2 === 0) { for (let i = 0; i < 5; i++) { const a = i / 5 * TAU + a0; hdBall(c, px + Math.cos(a) * 2.6, py + Math.sin(a) * 2.6, 2.3, 2.3, '#ff9ac4', { olk: .5, noSpec: true, noBounce: true }); } hdBall(c, px, py, 1.7, 1.7, '#ffe14a', { olk: .5, noSpec: true, noBounce: true }); }
+  } else { c.beginPath(); c.arc(x + (R() - .5) * 18, y + (R() - .5) * 18, 1.1, 0, TAU); c.fillStyle = 'rgba(255,255,255,.85)'; c.fill(); }
+  c.restore();
+}
+// Bramble thicket: removable junk, side view like the rock.
+function hdWeed(c, x, y) {
+  c.save(); c.translate(x, y);
+  hdShadow(c, 0, 9, 18, 6, 1.1);
+  for (const [dx, dy, r, col] of [[-9, 3, 8, '#6d8838'], [9, 4, 8.4, '#5d7832'], [0, -3, 10, '#7a9440'], [-3, 6, 7, '#657e36'], [7, -6, 6.4, '#869e4a']]) hdBall(c, dx, dy, r, r * .85, col, { specA: .25 });
+  const cane = (p) => {
+    hdCurve(c, p, '#3a2414', 4.4); hdCurve(c, p, '#96623a', 2.4);
+    for (let i = 1; i < 6; i++) {
+      const t = i / 6, u = 1 - t, px = u * u * p[0] + 2 * u * t * p[2] + t * t * p[4], py = u * u * p[1] + 2 * u * t * p[3] + t * t * p[5];
+      const tx = 2 * u * (p[2] - p[0]) + 2 * t * (p[4] - p[2]), ty = 2 * u * (p[3] - p[1]) + 2 * t * (p[5] - p[3]), a = Math.atan2(ty, tx) + (i % 2 ? 1 : -1) * 1.35;
+      c.save(); c.translate(px, py); c.rotate(a); hdBlob(c, cc => { cc.moveTo(0, -1.5); cc.lineTo(5.4, 0); cc.lineTo(0, 1.5); cc.closePath(); }, '#f0dca0', 2, 0, 3, { olk: .6 }); c.restore();
+    }
+  };
+  cane([-16, 9, -15, -22, 3, -9]); cane([16, 9, 13, -24, -7, -13]); cane([-5, 10, 2, -17, 17, -5]);
+  jagLeaf(c, -9, -4, 10, -2.5, '#7c9a3c', { w: .36 }); jagLeaf(c, 6, -1, 10, -.45, '#6a8a36', { w: .36 }); jagLeaf(c, -2, 6, 9, 2.6, '#a59a3e', { w: .36 }); jagLeaf(c, 3, 7, 9, .5, '#8a8a34', { w: .36 });
+  for (const [dx, dy, r] of [[-4, -12, 3.4], [11, -9, 2.8]]) {
+    c.save(); c.translate(dx, dy); for (let i = 0; i < 9; i++) { const a = i / 9 * TAU; hdLine(c, [0, 0, Math.cos(a) * (r + 2.2), Math.sin(a) * (r + 2.2)], '#5a2a6a', 1.1); }
+    c.restore(); hdBall(c, dx, dy, r, r, '#a85ac0', { olk: .7, noBounce: true });
+  }
+  c.restore();
+}
+// Web over a tied-up plant.
+function hdWeb(c, x, y, r = 18) {
+  const n = 8, R = rng(71), A = [], L = [];
+  for (let i = 0; i < n; i++) { A.push(i / n * TAU + .22 + (R() - .5) * .22); L.push(r * (.9 + R() * .14)); }
+  const pt = (i, k) => [x + Math.cos(A[i % n]) * L[i % n] * k, y + Math.sin(A[i % n]) * L[i % n] * k];
+  c.save(); c.lineCap = 'round'; c.lineJoin = 'round';
+  c.beginPath(); c.arc(x, y, r * .92, 0, TAU); c.fillStyle = 'rgba(240,246,255,.16)'; c.fill();
+  for (const [col, w] of [['rgba(50,60,90,.4)', 2.6], ['rgba(255,255,255,.95)', 1.15]]) {
+    c.strokeStyle = col; c.lineWidth = w; c.beginPath();
+    for (let i = 0; i < n; i++) { const p = pt(i, 1); c.moveTo(x, y); c.lineTo(p[0], p[1]); }
+    for (const k of [.3, .56, .82]) for (let i = 0; i < n; i++) { const p = pt(i, k), q = pt(i + 1, k), mx = x + ((p[0] + q[0]) / 2 - x) * .84, my = y + ((p[1] + q[1]) / 2 - y) * .84; c.moveTo(p[0], p[1]); c.quadraticCurveTo(mx, my, q[0], q[1]); }
+    c.stroke();
+  }
+  for (const [i, k] of [[1, .56], [4, .82], [6, .3]]) { const p = pt(i, k); c.beginPath(); c.arc(p[0], p[1], 1.5, 0, TAU); c.fillStyle = '#ffffff'; c.fill(); c.lineWidth = .7; c.strokeStyle = 'rgba(70,120,180,.8)'; c.stroke(); }
+  c.restore();
+}
+
+export { hdBall, hdBlob, hdLeaf, hdShadow, hdLine, hdCurve, hdEye, hdText, hdBug, hdPlant, hdApple, hdStump, hdAnthill, hdRock, hdLog, hdGrass, hdPath, hdBorderBushes, hdForeground, hdVignette, hdMotes, fxThorn, fxKernel, fxStar, fxHit, fxDmg, fxFrost, fxIced, fxFire, hdDrop, hdHp, uiPanel, uiRound, iconFrost, iconRain, iconBirds, hdSoil, hdTile, hdWater, hdWeed, hdWeb, hdDapple, hdGrade, hdSun2, bladeTri, rrect, along, chaikin, rng, lighten, darken, alpha, mix, TAU, star5, strokePts };

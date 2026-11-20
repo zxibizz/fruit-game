@@ -1,7 +1,7 @@
 // Simulation: no DOM, plain data. The view reads the state and the events, and calls the actions below.
-import { COLS, ROWS, FRUIT_HP, PLANTS, BUGS, LEVELS, BREAK, EARLY_DEW, REPAIR, REGROW, CHEW_GROWTH, POWER_EVERY, POWER_MAX } from './data.js';
+import { COLS, ROWS, FRUIT_HP, PLANTS, BUGS, LEVELS, PERKS, BREAK, EARLY_DEW, REPAIR, REGROW, REFUND, CHEW_GROWTH, POWER_EVERY, POWER_MAX, FERTILE, FERTILE_ADD, MUD, NETTLE, NETTLE_BOSS, WEED_COST, BROOD_REWARD } from './data.js';
 
-export const VERSION = '0.12.0';
+export const VERSION = '0.13.0';
 export { COLS, ROWS, BREAK };
 
 const DIRS = [[-1, 0], [0, -1], [0, 1], [1, 0]]; // tie order: towards the fruit side first
@@ -9,19 +9,25 @@ const INF = 1e9;
 
 function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 
-export function createGame(levelIndex, seed = 1) {
-  const L = LEVELS[levelIndex];
+// meta: the tiers of the permanent perks the player has bought, { perk: tier }.
+export function createGame(levelIndex, seed = 1, meta = {}) {
+  const L = LEVELS[levelIndex], tier = (k) => (meta[k] ? PERKS[k].v[meta[k] - 1] : 0);
+  const hp = FRUIT_HP + tier('heart'), clouds = tier('clouds');
   const g = {
-    level: levelIndex, L, cols: COLS, rows: ROWS,
+    level: levelIndex, L, cols: COLS, rows: ROWS, seed, meta,
     grid: Array.from({ length: ROWS }, () => Array(COLS).fill(null)),
-    entry: [COLS - 1, L.entry], fruit: L.fruit.slice(),
-    dew: L.dew, hp: FRUIT_HP, maxHp: FRUIT_HP,
+    tiles: Array.from({ length: ROWS }, () => Array(COLS).fill(null)),
+    entries: L.entries.map((j) => [COLS - 1, j]), fruit: L.fruit.slice(),
+    dew: L.dew + tier('dew'), hp, maxHp: hp,
     wave: 0, waves: L.waves.length, phase: 'build', nextIn: null, // nextIn: seconds until the next wave starts by itself
     bugs: [], shots: [], plants: [], stubs: [], events: [], queue: [], // stubs: roots of the eaten plants
-    time: 0, waveTime: 0, powers: { frost: 1, rain: 1 }, nextId: 1, rand: mulberry32(seed),
-    dist: null, dig: null, stats: { kills: 0, bites: 0 },
+    time: 0, waveTime: 0, powers: { frost: 1 + clouds, rain: 1 + clouds }, powerMax: POWER_MAX + clouds, nextId: 1, rand: mulberry32(seed),
+    regrow: REGROW * (tier('roots') || 1), refund: tier('refund') || REFUND,
+    dist: null, dig: null, stats: { kills: 0, bites: 0, eaten: 0, earned: 0 },
   };
+  g.entry = g.entries[0];
   for (const [i, j, type] of L.obstacles) g.grid[j][i] = { obstacle: type, i, j };
+  for (const [i, j, type] of L.tiles) g.tiles[j][i] = type;
   refresh(g);
   return g;
 }
@@ -74,7 +80,16 @@ function nextDig(g, i, j, dir) {
   return best;
 }
 // Call after any change of the plants on the field.
-function refresh(g) { g.dist = computeDist(g); g.dig = computeDig(g); }
+function refresh(g) { g.dist = computeDist(g); g.dig = computeDig(g); auras(g); }
+// What the plants give to the plants around them: a bell makes them shoot more often, a grown aloe guards them.
+function auras(g) {
+  for (const p of g.plants) { p.buff = 0; p.guard = 0; }
+  for (const p of g.plants) {
+    const buff = pstat(g, p, 'buff'), guard = pstat(g, p, 'guard'); if (!buff && !guard) continue;
+    const r = pstat(g, p, 'range');
+    for (const q of g.plants) if (q !== p && Math.hypot(q.i - p.i, q.j - p.j) <= r) { q.buff = Math.max(q.buff, buff); q.guard = Math.max(q.guard, guard); }
+  }
+}
 
 // Next cell from (i, j) towards the fruit; keeps going straight when that is as short.
 export function nextCell(g, i, j, dir, dist = g.dist) {
@@ -90,8 +105,8 @@ export function nextCell(g, i, j, dir, dist = g.dist) {
 }
 
 // The trail bugs take from the entrance (list of cells, entrance first).
-export function trail(g, dist = g.dist) {
-  const out = [g.entry.slice()]; let dir = [-1, 0], [i, j] = g.entry;
+export function trail(g, dist = g.dist, e = 0) {
+  const out = [g.entries[e].slice()]; let dir = [-1, 0], [i, j] = g.entries[e];
   if (dist[key(i, j)] >= INF) return out;
   for (let n = 0; n < COLS * ROWS; n++) {
     if (i === g.fruit[0] && j === g.fruit[1]) break;
@@ -100,17 +115,19 @@ export function trail(g, dist = g.dist) {
   }
   return out;
 }
-
-const cellOf = (b) => [Math.floor(b.x), Math.floor(b.y)];
+// one trail per anthill
+export const trails = (g, dist = g.dist) => g.entries.map((_, e) => trail(g, dist, e));
+const isEntry = (g, i, j) => g.entries.some((e) => e[0] === i && e[1] === j);
 
 // Why a plant cannot go to (i, j): null when it can. A plant may grow on a cell with bugs on it (a hole in a wall
 // is mended while they run through it): they step out of it, so they only need a way on from a cell next to it.
 export function placeProblem(g, i, j) {
   if (!inside(i, j)) return 'outside';
   if (g.grid[j][i]) return 'busy';
-  if ((i === g.entry[0] && j === g.entry[1]) || (i === g.fruit[0] && j === g.fruit[1])) return 'busy';
+  if (isEntry(g, i, j) || (i === g.fruit[0] && j === g.fruit[1])) return 'busy';
+  if (g.tiles[j][i] === 'nettle') return 'nettle';
   const d = computeDist(g, key(i, j));
-  if (d[key(...g.entry)] >= INF) return 'blocks';
+  if (g.entries.some((e) => d[key(...e)] >= INF)) return 'blocks';
   const open = (ci, cj) => inside(ci, cj) && d[key(ci, cj)] < INF;
   for (const b of g.bugs) {
     if (b.fly || b.ti == null || BUGS[b.kind].dig || !inside(b.ti, b.tj)) continue;
@@ -123,15 +140,27 @@ export function blockingCells(g) {
   for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) if (!g.grid[j][i] && placeProblem(g, i, j) === 'blocks') out.push([i, j]);
   return out;
 }
-export function previewTrail(g, i, j) { return trail(g, computeDist(g, key(i, j))); }
+export function previewTrails(g, i, j) { return trails(g, computeDist(g, key(i, j))); }
 
-const stat = (p, name) => { const v = PLANTS[p.type][name]; return Array.isArray(v) ? v[p.lvl - 1] : v; };
+// A stat of a plant as it stands: its level, the player's perk for this plant and the soil under it.
+// p may be a plant or just { type, lvl, i, j } (i < 0: no cell yet).
+const BOOSTED = { dmg: 1, burn: 1, heal: 1, bossDmg: 1, hp: 1 };
+export function pstat(g, p, name) {
+  let v = PLANTS[p.type][name]; if (v == null) return 0; if (Array.isArray(v)) v = v[p.lvl - 1];
+  if (!v || typeof v !== 'number') return v;
+  const perk = PERKS[p.type], tier = g.meta[p.type] || 0;
+  if (tier && perk.stat === name) v = perk.mul ? v * perk.v[tier - 1] : v + perk.v[tier - 1];
+  if (g.tiles[p.j]?.[p.i] === 'fertile') { if (BOOSTED[name]) v *= FERTILE; else if (name === 'slow' || name === 'buff') v += FERTILE_ADD; else if (name === 'eat') v /= FERTILE; }
+  if (name === 'slow') v = Math.min(v, .8);
+  return name === 'hp' ? Math.round(v) : v;
+}
 
 const over = (g) => g.phase === 'won' || g.phase === 'lost';
 export const stubAt = (g, i, j) => g.stubs.find((s) => s.i === i && s.j === j) || null;
 function grow(g, type, i, j, lvl, spent) {
   const P = PLANTS[type], k = g.stubs.findIndex((s) => s.i === i && s.j === j); if (k >= 0) g.stubs.splice(k, 1);
-  const p = { id: g.nextId++, type, i, j, lvl, hp: P.hp[lvl - 1], maxHp: P.hp[lvl - 1], cd: .3, spent, hit: 0 };
+  const p = { id: g.nextId++, type, i, j, lvl, hp: 1, maxHp: 1, cd: .3, spent, hit: 0, web: 0, buff: 0, guard: 0, busy: 0, born: -1 };
+  p.hp = p.maxHp = pstat(g, p, 'hp');
   g.grid[j][i] = p; g.plants.push(p); refresh(g);
   return p;
 }
@@ -139,7 +168,8 @@ export function place(g, type, i, j) {
   const P = PLANTS[type];
   if (!P || !g.L.plants.includes(type) || g.dew < P.cost || placeProblem(g, i, j) || over(g)) return false;
   g.dew -= P.cost;
-  g.events.push({ t: 'place', p: grow(g, type, i, j, 1, P.cost) });
+  const p = grow(g, type, i, j, 1, P.cost); if (g.phase === 'build') p.born = g.wave; // sold before the wave starts, it gives all its dew back
+  g.events.push({ t: 'place', p });
   return true;
 }
 // Repairs. The roots of an eaten plant grow back into the same plant of the same level for a part of its price
@@ -161,15 +191,22 @@ export function heal(g, p) {
 export function upgradeCost(p) { return p.lvl < 3 ? PLANTS[p.type].up[p.lvl - 1] : null; }
 export function upgrade(g, p) {
   const c = upgradeCost(p); if (c == null || g.dew < c || over(g)) return false;
-  g.dew -= c; p.spent += c; p.lvl++; const mh = stat(p, 'hp'); p.hp += mh - p.maxHp; p.maxHp = mh; g.dig = computeDig(g);
+  g.dew -= c; p.spent += c; p.lvl++; const mh = pstat(g, p, 'hp'); p.hp += mh - p.maxHp; p.maxHp = mh; g.dig = computeDig(g); auras(g);
   g.events.push({ t: 'upgrade', p });
   return true;
 }
-export const refund = (p) => Math.floor(p.spent / 2);
+export const isFresh = (g, p) => g.phase === 'build' && p.born === g.wave;
+export const refund = (g, p) => (isFresh(g, p) ? p.spent : Math.floor(p.spent * g.refund));
+// Weeds are cleared for dew; the cell is free after that.
+export function clearWeed(g, i, j) {
+  const o = g.grid[j]?.[i]; if (!o || o.obstacle !== 'weed' || g.dew < WEED_COST || over(g)) return false;
+  g.dew -= WEED_COST; g.grid[j][i] = null; refresh(g); g.events.push({ t: 'weed', i, j });
+  return true;
+}
 export function removePlant(g, p, sold = true) {
   const k = g.plants.indexOf(p); if (k < 0 || (sold && over(g))) return;
   g.plants.splice(k, 1); g.grid[p.j][p.i] = null; refresh(g);
-  if (sold) g.dew += refund(p); else g.stubs.push({ id: g.nextId++, type: p.type, lvl: p.lvl, spent: p.spent, i: p.i, j: p.j, grow: 0 });
+  if (sold) g.dew += refund(g, p); else { g.stats.eaten++; g.stubs.push({ id: g.nextId++, type: p.type, lvl: p.lvl, spent: p.spent, i: p.i, j: p.j, grow: 0 }); }
   g.events.push({ t: sold ? 'sell' : 'plantDead', p });
 }
 
@@ -178,12 +215,13 @@ export const earlyBonus = (g) => (g.phase === 'build' && g.nextIn > 0 ? Math.rou
 export function startWave(g) {
   if (g.phase !== 'build' || g.wave >= g.waves) return false;
   const bonus = earlyBonus(g); g.nextIn = null;
-  if (bonus) { g.dew += bonus; g.events.push({ t: 'early', bonus }); }
+  if (bonus) { gain(g, bonus); g.events.push({ t: 'early', bonus }); }
   const spec = g.L.waves[g.wave]; g.wave++; g.phase = 'wave'; g.waveTime = 0; g.queue = [];
-  let t0 = 0;
-  for (const [kind, count, gap, delay] of spec) { t0 += delay; for (let n = 0; n < count; n++) g.queue.push({ kind, at: t0 + n * gap }); t0 += count * gap * .5; }
+  // with two anthills the groups of a wave come out of them in turn
+  let t0 = 0, e = g.wave;
+  for (const [kind, count, gap, delay] of spec) { t0 += delay; e++; for (let n = 0; n < count; n++) g.queue.push({ kind, at: t0 + n * gap, e: (BUGS[kind].boss ? e + n : e) % g.entries.length }); t0 += count * gap * .5; }
   g.queue.sort((a, b) => a.at - b.at);
-  g.events.push({ t: 'wave', n: g.wave });
+  g.events.push({ t: 'wave', n: g.wave, boss: spec.find(([k]) => BUGS[k].boss)?.[0] || null });
   return true;
 }
 export function wavePreview(g, n = g.wave) {
@@ -191,34 +229,58 @@ export function wavePreview(g, n = g.wave) {
   const m = new Map(); for (const [k, c] of spec) m.set(k, (m.get(k) || 0) + c);
   return [...m];
 }
+function gain(g, n) { g.dew += n; g.stats.earned += n; }
 
 // How much stronger the bugs of a wave are than in the first one, and how much harder they bite the plants.
 export const hpMul = (g, wave = g.wave) => 1 + g.L.hpGrowth * (wave - 1) + (g.L.hpLate || 0) * (wave - 1) ** 2;
+const bossMul = (g, wave) => g.L.boss.find(([at]) => at === wave)?.[3] ?? 1;
+export const bugHp = (g, kind, wave = g.wave) => Math.round(BUGS[kind].hp * hpMul(g, wave) * (BUGS[kind].boss ? bossMul(g, wave) : 1));
 const chewMul = (g) => 1 + CHEW_GROWTH * (g.wave - 1);
-function spawn(g, kind) {
-  const B = BUGS[kind], hp = Math.round(B.hp * hpMul(g));
-  const b = { id: g.nextId++, kind, hp, maxHp: hp, speed: B.speed, fly: !!B.fly, armor: B.armor || 0, x: COLS + .6, y: g.entry[1] + .5, vx: -1, vy: 0, slow: 1, frozen: 0, burn: 0, burnDps: 0, chew: 0, chewCd: 2, gnaw: null, gnawT: 0, dir: [-1, 0], ti: g.entry[0], tj: g.entry[1], hit: 0 };
-  if (b.fly) { b.y = .6 + g.rand() * (ROWS - 1.2); b.ti = b.tj = null; }
+// A bug comes out of anthill e, or (from: a boss) appears where its boss is.
+function spawn(g, kind, e = 0, from = null) {
+  const B = BUGS[kind], hp = Math.round(bugHp(g, kind) * (from ? .4 : 1)), en = g.entries[e] || g.entries[0];
+  const b = { id: g.nextId++, kind, hp, maxHp: hp, speed: B.speed, fly: !!B.fly, armor: B.armor || 0, x: COLS + .6, y: en[1] + .5, vx: -1, vy: 0, slow: 1, frozen: 0, burn: 0, burnDps: 0, chew: 0, chewCd: 2, gnaw: null, gnawT: 0, dir: [-1, 0], ti: en[0], tj: en[1], hit: 0, skill: 0, rush: 0, brood: !!from, e };
+  if (B.charge) b.skill = B.charge[0] * .6; if (B.brood) b.skill = B.brood[2]; if (B.web) b.skill = B.web[0] * .6;
+  if (b.fly) { b.y = from ? from.y : .6 + g.rand() * (ROWS - 1.2); b.ti = b.tj = null; }
+  if (from) {
+    b.x = from.x + (g.rand() - .5) * .5; b.y = from.y + (g.rand() - .5) * .5;
+    if (!b.fly) { b.x = Math.min(COLS - .05, Math.max(.05, b.x)); b.y = Math.min(ROWS - .05, Math.max(.05, b.y)); b.ti = from.ti; b.tj = from.tj; b.dir = from.dir.slice(); if (b.ti == null) { b.ti = Math.floor(b.x); b.tj = Math.floor(b.y); } }
+  }
   g.bugs.push(b);
+  if (B.boss) g.events.push({ t: 'boss', b });
+  return b;
 }
 
 export function usePower(g, kind) {
   if (!g.powers[kind] || over(g)) return false;
   g.powers[kind]--;
-  if (kind === 'frost') for (const b of g.bugs) b.frozen = 4;
-  if (kind === 'rain') { for (const p of g.plants) p.hp = p.maxHp; for (const s of g.stubs.slice()) regrow(g, s, true); g.hp = Math.min(g.maxHp, g.hp + 3); }
+  if (kind === 'frost') for (const b of g.bugs) b.frozen = Math.max(b.frozen, BUGS[b.kind].boss ? 2 : 4);
+  if (kind === 'rain') { for (const p of g.plants) { p.hp = p.maxHp; p.web = 0; } for (const s of g.stubs.slice()) regrow(g, s, true); g.hp = Math.min(g.maxHp, g.hp + 3); }
   g.events.push({ t: 'power', kind });
   return true;
 }
+const rewardOf = (b) => Math.max(1, Math.round(BUGS[b.kind].reward * (b.brood ? BROOD_REWARD : 1)));
+function kill(g, b, how) {
+  const B = BUGS[b.kind], reward = rewardOf(b);
+  b.hp = 0; gain(g, reward); g.stats.kills++;
+  g.events.push({ t: 'kill', b, reward, how });
+  if (B.boss) g.events.push({ t: 'bossDead', b });
+  if (B.split && !b.fly) for (let n = 0; n < B.split[1]; n++) spawn(g, B.split[0], b.e, b);
+}
+// Health lost for any reason other than a hit (fire, nettles, thorns): no armor, no floor.
+function lose(g, b, amount, how) { if (b.hp <= 0) return; b.hp -= amount; if (b.hp <= 0) kill(g, b, how); }
 function damage(g, b, amount, src) {
   if (b.hp <= 0) return;
   const dmg = Math.max(1, amount - b.armor);
   b.hp -= dmg; b.hit = .15;
   g.events.push({ t: 'hit', b, dmg, src });
-  if (b.hp <= 0) {
-    g.dew += BUGS[b.kind].reward; g.stats.kills++;
-    g.events.push({ t: 'kill', b, reward: BUGS[b.kind].reward });
-  }
+  if (b.hp <= 0) kill(g, b, src);
+}
+// A bug bites a plant: a guarded plant takes less, a thorny one bites back. k: the part of a bite or a second.
+function hurtPlant(g, p, amount, b, k = 1) {
+  p.hp -= amount * (1 - (p.guard || 0)); p.hit = Math.max(p.hit, .12);
+  const th = pstat(g, p, 'thorns'); if (th) lose(g, b, b.maxHp * th * k * (BUGS[b.kind].boss ? .3 : 1), 'thorns');
+  if (p.hp <= 0) removePlant(g, p, false);
 }
 
 function progress(g, b) {
@@ -227,18 +289,40 @@ function progress(g, b) {
   return (BUGS[b.kind].dig ? g.dig : g.dist)[key(b.ti, b.tj)] + Math.hypot(b.x - b.ti - .5, b.y - b.tj - .5);
 }
 
-function updateBug(g, b, dt) {
-  if (b.frozen > 0) { b.frozen -= dt; return; }
-  if (b.burn > 0) {
-    b.burn -= dt; b.hp -= b.burnDps * dt; // burn ignores armor and has no 1-damage floor
-    if (b.hp <= 0) { g.dew += BUGS[b.kind].reward; g.stats.kills++; g.events.push({ t: 'kill', b, reward: BUGS[b.kind].reward }); return; }
+// What a boss does on its way.
+function bossSkill(g, b, B, dt) {
+  if (b.rush > 0) b.rush -= dt;
+  b.skill -= dt; if (b.skill > 0) return;
+  if (B.charge) { b.skill = B.charge[0]; b.rush = B.charge[1]; g.events.push({ t: 'charge', b }); }
+  else if (B.brood) {
+    b.skill = B.brood[2];
+    if (b.x < COLS - .5) { for (let n = 0; n < B.brood[1]; n++) spawn(g, B.brood[0], b.e, b); g.events.push({ t: 'brood', b }); }
   }
+  else if (B.web) {
+    const [every, r, n, life] = B.web; b.skill = every;
+    const near = g.plants.filter((p) => !p.web && PLANTS[p.type].range && Math.hypot(p.i + .5 - b.x, p.j + .5 - b.y) <= r)
+      .sort((p, q) => Math.hypot(p.i + .5 - b.x, p.j + .5 - b.y) - Math.hypot(q.i + .5 - b.x, q.j + .5 - b.y)).slice(0, n);
+    if (!near.length) { b.skill = 1; return; }
+    for (const p of near) p.web = life;
+    g.events.push({ t: 'web', b, plants: near });
+  }
+}
+
+function updateBug(g, b, dt) {
   const B = BUGS[b.kind];
+  if (b.burn > 0) { b.burn -= dt; lose(g, b, b.burnDps * dt, 'burn'); if (b.hp <= 0) return; } // burn ignores armor and has no 1-damage floor
+  const ci = Math.floor(b.x), cj = Math.floor(b.y), tile = b.fly ? null : g.tiles[cj]?.[ci];
+  if (tile === 'nettle') { lose(g, b, b.maxHp * (B.boss ? NETTLE_BOSS : NETTLE) * dt, 'nettle'); if (b.hp <= 0) return; b.sting = .25; }
+  if (b.sting > 0) b.sting -= dt;
+  if (b.frozen > 0) { b.frozen -= dt; return; }
+  if (B.mend) for (const o of g.bugs) if (o !== b && o.hp > 0 && o.hp < o.maxHp && !BUGS[o.kind].boss && !BUGS[o.kind].mend && Math.hypot(o.x - b.x, o.y - b.y) <= 1.6) { o.hp = Math.min(o.maxHp, o.hp + o.maxHp * B.mend * dt); o.mended = .3; }
+  if (b.mended > 0) b.mended -= dt;
+  if (B.boss) bossSkill(g, b, B, dt);
   if (b.chew > 0) {
     b.chew -= dt;
     if (b.chew <= 0) {
       const p = b.chewTarget; b.chewCd = 5;
-      if (p && g.plants.includes(p)) { p.hp -= B.chew * chewMul(g); p.hit = .2; g.events.push({ t: 'chew', p, b }); if (p.hp <= 0) removePlant(g, p, false); }
+      if (p && g.plants.includes(p)) { g.events.push({ t: 'chew', p, b }); hurtPlant(g, p, B.chew * chewMul(g), b); }
     }
     return;
   }
@@ -246,14 +330,16 @@ function updateBug(g, b, dt) {
     const p = b.gnaw;
     if (!g.plants.includes(p)) b.gnaw = null;
     else {
-      p.hp -= B.dig * chewMul(g) * dt; p.hit = .1; b.gnawT -= dt;
+      b.gnawT -= dt;
       if (b.gnawT <= 0) { b.gnawT = .45; g.events.push({ t: 'chew', p, b }); }
-      if (p.hp <= 0) { removePlant(g, p, false); b.gnaw = null; }
+      hurtPlant(g, p, B.dig * chewMul(g) * dt, b, dt);
+      if (!g.plants.includes(p)) b.gnaw = null;
       return;
     }
   }
   b.chewCd -= dt;
-  const v = b.speed * (B.noSlow ? 1 : b.slow) * dt;
+  const rush = b.rush > 0 ? B.charge[2] : 1;
+  const v = b.speed * (B.noSlow || rush > 1 ? 1 : b.slow) * (tile === 'mud' ? MUD : 1) * rush * dt;
   if (b.fly) {
     const tx = g.fruit[0] + .5, ty = g.fruit[1] + .5, dx = tx - b.x, dy = ty - b.y, d = Math.hypot(dx, dy);
     if (d < .45) { bite(g, b); return; }
@@ -284,40 +370,70 @@ function bite(g, b) {
 function updatePlant(g, p, dt) {
   const P = PLANTS[p.type], px = p.i + .5, py = p.j + .5;
   if (p.hit > 0) p.hit -= dt;
-  if (!P.range) return;
+  if (p.busy > 0) p.busy -= dt;
+  if (p.web > 0) { p.web -= dt; return; } // caught in a spider's web: does nothing
+  if (!P.range || P.buff) return;
+  const range = pstat(g, p, 'range');
   if (P.heal) {
-    const range = stat(p, 'range'), near = (q) => Math.hypot(q.i - p.i, q.j - p.j) <= range;
-    for (const q of g.plants) if (q.hp < q.maxHp && near(q)) q.hp = Math.min(q.maxHp, q.hp + stat(p, 'heal') * dt);
+    const near = (q) => Math.hypot(q.i - p.i, q.j - p.j) <= range, heal = pstat(g, p, 'heal');
+    for (const q of g.plants) if (q.hp < q.maxHp && near(q)) q.hp = Math.min(q.maxHp, q.hp + heal * dt);
     for (const s of g.stubs.slice()) {
       if (!near(s)) continue;
-      s.grow = Math.min(1, s.grow + dt / stat(p, 'regrow'));
+      s.grow = Math.min(1, s.grow + dt / pstat(g, p, 'regrow'));
     }
     return;
   }
-  const range = stat(p, 'range'), inRange = (b) => b.hp > 0 && (P.air || !b.fly) && Math.hypot(b.x - px, b.y - py) <= range;
-  if (P.slow) { const s = 1 - stat(p, 'slow'); for (const b of g.bugs) if (inRange(b)) b.slow = Math.min(b.slow, s); return; }
+  const inRange = (b, air = P.air) => b.hp > 0 && (air || !b.fly) && b.x < COLS + .2 && Math.hypot(b.x - px, b.y - py) <= range;
+  if (P.slow) {
+    const s = 1 - pstat(g, p, 'slow'); let any = false;
+    for (const b of g.bugs) if (inRange(b)) { b.slow = Math.min(b.slow, s); any = true; }
+    const chill = pstat(g, p, 'chill'); if (!chill) return;
+    p.cd -= dt; if (p.cd > 0 || !any) return;
+    p.cd = chill; for (const b of g.bugs) if (inRange(b)) b.frozen = Math.max(b.frozen, BUGS[b.kind].boss ? .4 : 1);
+    g.events.push({ t: 'chill', p });
+    return;
+  }
   p.cd -= dt; if (p.cd > 0) return;
+  const quick = 1 + (p.buff || 0);
+  if (P.eat) { // swallows the strongest bug it reaches; a boss is only bitten
+    const air = !!pstat(g, p, 'eatAir'); let best = null;
+    for (const b of g.bugs) if (inRange(b, air) && (!best || (BUGS[b.kind].boss ? 0 : b.hp) > (BUGS[best.kind].boss ? 0 : best.hp))) best = b;
+    if (!best) return;
+    p.cd = pstat(g, p, 'eat') / quick; p.busy = 1.4;
+    g.events.push({ t: 'eat', p, b: best });
+    if (BUGS[best.kind].boss) damage(g, best, pstat(g, p, 'bossDmg') + best.armor, p.type); else kill(g, best, 'eat');
+    return;
+  }
   if (p.type === 'pepper') {
-    const hit = g.bugs.filter(inRange); if (!hit.length) return;
-    p.cd = 1 / stat(p, 'rate');
-    for (const b of hit) { damage(g, b, stat(p, 'dmg'), p.type); b.burn = 2; b.burnDps = stat(p, 'burn'); }
+    const hit = g.bugs.filter((b) => inRange(b)); if (!hit.length) return;
+    p.cd = 1 / (pstat(g, p, 'rate') * quick);
+    const dmg = pstat(g, p, 'dmg'), burn = pstat(g, p, 'burn'), burnT = pstat(g, p, 'burnT');
+    for (const b of hit) { damage(g, b, dmg, p.type); b.burn = burnT; b.burnDps = burn; }
     g.events.push({ t: 'fire', p });
     return;
   }
-  let best = null, bp = INF; for (const b of g.bugs) if (inRange(b)) { const pr = progress(g, b); if (pr < bp) { bp = pr; best = b; } }
-  if (!best) return;
-  p.cd = 1 / stat(p, 'rate');
-  const dmg = stat(p, 'dmg') * (best.fly && P.airMul ? P.airMul : 1);
-  g.shots.push({ id: g.nextId++, kind: P.shot, from: p.type, x: px, y: py - .25, sx: px, sy: py - .25, target: best, tx: best.x, ty: best.y, speed: P.speed, dmg, splash: P.splash || 0, air: !!P.air });
-  g.events.push({ t: 'shoot', p, target: best });
+  // the bugs nearest to the fruit first; a grown rose shoots at two of them
+  const multi = pstat(g, p, 'multi') || 1, seen = [];
+  for (const b of g.bugs) if (inRange(b)) seen.push([progress(g, b), b]);
+  if (!seen.length) return;
+  seen.sort((a, b) => a[0] - b[0]);
+  p.cd = 1 / (pstat(g, p, 'rate') * quick);
+  for (const [, best] of seen.slice(0, multi)) {
+    const dmg = pstat(g, p, 'dmg') * (best.fly && P.airMul ? P.airMul : 1);
+    g.shots.push({ id: g.nextId++, kind: P.shot, from: p.type, x: px, y: py - .25, sx: px, sy: py - .25, target: best, tx: best.x, ty: best.y, speed: P.speed, dmg, splash: pstat(g, p, 'splash') || 0, stun: pstat(g, p, 'stun') || 0, air: !!P.air });
+    g.events.push({ t: 'shoot', p, target: best });
+  }
 }
 function updateShot(g, s, dt) {
   if (s.target && s.target.hp > 0 && !s.target.gone) { s.tx = s.target.x; s.ty = s.target.y; }
   const dx = s.tx - s.x, dy = s.ty - s.y, d = Math.hypot(dx, dy), v = s.speed * dt;
   if (d <= v) {
     s.done = true;
-    if (s.splash) { for (const b of g.bugs) if (!b.fly && b.hp > 0 && Math.hypot(b.x - s.tx, b.y - s.ty) <= s.splash) damage(g, b, s.dmg, s.from); g.events.push({ t: 'splash', x: s.tx, y: s.ty, kind: s.kind }); }
-    else if (s.target && s.target.hp > 0 && !s.target.gone) damage(g, s.target, s.dmg, s.from);
+    if (s.splash) { for (const b of g.bugs) if (!b.fly && b.hp > 0 && Math.hypot(b.x - s.tx, b.y - s.ty) <= s.splash) damage(g, b, s.dmg, s.from); g.events.push({ t: 'splash', x: s.tx, y: s.ty, kind: s.kind, r: s.splash }); }
+    else if (s.target && s.target.hp > 0 && !s.target.gone) {
+      damage(g, s.target, s.dmg, s.from);
+      if (s.stun && s.target.hp > 0) s.target.frozen = Math.max(s.target.frozen, s.stun * (BUGS[s.target.kind].boss ? .3 : 1));
+    }
     return;
   }
   s.x += dx / d * v; s.y += dy / d * v;
@@ -329,13 +445,13 @@ export function step(g, dt) {
   if (g.phase === 'build' && g.nextIn != null) { g.nextIn -= dt; if (g.nextIn <= 0) { g.nextIn = 0; startWave(g); } }
   if (g.phase === 'wave') {
     g.waveTime += dt;
-    while (g.queue.length && g.queue[0].at <= g.waveTime) spawn(g, g.queue.shift().kind);
+    while (g.queue.length && g.queue[0].at <= g.waveTime) { const q = g.queue.shift(); spawn(g, q.kind, q.e); }
   }
   for (const b of g.bugs) b.slow = 1;
   // roots grow back by themselves (aloes add to it in updatePlant); where that would close the way, they wait
-  for (const s of g.stubs.slice()) { s.grow = Math.min(1, s.grow + dt / REGROW); if (s.grow >= 1) regrow(g, s, true); }
+  for (const s of g.stubs.slice()) { s.grow = Math.min(1, s.grow + dt / g.regrow); if (s.grow >= 1) regrow(g, s, true); }
   for (const p of g.plants.slice()) updatePlant(g, p, dt);
-  for (const b of g.bugs) { if (b.hit > 0) b.hit -= dt; if (b.hp > 0) updateBug(g, b, dt); }
+  for (const b of g.bugs.slice()) { if (b.hit > 0) b.hit -= dt; if (b.hp > 0) updateBug(g, b, dt); }
   for (const s of g.shots) updateShot(g, s, dt);
   g.shots = g.shots.filter((s) => !s.done);
   g.bugs = g.bugs.filter((b) => b.hp > 0);
@@ -343,12 +459,38 @@ export function step(g, dt) {
   if (g.phase === 'wave' && !g.queue.length && !g.bugs.length) {
     if (g.wave >= g.waves) { g.phase = 'won'; g.events.push({ t: 'won' }); }
     else {
-      g.phase = 'build'; g.nextIn = BREAK; g.dew += g.L.waveBonus;
+      g.phase = 'build'; g.nextIn = BREAK; gain(g, g.L.waveBonus);
       const powers = g.wave % POWER_EVERY === 0;
-      if (powers) for (const k in g.powers) g.powers[k] = Math.min(POWER_MAX, g.powers[k] + 1);
+      if (powers) for (const k in g.powers) g.powers[k] = Math.min(g.powerMax, g.powers[k] + 1);
       g.events.push({ t: 'waveDone', n: g.wave, bonus: g.L.waveBonus, powers });
     }
   }
 }
 
 export const stars = (g) => (g.hp >= g.maxHp * .8 ? 3 : g.hp >= g.maxHp * .4 ? 2 : 1);
+
+// A level in progress is kept between waves: what stands on the field and what the player has. It comes back in the
+// build phase, and the next wave waits for the player.
+export function snapshot(g) {
+  const cleared = g.L.obstacles.filter(([i, j, t]) => t === 'weed' && !g.grid[j][i]).map(([i, j]) => [i, j]);
+  return {
+    v: 1, level: g.level, seed: g.seed, wave: g.wave, dew: g.dew, hp: g.hp, powers: { ...g.powers }, stats: { ...g.stats }, time: g.time, cleared,
+    plants: g.plants.map((p) => ({ type: p.type, lvl: p.lvl, i: p.i, j: p.j, hp: p.hp, spent: p.spent })),
+    stubs: g.stubs.map((s) => ({ type: s.type, lvl: s.lvl, i: s.i, j: s.j, spent: s.spent, grow: s.grow })),
+  };
+}
+export function restore(snap, meta = {}) {
+  if (!snap || snap.v !== 1 || !LEVELS[snap.level]) return null;
+  const g = createGame(snap.level, snap.seed, meta);
+  if (snap.wave >= g.waves) return null;
+  for (const [i, j] of snap.cleared || []) if (g.grid[j]?.[i]?.obstacle === 'weed') g.grid[j][i] = null;
+  for (const q of snap.plants) {
+    if (!PLANTS[q.type] || !inside(q.i, q.j) || g.grid[q.j][q.i]) continue;
+    const p = grow(g, q.type, q.i, q.j, q.lvl, q.spent); p.hp = Math.min(p.maxHp, q.hp);
+  }
+  for (const s of snap.stubs || []) if (PLANTS[s.type] && inside(s.i, s.j) && !g.grid[s.j][s.i]) g.stubs.push({ id: g.nextId++, ...s });
+  Object.assign(g, { wave: snap.wave, dew: snap.dew, hp: Math.min(g.maxHp, snap.hp), time: snap.time || 0 });
+  Object.assign(g.powers, snap.powers); Object.assign(g.stats, snap.stats);
+  refresh(g);
+  return g;
+}

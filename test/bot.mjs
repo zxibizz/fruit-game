@@ -2,9 +2,11 @@
 // its walls, holes closed at once. Used by the tests as a balance check: it must win every level, and must lose
 // when its garden stops at half of the field or when it plants along the straight trail without a maze
 // (maze: false). Run directly to see how it did: node test/bot.mjs [level ...] [max=N]
-import { createGame, computeDist, step, place, upgrade, upgradeCost, startWave, placeProblem, trail, regrow, regrowCost, heal, healCost, removePlant, refund, stubAt, COLS, ROWS } from '../public/game.js';
+import { createGame, computeDist, step, place, upgrade, upgradeCost, startWave, placeProblem, trails, regrow, regrowCost, heal, healCost, removePlant, refund, stubAt, COLS, ROWS } from '../public/game.js';
 import { LEVELS, BUGS, PLANTS } from '../public/data.js';
 const inside = (i, j) => i >= 0 && j >= 0 && i < COLS && j < ROWS;
+// every cell some trail runs over (a level may have two anthills), each once
+const trail = (g, dist) => { const seen = new Set(), out = []; for (const tr of trails(g, dist)) for (const c of tr) { const k = c[0] + ',' + c[1]; if (!seen.has(k)) { seen.add(k); out.push(c); } } return out; };
 const show = process.env.MAP ? (await import(process.env.MAP)).show : null;
 
 // The maze: full-height walls of plants two columns apart, each with one gap, the gaps at opposite ends in turn.
@@ -12,9 +14,9 @@ const show = process.env.MAP ? (await import(process.env.MAP)).show : null;
 function layout(level) {
   const length = (walls) => {
     const g = createGame(level);
-    for (const [col, gap] of walls) for (let j = 0; j < ROWS; j++) if (j !== gap && !g.grid[j][col] && !(col === g.fruit[0] && j === g.fruit[1])) g.grid[j][col] = { type: 'pumpkin' };
-    const tr = trail(g, computeDist(g)), last = tr[tr.length - 1];
-    return last[0] === g.fruit[0] && last[1] === g.fruit[1] ? tr.length : -1;
+    for (const [col, gap] of walls) for (let j = 0; j < ROWS; j++) if (j !== gap && !g.grid[j][col] && g.tiles[j][col] !== 'nettle' && !(col === g.fruit[0] && j === g.fruit[1])) g.grid[j][col] = { type: 'pumpkin' };
+    const all = trails(g, computeDist(g));
+    return all.every((tr) => { const last = tr[tr.length - 1]; return last[0] === g.fruit[0] && last[1] === g.fruit[1]; }) ? Math.min(...all.map((tr) => tr.length)) : -1;
   };
   let best = null, bestLen = -1;
   for (const cols of [[11, 9, 7, 5, 3], [10, 8, 6, 4, 2], [11, 9, 7, 5, 2], [12, 10, 8, 6, 4, 2], [11, 8, 6, 4, 2]]) {
@@ -34,7 +36,7 @@ function layout(level) {
 function spare(g) {
   const tr = trail(g), on = new Set(tr.map(([i, j]) => i + ',' + j)), out = [];
   for (let i = 0; i < COLS; i++) for (let j = 0; j < ROWS; j++) {
-    if (g.grid[j][i] || on.has(i + ',' + j) || (i === g.entry[0] && j === g.entry[1])) continue;
+    if (g.grid[j][i] || on.has(i + ',' + j) || g.entries.some((e) => e[0] === i && e[1] === j)) continue;
     if (tr.some(([a, b]) => Math.hypot(a - i, b - j) <= 2.3)) out.push([i, j]);
   }
   return out;
@@ -45,7 +47,7 @@ const power = (type, lvl) => {
   const P = PLANTS[type], v = (a) => a[lvl - 1];
   if (P.slow) return 14 * v(P.slow);
   if (!P.dmg) return 0;
-  return v(P.dmg) * v(P.rate) * (P.splash ? 1.6 : 1) + (P.burn ? v(P.burn) * 2 + v(P.dmg) * v(P.rate) : 0);
+  return v(P.dmg) * v(P.rate) * (P.splash ? 1.6 : 1) * (P.multi ? v(P.multi) : 1) + (P.burn ? v(P.burn) * 2 + v(P.dmg) * v(P.rate) : 0);
 };
 function worth(g, tr, flyers) {
   let sum = 0;
@@ -66,13 +68,13 @@ function worth(g, tr, flyers) {
 export function playLevel(level, { seed = 7, verbose = false, maxPlants = Infinity, onEvents = null, maze = true } = {}) {
   const g = createGame(level, seed), L = LEVELS[level], walls = maze ? layout(level) : [];
   const flyers = L.waves.some((w) => w.some(([kind]) => BUGS[kind].fly));
-  const kinds = L.plants.filter((k) => k !== 'aloe'), shooters = kinds.filter((k) => k !== 'pumpkin');
+  const kinds = L.plants.filter((k) => !['aloe', 'flytrap', 'bell'].includes(k)), shooters = kinds.filter((k) => k !== 'pumpkin');
   const planned = []; for (const [col, gap] of walls) for (let j = 0; j < ROWS; j++) if (j !== gap) planned.push([col, j]);
   const room = () => g.plants.length + g.stubs.length < maxPlants;
   const firstDigger = L.waves.findIndex((w) => w.some(([kind]) => BUGS[kind].dig)) + 1;
   // where the trail will run when the walls stand: nothing but the walls is planted on it
   const keep = new Set();
-  if (walls.length) { const f = createGame(level); for (const [i, j] of planned) if (!f.grid[j][i]) f.grid[j][i] = { type: 'pumpkin' }; for (const [i, j] of trail(f, computeDist(f))) keep.add(i + ',' + j); }
+  if (walls.length) { const f = createGame(level); for (const [i, j] of planned) if (!f.grid[j][i] && f.tiles[j][i] !== 'nettle') f.grid[j][i] = { type: 'pumpkin' }; for (const [i, j] of trail(f, computeDist(f))) keep.add(i + ',' + j); }
   const best = () => {
     const tr = trail(g), now = worth(g, tr, flyers), on = new Set(tr.map(([i, j]) => i + ',' + j));
     let top = null;
@@ -80,6 +82,7 @@ export function playLevel(level, { seed = 7, verbose = false, maxPlants = Infini
     const tryCell = (i, j, types) => {
       if (g.grid[j][i] || stubAt(g, i, j) || placeProblem(g, i, j)) return;
       for (const type of types) {
+        if (g.wave < 5 && PLANTS[type].cost > 60) continue; // a young garden needs many cheap shooters, not a few dear ones
         g.grid[j][i] = { type, lvl: 1, i, j };
         const tr2 = on.has(i + ',' + j) ? trail(g, computeDist(g)) : tr, gain = worth(g, tr2, flyers) - now + (tr2.length - tr.length) * .5;
         g.grid[j][i] = null;
@@ -95,7 +98,7 @@ export function playLevel(level, { seed = 7, verbose = false, maxPlants = Infini
       if (c != null) { p.lvl++; const gain = worth(g, tr, flyers) - now; p.lvl--; offer(gain || (p.type === 'pumpkin' ? .2 : 0), c, () => upgrade(g, p)); }
       if (p.type === 'pumpkin' && g.phase === 'build') for (const type of shooters) {
         p.type = type; const gain = worth(g, tr, flyers) - now; p.type = 'pumpkin';
-        offer(gain, PLANTS[type].cost - refund(p), () => { removePlant(g, p); place(g, type, p.i, p.j); });
+        offer(gain, PLANTS[type].cost - refund(g, p), () => { removePlant(g, p); place(g, type, p.i, p.j); });
       }
     }
     return top;
