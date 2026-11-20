@@ -4,18 +4,23 @@ A browser tower-defense game for the family. Bugs crawl from the anthill to the 
 field and the plants are the towers. Bugs always take the shortest way, so every plant you put down reshapes their
 trail — you build the maze yourself (the way can never be closed completely). The 14×8 field fits whole in landscape
 and in portrait (turned there); tap a free cell to get the plant menu, hold a plant or a bug to read about it.
+Levels are long (20–30 waves): no plant makes dew, it comes only from beaten bugs, finished waves and waves called
+early, so the garden fills the field over the whole level and the last waves need it full. Some bugs break the maze:
+caterpillars bite the plants by the trail, mole crickets go straight for the apple and eat through the walls in their
+way (they pick the weak plants). An eaten plant leaves its roots — tap them to grow it back for a third of its price;
+a bitten plant can be healed the same way; an aloe does both by itself for the plants around it.
 After the first wave the waves come by themselves; the ▶ plate next to the anthill, off the grid (it also shows who comes next), calls the next one early for extra dew.
 On an iPhone home screen the page is laid out to the full screen height, as in the snake and roll games. No ads, works offline (PWA),
 Russian for now.
 
-- `public/data.js` — plants, bugs and the three levels with their waves.
+- `public/data.js` — plants, bugs, the three levels and `makeWaves`, which puts their waves together from a short recipe.
 - `public/game.js` — simulation (no DOM): distance field to the fruit, placement rules, bugs, shots, waves, powers.
 - `public/art.js` — every picture is drawn by code (volume shading, sprites, terrain, effects, UI pieces).
 - `public/view.js` — drawing with cached sprites, input, HUD, menus. `?dev` exposes `window.__fd` for scripted checks;
   `?dev&insets=top,right,bottom,left` fakes the safe areas (e.g. `0,59,21,59` for an iPhone on its side).
 - `server/` — Node 22, no dependencies: static files and `/healthz`.
-- `node --test test/*.test.js` — pathing and placement rules, economy, server, offline cache list, and a bot that must win
-  every level. `node test/bot.mjs [levels...]` prints how the bot did, wave by wave.
+- `node --test test/*.test.js` — pathing and placement rules, economy, repairs, server, offline cache list, and a bot that must win
+  every level with the whole field planted and lose with a garden on half of it. `node test/bot.mjs [levels...]` prints how the bot did, wave by wave.
 - [docs/research.md](docs/research.md) — the genre study the design started from (in Russian).
 
 When anything in `public/` changes, bump `VERSION` in both `public/game.js` and `public/sw.js`.

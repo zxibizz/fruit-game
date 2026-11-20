@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, step, place, placeProblem, trail, startWave, removePlant, upgrade, usePower, earlyBonus, COLS, ROWS, BREAK } from '../public/game.js';
-import { LEVELS, PLANTS } from '../public/data.js';
+import { createGame, step, place, placeProblem, trail, startWave, removePlant, upgrade, usePower, earlyBonus, regrow, regrowCost, stubAt, heal, healCost, COLS, ROWS, BREAK } from '../public/game.js';
+import { LEVELS, PLANTS, BUGS, PLANT_ORDER } from '../public/data.js';
 import { playLevel } from './bot.mjs';
 
 test('every level has a way from the entrance to the fruit', () => {
@@ -55,11 +55,81 @@ test('bugs never walk through plants', () => {
   }
 });
 
-test('the bot wins every level (balance check)', () => {
+test('the bot wins every level with the whole field planted (balance check)', () => {
   for (let n = 0; n < LEVELS.length; n++) {
     const r = playLevel(n);
     assert.ok(r.won, `level ${n + 1} lost at wave ${r.wave}`);
+    assert.ok(r.plants >= 44, `level ${n + 1}: the dew of the level should fill the field, got ${r.plants} plants`);
   }
+});
+
+test('a garden on half of the field loses every level, however well it is upgraded', () => {
+  for (let n = 0; n < LEVELS.length; n++) assert.equal(playLevel(n, { maxPlants: 28 }).won, false, `level ${n + 1}`);
+});
+
+test('levels are long and their waves grow', () => {
+  LEVELS.forEach((L, n) => {
+    assert.ok(L.waves.length >= 20, `level ${n + 1}`);
+    const weight = (w) => w.reduce((s, [k, c]) => s + c * BUGS[k].w, 0);
+    assert.ok(weight(L.waves[L.waves.length - 1]) > 5 * weight(L.waves[0]), `level ${n + 1}`);
+    assert.ok(L.waves.some((w) => w.some(([k]) => BUGS[k].dig)), `level ${n + 1} has diggers`);
+  });
+});
+
+test('dew comes only from bugs and waves: no plant makes it', () => {
+  const g = createGame(2); g.dew = 5000;
+  PLANT_ORDER.forEach((type, k) => assert.ok(place(g, type, 8, k), type));
+  const dew = g.dew;
+  for (let n = 0; n < 60 * 90; n++) step(g, 1 / 60);
+  assert.equal(g.dew, dew);
+});
+
+// one bug of the kind walks in; the field is left as it is
+function send(g, kind) { startWave(g); g.queue = [{ kind, at: 0 }]; }
+
+test('a digger eats through the wall in its way; the roots grow back for a part of the price', () => {
+  const g = createGame(0); g.dew = 1000;
+  for (let j = 1; j < ROWS; j++) assert.ok(place(g, 'pumpkin', 7, j), `row ${j}`);
+  const long = trail(g).length; send(g, 'cricket');
+  let dead = null;
+  for (let n = 0; n < 60 * 120 && !dead; n++) { step(g, 1 / 60); dead = g.events.find((e) => e.t === 'plantDead'); g.events.length = 0; }
+  assert.ok(dead, 'a plant was eaten');
+  const s = stubAt(g, dead.p.i, dead.p.j);
+  assert.ok(s, 'roots are left'); assert.ok(trail(g).length < long, 'the trail got shorter');
+  for (let n = 0; n < 60 * 3; n++) step(g, 1 / 60); // the digger walks on
+  const dew = g.dew; assert.ok(regrow(g, s)); assert.equal(g.dew, dew - regrowCost(s));
+  assert.equal(regrowCost(s), Math.ceil(PLANTS.pumpkin.cost / 3));
+  assert.equal(g.grid[s.j][s.i].type, 'pumpkin'); assert.equal(trail(g).length, long); assert.equal(g.stubs.length, 0);
+});
+
+test('a digger walks round when the way round is short', () => {
+  const g = createGame(0); g.dew = 1000;
+  place(g, 'pumpkin', 7, 3); send(g, 'cricket');
+  for (let n = 0; n < 60 * 120 && g.phase === 'wave'; n++) step(g, 1 / 60);
+  assert.equal(g.plants.length, 1); assert.equal(g.stubs.length, 0);
+});
+
+test('aloe heals the plants around and grows the eaten ones back for free; a bitten plant can be healed for dew', () => {
+  const g = createGame(0); g.dew = 1000;
+  place(g, 'aloe', 7, 4); place(g, 'pumpkin', 7, 5); place(g, 'rose', 7, 3); place(g, 'pumpkin', 12, 7);
+  const [, pumpkin, rose, far] = g.plants;
+  pumpkin.hp = 10; far.hp = 10;
+  for (let n = 0; n < 60 * 5; n++) step(g, 1 / 60);
+  assert.ok(pumpkin.hp > 20); assert.equal(far.hp, 10);
+  const cost = healCost(far), dew0 = g.dew; assert.ok(cost > 0 && cost <= Math.ceil(PLANTS.pumpkin.cost / 3));
+  assert.ok(heal(g, far)); assert.equal(far.hp, far.maxHp); assert.equal(g.dew, dew0 - cost); assert.equal(heal(g, far), false);
+  upgrade(g, rose); removePlant(g, rose, false);
+  assert.ok(stubAt(g, 7, 3)); const dew = g.dew;
+  for (let n = 0; n < 60 * (PLANTS.aloe.regrow[0] + 1); n++) step(g, 1 / 60);
+  assert.equal(g.grid[3][7]?.type, 'rose'); assert.equal(g.grid[3][7].lvl, 2); assert.equal(g.dew, dew);
+});
+
+test('rain grows the eaten plants back, and powers come back every tenth wave', () => {
+  const g = createGame(0); g.dew = 1000; place(g, 'rose', 7, 3);
+  removePlant(g, g.plants[0], false); assert.equal(g.plants.length, 0);
+  assert.ok(usePower(g, 'rain')); assert.equal(g.grid[3][7]?.type, 'rose'); assert.equal(g.powers.rain, 0);
+  g.wave = 9; send(g, 'ant'); g.bugs.length = 0; g.queue.length = 0; step(g, 1 / 60);
+  assert.equal(g.wave, 10); assert.equal(g.phase, 'build'); assert.equal(g.powers.rain, 1); assert.equal(g.powers.frost, 2);
 });
 
 test('after the first wave the next one starts by itself; calling it early pays dew', () => {

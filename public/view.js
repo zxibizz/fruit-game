@@ -2,24 +2,24 @@
 import * as A from './art.js';
 import {
   createGame, step, place, placeProblem, blockingCells, previewTrail, trail, upgrade, upgradeCost, removePlant, refund,
-  startWave, earlyBonus, wavePreview, usePower, collectDrop, stars, COLS, ROWS, BREAK,
+  startWave, earlyBonus, wavePreview, usePower, stars, regrow, regrowCost, clearStub, stubAt, heal, healCost, hpMul, COLS, ROWS, BREAK,
 } from './game.js';
 import { PLANTS, BUGS, LEVELS } from './data.js';
 
 const T = {
   wave: (n, m) => `Волна ${n} / ${m}`, go: 'В бой!', soon: (n, s) => `Волна ${n} через ${s} с`,
-  plant: { pumpkin: 'Тыква', rose: 'Шиповник', clover: 'Клевер', corn: 'Кукуруза', mint: 'Мята', pepper: 'Перец', dandelion: 'Одуванчик' },
-  eaten: { pumpkin: 'съедена', rose: 'съеден', clover: 'съеден', corn: 'съедена', mint: 'съедена', pepper: 'съеден', dandelion: 'съеден' },
+  plant: { pumpkin: 'Тыква', rose: 'Шиповник', aloe: 'Алоэ', corn: 'Кукуруза', mint: 'Мята', pepper: 'Перец', dandelion: 'Одуванчик' },
+  eaten: { pumpkin: 'съедена', rose: 'съеден', aloe: 'съедено', corn: 'съедена', mint: 'съедена', pepper: 'съеден', dandelion: 'съеден' },
   about: {
-    pumpkin: 'Живая стена. Не стреляет, зато крепкая — из тыкв удобно строить лабиринт, чтобы жуки шли дольше.',
+    pumpkin: 'Живая стена. Не стреляет, зато крепкая — из тыкв удобно строить лабиринт, чтобы жуки шли дольше. Чем выше уровень, тем дольше её грызть.',
     rose: 'Стреляет шипами по одному жуку. Достаёт и летающих.',
-    clover: 'Не воюет: время от времени даёт каплю росы. Тапни каплю, чтобы забрать сразу.',
+    aloe: 'Не воюет: лечит покусанные растения вокруг и сама отращивает съеденные. Ставь там, где грызут.',
     corn: 'Кидает зёрна навесом — попадает по нескольким жукам рядом. Летающих не достаёт.',
     mint: 'Холодит: жуки рядом ползут медленнее. Сама не бьёт — ставь рядом со стрелками.',
     pepper: 'Обжигает всех жуков вокруг себя и поджигает их. Бьёт только вблизи.',
     dandelion: 'Бьёт очень далеко и сильно, по летающим — вдвое.',
   },
-  bug: { ant: 'Муравей', beetle: 'Бронзовка', caterpillar: 'Гусеница', grasshopper: 'Кузнечик', snail: 'Улитка', butterfly: 'Бабочка', rhino: 'Жук-носорог' },
+  bug: { ant: 'Муравей', beetle: 'Бронзовка', caterpillar: 'Гусеница', grasshopper: 'Кузнечик', snail: 'Улитка', butterfly: 'Бабочка', cricket: 'Медведка', rhino: 'Жук-носорог' },
   bugAbout: {
     ant: 'Обычный, зато их много.',
     beetle: 'В панцире: слабые удары почти не берут.',
@@ -27,9 +27,11 @@ const T = {
     grasshopper: 'Быстрый, но хилый.',
     snail: 'Медленная и очень крепкая. Мята её не замедляет.',
     butterfly: 'Летит напрямик над лабиринтом. Бьют её шиповник, мята и одуванчик.',
+    cricket: 'Идёт к яблоку напрямик и прогрызает стены на пути — остальные жуки побегут в дыру. Выбирает растения послабее.',
     rhino: 'Босс: огромный и в броне.',
   },
-  fresh: (list) => `Новое: ${list.join(', ')}. Зажми, чтобы узнать подробнее`, lvl: (n) => `уровень ${n}`,
+  fresh: (list) => `Новое: ${list.join(', ')}. Зажми, чтобы узнать подробнее`, freshBug: (list) => `Новый жук: ${list.join(', ')}. Зажми его, чтобы узнать подробнее`,
+  roots: (name) => `${name}: корни`, powersBack: 'Мороз и дождь снова с тобой', regrown: 'Отросло!', lvl: (n) => `уровень ${n}`,
   problem: { busy: 'Здесь занято', bug: 'Здесь жук', blocks: 'Нельзя закрыть жукам путь', poor: 'Не хватает росы' },
   gain: (n) => (n > 0 ? `путь +${n}` : n < 0 ? `путь ${n}` : 'путь тот же'),
   hint1: 'Тапни по траве и выбери растение — жуки пойдут в обход. Готов — жми ▶ у муравейника',
@@ -232,7 +234,7 @@ function buildTerrain() {
 
 // ---------- sprites ----------
 const plantSprite = (type, lvl) => sprite(`p:${type}:${lvl}`, 70, 84, (x) => A.hdPlant(x, type, 35, 66, 1, { noShadow: true, lvl: lvl > 1 ? lvl : 0 }));
-const BUG_SIZE = { rhino: 2.1, snail: 1.25, beetle: 1.15 }, BUG_K = .78;
+const BUG_SIZE = { rhino: 2.1, snail: 1.25, beetle: 1.15, cricket: 1.2 }, BUG_K = .78;
 // Walking bugs keep a small fixed offset from the trail's middle, so a faster bug visibly passes a slower one.
 const LANE = [-.17, .17, 0, -.09, .09];
 function bugPos(b) { if (b.fly) return sp(b.x, b.y); const a = LANE[b.id % 5], d = LANE[(b.id * 3 + 1) % 5]; return sp(b.x + d, b.y + a); }
@@ -258,18 +260,24 @@ function startLevel(n) {
   if (n === 0) banner(T.hint1, 9, true);
   else {
     const plants = LEVELS[n].plants.filter((p) => !LEVELS[n - 1].plants.includes(p));
-    const seen = new Set(LEVELS.slice(0, n).flatMap(bugsOf)), bugs = bugsOf(LEVELS[n]).filter((b) => !seen.has(b));
-    if (plants.length || bugs.length) banner(T.fresh([...plants.map((p) => T.plant[p]), ...bugs.map((b) => T.bug[b])].map((w) => w.toLowerCase())), 7, true);
+    if (plants.length) banner(T.fresh(plants.map((p) => T.plant[p].toLowerCase())), 7, true);
   }
   if (!localStorage.getItem('fruit.holdHint')) { banner(T.holdHint, 7, true); localStorage.setItem('fruit.holdHint', '1'); }
 }
 const bugsOf = (L) => [...new Set(L.waves.flat().map((w) => w[0]))];
+// Bugs of wave n (1-based) that the player has not met yet: neither on the earlier levels nor in this one.
+function newBugs(n) {
+  const seen = new Set([...LEVELS.slice(0, levelIdx).flatMap(bugsOf), ...game.L.waves.slice(0, n - 1).flat().map((w) => w[0])]);
+  return [...new Set(game.L.waves[n - 1].map((w) => w[0]))].filter((k) => !seen.has(k));
+}
 function bugStats(kind, b) {
   const B = BUGS[kind], out = [];
-  out.push(b ? `здоровье ${Math.ceil(b.hp)} / ${b.maxHp}` : `здоровье ${Math.round(B.hp * (1 + game.L.hpGrowth * game.wave))}`); // as in the next wave
+  out.push(b ? `здоровье ${Math.ceil(b.hp)} / ${b.maxHp}` : `здоровье ${Math.round(B.hp * hpMul(game, game.wave + 1))}`); // as in the next wave
   out.push(B.speed >= 1.3 ? 'быстрый' : B.speed <= .5 ? 'очень медленный' : B.speed < .8 ? 'медленный' : 'обычная скорость');
   if (B.armor) out.push(`броня ${B.armor}`);
   if (B.fly) out.push('летает');
+  if (B.dig) out.push('прогрызает стены');
+  if (B.chew) out.push('кусает растения');
   out.push(`кусает на ${B.bite}`, `+${B.reward} росы`);
   return out;
 }
@@ -279,9 +287,9 @@ function statLine(type, l = 1) {
   if (P.range) out.push(`дальность ${v(P.range)}`);
   if (P.rate) out.push(v(P.rate) >= 1 ? `${v(P.rate)} выстр./с` : `раз в ${(1 / v(P.rate)).toFixed(1)} с`);
   if (P.slow) out.push(`замедляет на ${Math.round(v(P.slow) * 100)}%`);
-  if (P.value) out.push(`+${v(P.value)} росы раз в ${v(P.period)} с`);
-  if (type === 'pumpkin') out.push(`прочность ${v(P.hp)}`);
-  if (P.range && !P.slow) out.push(P.air ? 'бьёт летающих' : 'летающих не бьёт');
+  if (P.heal) out.push(`лечит ${v(P.heal)} в секунду`, `отращивает за ${v(P.regrow)} с`);
+  out.push(`прочность ${v(P.hp)}`);
+  if (P.dmg) out.push(P.air ? 'бьёт летающих' : 'летающих не бьёт');
   return out;
 }
 function banner(text, life = 2, top = false) { banners.push({ text, t: 0, life, top }); }
@@ -302,6 +310,8 @@ function choose(type, confirm = true) {
 function tapCell(i, j) {
   const p = game.grid[j]?.[i];
   if (p && p.type) { ghost = null; pop = pop === p ? null : p; return; }
+  const st = p ? null : stubAt(game, i, j);
+  if (st) { ghost = null; pop = pop === st ? null : st; return; } // roots of an eaten plant: grow it back or clear them
   pop = null;
   if (p || (i === game.fruit[0] && j === game.fruit[1]) || (i === game.entry[0] && j === game.entry[1])) { ghost = null; return; }
   if (ghost && ghost.i === i && ghost.j === j) { if (ghost.type && ghost.ok) confirmGhost(); else ghost = null; return; }
@@ -323,13 +333,14 @@ function handleEvents() {
       case 'fire': { const [x, y] = cellCenter(e.p.i, e.p.j); fx.push({ k: 'fire', x, y, t: 0, life: .45, r: PLANTS.pepper.range[e.p.lvl - 1] * CELL }); bump(e.p, .2); break; }
       case 'shoot': bump(e.p, .12); break;
       case 'bite': { angles.delete(e.b.id); const [x, y] = cellCenter(...game.fruit); fx.push({ k: 'dmg', x: x + 20, y: y - 30, t: 0, life: .9, txt: `-${BUGS[e.b.kind].bite}`, red: true }); appleMood('scream', .9); appleSay(T.screams[Math.floor(Math.random() * T.screams.length)]); break; }
-      case 'collect': { const [x, y] = toUI(...sp(e.d.x, e.d.y)); ufx.push({ k: 'fly', x, y, t: 0, life: .5 }); break; }
       case 'place': bump(e.p, .35, true); dust(e.p); terrainDirty = true; break;
+      case 'regrow': bump(e.p, .35, true); dust(e.p); terrainDirty = true; if (e.free) { const [x, y] = cellCenter(e.p.i, e.p.j); fx.push({ k: 'gain', x, y: y - 26, t: 0, life: 1, txt: T.regrown }); } break;
+      case 'heal':
       case 'upgrade': { const [x, y] = cellCenter(e.p.i, e.p.j); for (let n = 0; n < 6; n++) fx.push({ k: 'spark', x: x + (Math.random() - .5) * 30, y: y - 10 - Math.random() * 30, t: n * .05, life: .5 }); bump(e.p, .3, true); break; }
       case 'sell': case 'plantDead': dust(e.p); terrainDirty = true; if (pop === e.p) pop = null; if (e.t === 'plantDead') banner(`${T.plant[e.p.type]} ${T.eaten[e.p.type]}!`, 1.4); break;
       case 'chew': { const [x, y] = cellCenter(e.p.i, e.p.j); for (let n = 0; n < 6; n++) fx.push({ k: 'crumb', x, y: y - 6, vx: (Math.random() - .5) * 50, vy: -20 - Math.random() * 30, t: 0, life: .5, col: e.p.type === 'pumpkin' ? '#f7a23a' : '#6cc04a' }); bump(e.p, .2); break; }
-      case 'wave': banner(T.wave(e.n, game.waves), 1.4); if (AP.mood === 'happy') appleMood('idle', 0); break;
-      case 'waveDone': appleMood('happy', 2.6); appleCheer(); banner(T.waveDone(e.bonus), 1.8); if (levelIdx === 0 && e.n === 1) banner(T.hint2, 6, true); break;
+      case 'wave': banner(T.wave(e.n, game.waves), 1.4); { const nb = newBugs(e.n); if (nb.length && !(levelIdx === 0 && e.n === 1)) banner(T.freshBug(nb.map((k) => T.bug[k].toLowerCase())), 7, true); } if (AP.mood === 'happy') appleMood('idle', 0); break;
+      case 'waveDone': appleMood('happy', 2.6); appleCheer(); banner(T.waveDone(e.bonus), 1.8); if (e.powers) banner(T.powersBack, 4, true); if (levelIdx === 0 && e.n === 1) banner(T.hint2, 6, true); break;
       case 'early': ufx.push({ k: 'gain', x: GOB[0] + GOB[2] / 2, y: GOB[1] - 8, t: 0, life: 1.2, txt: T.early(e.bonus) }); break;
       case 'power': if (e.kind === 'frost') ufx.push({ k: 'flash', t: 0, life: .6, col: 'rgba(190,240,255,' }); else for (let n = 0; n < 70; n++) ufx.push({ k: 'rain', x: Math.random() * UW, y: -Math.random() * UH, t: 0, life: 1.2 }); break;
       case 'won': case 'lost': { if (e.t === 'won') appleCheer(); const g = game; setTimeout(() => { if (game === g) endScreen(e.t === 'won'); }, 900); break; }
@@ -376,13 +387,14 @@ function draw(dt) {
 
   // depth-sorted things on the ground
   const items = [];
+  if (pop && !game.plants.includes(pop) && !game.stubs.includes(pop)) pop = null;
   for (const p of game.plants) items.push([cellCenter(p.i, p.j)[1] + 14, () => drawPlant(p, t)]);
+  for (const st of game.stubs) items.push([cellCenter(st.i, st.j)[1] + 14, () => drawStub(st, t)]);
   for (const b of game.bugs) if (!b.fly) items.push([bugPos(b)[1], () => drawBug(b, t, dt)]);
   const [fxx, fyy] = cellCenter(...game.fruit); items.push([fyy + 12, () => drawApple(fxx, fyy, dt)]);
   items.sort((a, b) => a[0] - b[0]); for (const [, f] of items) f();
   for (const p of game.plants) if (p.hp < p.maxHp) { const [x, y] = cellCenter(p.i, p.j); A.hdHp(c, x, y - 32, 28, p.hp / p.maxHp, '#ffb03a'); }
   if (ghost) drawGhost(t);
-  for (const d of game.drops) drawDrop(d, t);
   for (const s of game.shots) drawShot(s);
   for (const b of game.bugs) if (b.fly) drawBug(b, t, dt);
   for (const b of game.bugs) if (b.hp < b.maxHp && emerge(b) > .3) { const [x, y] = bugPos(b); A.hdHp(c, x, y - (b.kind === 'rhino' ? 34 : 18), b.kind === 'rhino' ? 44 : 20, b.hp / b.maxHp, b.kind === 'rhino' ? '#ff5a5a' : '#7be05a'); }
@@ -420,19 +432,29 @@ function drawPlant(p, t) {
   const sway = Math.sin(t * 1.7 + p.id * 1.3) * .035;
   c.save(); c.translate(x, base); c.transform(sx, 0, sway, sy, 0, 0); blit(s, -35, -66); c.restore();
 }
+// Roots of an eaten plant: a sprout in the soil, with a ring that fills while an aloe grows it back.
+const stubSprite = () => sprite('stub', 70, 84, (x) => A.hdPlant(x, 'pumpkin', 35, 66, 1, { noShadow: true, stage: 0 }));
+function drawStub(st, t) {
+  const [x, y] = cellCenter(st.i, st.j), k = 1 + Math.sin(t * 5 + st.id) * .06;
+  c.save(); c.translate(x, y + 14); c.scale(k, k); blit(stubSprite(), -35, -66); c.restore();
+  c.save(); c.lineCap = 'round'; c.lineWidth = 3;
+  c.beginPath(); c.arc(x, y + 4, 15, 0, A.TAU); c.setLineDash([4, 5]); c.strokeStyle = 'rgba(255,255,255,.75)'; c.stroke(); c.setLineDash([]);
+  if (st.grow > 0) { c.beginPath(); c.arc(x, y + 4, 15, -Math.PI / 2, -Math.PI / 2 + A.TAU * st.grow); c.strokeStyle = '#7be05a'; c.stroke(); }
+  c.restore();
+}
 // coming out of the anthill: small and faint at its hole, full size a step later
 const emerge = (b) => (b.fly ? 1 : clamp((HILL_X - b.x) / .55, 0, 1));
 function drawBug(b, t, dt) {
   const [x, y] = bugPos(b), target = screenAngle(b.vx, b.vy);
   let a = angles.get(b.id); if (a == null) a = target;
   let d = target - a; while (d > Math.PI) d -= A.TAU; while (d < -Math.PI) d += A.TAU; a += d * Math.min(1, dt * 10); angles.set(b.id, a);
-  const moving = !(b.frozen > 0) && !(b.chew > 0), fr = moving ? Math.floor(t * (b.kind === 'butterfly' ? 10 : 7) + b.id) % 2 : 0;
+  const moving = !(b.frozen > 0) && !(b.chew > 0 || b.gnaw), fr = moving ? Math.floor(t * (b.kind === 'butterfly' ? 10 : 7) + b.id) % 2 : 0;
   const s = bugSprite(b.kind, fr), sc = (BUG_SIZE[b.kind] || 1) * BUG_K / 1.12;
   const lift = b.fly ? 16 : 0;
   c.save(); c.globalAlpha = (b.fly ? .18 : .25) * emerge(b); c.beginPath(); c.ellipse(x + 3 + lift * .6, y + 5 + lift, 15 * sc, 8 * sc, 0, 0, A.TAU); c.fillStyle = '#183008'; c.fill(); c.restore();
   if (b.slow < 1 && !b.fly) { c.save(); c.beginPath(); c.ellipse(x, y + 4, 17 * sc, 10 * sc, 0, 0, A.TAU); c.fillStyle = 'rgba(170,235,255,.35)'; c.fill(); c.restore(); }
   const em = emerge(b); if (em <= 0) return;
-  c.save(); c.globalAlpha = em; c.translate(x, y - (b.fly ? Math.sin(t * 6 + b.id) * 3 : 0)); c.rotate(a + (b.chew > 0 ? Math.sin(t * 30) * .12 : 0)); if (em < 1) c.scale(.4 + em * .6, .4 + em * .6);
+  c.save(); c.globalAlpha = em; c.translate(x, y - (b.fly ? Math.sin(t * 6 + b.id) * 3 : 0)); c.rotate(a + (b.chew > 0 || b.gnaw ? Math.sin(t * 30) * .12 : 0)); if (em < 1) c.scale(.4 + em * .6, .4 + em * .6);
   if (b.hit > 0) c.filter = 'brightness(1.8)';
   blit(s, -s.w / 2, -s.h / 2); c.restore();
   if (b.frozen > 0) A.fxIced(c, x, y, 13 * sc);
@@ -510,13 +532,6 @@ function appleFace(r, mood, fear, t) {
   if ((mood === 'idle' && fear > .5) || mood === 'scream') { const k = (t * 1.3) % 1; A.hdDrop(c, r * .66, -r * .45 + k * r * .4, 2.6 + (1 - k)); }
   if (mood === 'sad' || mood === 'scream') for (const s of [-1, 1]) { const k = (t * 1.6 + (s > 0 ? .5 : 0)) % 1; c.save(); c.globalAlpha = 1 - k; A.hdDrop(c, s * r * .3, r * .08 + k * r * .5, 2.2); c.restore(); }
   c.restore();
-}
-function drawDrop(d, t) {
-  const [x, y0] = sp(d.x, d.y), y = y0 - 6 + Math.sin(t * 4 + d.id) * 3;
-  if (d.age > 4 && Math.floor(t * 8) % 2) return;
-  c.save(); const g = c.createRadialGradient(x, y, 1, x, y, 18); g.addColorStop(0, 'rgba(200,245,255,.7)'); g.addColorStop(1, 'rgba(200,245,255,0)'); c.fillStyle = g; c.fillRect(x - 18, y - 18, 36, 36); c.restore();
-  A.hdDrop(c, x, y, 8);
-  const r = Math.max(22, 22 / ws); ui.push({ x: x - r, y: y - r - 2, w: r * 2, h: r * 2, fn: () => collectDrop(game, d.id), s: 'w' });
 }
 function drawShot(s) {
   // shots fly to the bug as drawn, in its lane: blend in the lane offset as the shot gets closer
@@ -763,7 +778,7 @@ function bugChip(k, n, cx, cy, fn) {
   A.hdText(c, '×' + n, cx + 12, cy + 3, 12, '#fff', { stroke: '#4a2a12', sw: 3.5, align: 'left' });
 }
 function pauseBtn(x, y) { button(x, y, 16, '#7ac8ff', (bx, by) => { c.save(); c.fillStyle = '#fff'; c.strokeStyle = '#1f5a8a'; c.lineWidth = 1.5; for (const dx of [-5, 2]) { c.beginPath(); A.rrect(c, bx + dx, by - 6, 4, 12, 1.5); c.fill(); c.stroke(); } c.restore(); }, openPause); }
-function speedBtn(x, y) { button(x, y, 16, speed > 1 ? '#ff9a2a' : '#ffcf3a', (bx, by) => A.hdText(c, '×' + speed, bx, by + 1, 13, '#fff', { stroke: '#8a5a00', sw: 3.5 }), () => { speed = speed > 1 ? 1 : 2; }); }
+function speedBtn(x, y) { button(x, y, 16, speed > 2 ? '#f2622a' : speed > 1 ? '#ff9a2a' : '#ffcf3a', (bx, by) => A.hdText(c, '×' + speed, bx, by + 1, 13, '#fff', { stroke: '#8a5a00', sw: 3.5 }), () => { speed = speed % 3 + 1; }); }
 function powerBtns([fx0, fy0], [rx, ry]) {
   button(fx0, fy0, 19, '#8fd6ff', (x, y) => A.iconFrost(x, y, c), () => usePower(game, 'frost'), !game.powers.frost || game.phase !== 'wave');
   badge(fx0, fy0, 19, game.powers.frost);
@@ -779,10 +794,20 @@ function waveBar(x, y, w, h, text, ts) {
   A.hdText(c, text, x + w / 2, y + h / 2 + .5, ts, '#ffffff', { stroke: '#2a1a0e', sw: 4 });
 }
 function drawPop() {
-  const p = pop, up = upgradeCost(p), { x, by, ly } = nearCell(p.i, p.j);
-  A.uiPanel(c, x - 62, by - 26, 124, 52, 18, '#fff3d6', { ol: '#6a3e1c' });
-  button(x - 30, by, 18, up == null ? '#c8b070' : '#5cc23e', (bx, yy) => { if (up == null) A.hdText(c, '★', bx, yy + 1, 16, '#fff', { stroke: '#8a6a10', sw: 3 }); else { A.hdText(c, '⬆', bx, yy - 4, 13, '#fff', { stroke: '#1f5a14', sw: 3 }); A.hdText(c, String(up), bx, yy + 8, 10, '#fff', { stroke: '#1f5a14', sw: 3 }); } }, () => { upgrade(game, p); }, up == null || game.dew < up);
-  button(x + 30, by, 18, '#e0884a', (bx, yy) => { A.hdText(c, '✕', bx, yy - 4, 12, '#fff', { stroke: '#7a3a10', sw: 3 }); A.hdText(c, '+' + refund(p), bx, yy + 8, 10, '#fff', { stroke: '#7a3a10', sw: 3 }); }, () => { removePlant(game, p); pop = null; });
+  const p = pop, { x: x0, by, ly } = nearCell(p.i, p.j), two = (txt, n, ol) => (bx, yy) => { A.hdText(c, txt, bx, yy - 4, 13, '#fff', { stroke: ol, sw: 3 }); A.hdText(c, String(n), bx, yy + 8, 10, '#fff', { stroke: ol, sw: 3 }); };
+  if (game.stubs.includes(p)) { // roots: grow the plant back, or clear the cell for something else
+    const cost = regrowCost(p), x = x0;
+    A.uiPanel(c, x - 62, by - 26, 124, 52, 18, '#fff3d6', { ol: '#6a3e1c' });
+    button(x - 30, by, 18, '#5cc23e', (bx, yy) => { A.hdLeaf(c, bx, yy - 1, 8, -2.4, '#e8ffd8', { noOl: true }); A.hdLeaf(c, bx, yy - 1, 8, -.75, '#ffffff', { noOl: true }); A.hdText(c, String(cost), bx, yy + 8, 10, '#fff', { stroke: '#1f5a14', sw: 3 }); }, () => { if (regrow(game, p)) pop = null; }, game.dew < cost || !!placeProblem(game, p.i, p.j));
+    button(x + 30, by, 18, '#e0884a', (bx, yy) => A.hdText(c, '✕', bx, yy + 1, 14, '#fff', { stroke: '#7a3a10', sw: 3 }), () => { clearStub(game, p); pop = null; });
+    labelPill(T.roots(T.plant[p.type]), x, ly, '#8a5a32', '#4a2a12');
+    return;
+  }
+  const up = upgradeCost(p), hc = healCost(p), dx = hc ? 44 : 30, hw = hc ? 76 : 62, x = clamp(x0, hw + 4, UW - hw - 4);
+  A.uiPanel(c, x - hw, by - 26, hw * 2, 52, 18, '#fff3d6', { ol: '#6a3e1c' });
+  button(x - dx, by, 18, up == null ? '#c8b070' : '#5cc23e', up == null ? (bx, yy) => A.hdText(c, '★', bx, yy + 1, 16, '#fff', { stroke: '#8a6a10', sw: 3 }) : two('⬆', up, '#1f5a14'), () => { upgrade(game, p); }, up == null || game.dew < up);
+  if (hc) button(x, by, 18, '#4aa8ee', two('✚', hc, '#1a4f8a'), () => { heal(game, p); }, game.dew < hc); // heal the bitten plant
+  button(x + dx, by, 18, '#e0884a', two('✕', '+' + refund(p), '#7a3a10'), () => { removePlant(game, p); pop = null; });
   labelPill(T.plant[p.type], x, ly, '#8a5a32', '#4a2a12');
 }
 

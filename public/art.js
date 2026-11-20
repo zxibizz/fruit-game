@@ -199,6 +199,23 @@ function hdBug(c, kind, x, y, a = 0, s = 1, o = {}) {
       hdEye(c, 15, -3.2, 2.4); hdEye(c, 15, 3.2, 2.4);
       break;
     }
+    case 'cricket': {
+      // mole cricket: long earth-brown body, a shield behind the head, two digging claws in front
+      const col = o.color || '#9a6a3a', sw = Math.sin(o.ph || 0) * .22;
+      hdLegs(c, [-9, -3], 10, legC, 1.8);
+      for (let i = 4; i >= 0; i--) hdBall(c, -8 - i * 4.4, 0, 5.2, 6.6 - i * .55, i % 2 ? col : darken(col, .12), { olk: .8, noSpec: i > 1 });
+      for (const sg of [-1, 1]) { c.save(); c.globalAlpha = .55; hdLeaf(c, -7, sg * 2.6, 15, Math.PI + sg * .12, '#e8d2a0', { w: .22, noOl: true }); c.restore(); }
+      hdBall(c, 1, 0, 7.6, 7.8, darken(col, .22), { specA: .55 });
+      hdBall(c, 9.5, 0, 5.2, 5.6, lighten(col, .06));
+      for (const sg of [-1, 1]) {
+        c.save(); c.translate(8, sg * 6.5); c.rotate(sg * (.55 + sw));
+        hdBlob(c, cc => { cc.moveTo(-2, -2.6); cc.lineTo(7, -3.4); cc.lineTo(10.5, -1.6); cc.lineTo(8, -.4); cc.lineTo(10.8, .8); cc.lineTo(8, 1.6); cc.lineTo(10, 3.2); cc.lineTo(6, 3.6); cc.lineTo(-2, 2.6); cc.closePath(); }, '#d8a45a', 4, 0, 8);
+        c.restore();
+      }
+      hdAntennae(c, 12, 6, legC);
+      hdEye(c, 11.5, -2.8, 2.3); hdEye(c, 11.5, 2.8, 2.3);
+      break;
+    }
     case 'caterpillar': {
       const col = o.color || '#86d23c';
       for (let i = 6; i >= 1; i--) {
@@ -308,19 +325,17 @@ function hdPlant(c, kind, x, y, s = 1, o = {}) {
       for (const [dx, dy, r] of [[-13, -24, 3.5], [13, -22, 3], [0, -31, 4]]) { c.save(); c.strokeStyle = '#ffffff'; c.lineWidth = 1.5; c.lineCap = 'round'; for (let i = 0; i < 3; i++) { const aa = i * Math.PI / 3; c.beginPath(); c.moveTo(dx - Math.cos(aa) * r, dy - Math.sin(aa) * r); c.lineTo(dx + Math.cos(aa) * r, dy + Math.sin(aa) * r); c.stroke(); } c.restore(); }
       break;
     }
-    case 'clover': {
-      hdLine(c, [5, -2, 6, -26], '#4a9a32', 2.2);
-      for (const a of [-2.5, -1.57, -.65]) {
-        const lx = Math.cos(a) * 9, ly = -9 + Math.sin(a) * 8;
-        c.save(); c.translate(lx, ly); c.rotate(a + Math.PI / 2);
-        hdBlob(c, cc => { cc.moveTo(0, 7); cc.bezierCurveTo(-11, -1, -6, -11, 0, -5); cc.bezierCurveTo(6, -11, 11, -1, 0, 7); }, a === -1.57 ? '#6cc84e' : '#56b840', 0, -1, 9);
-        c.beginPath(); c.moveTo(-4, -1); c.lineTo(0, 2); c.lineTo(4, -1); c.strokeStyle = 'rgba(255,255,255,.6)'; c.lineWidth = 1.4; c.stroke();
+    case 'aloe': {
+      // thick pointed leaves in a fan, pale spots on them, a healing sparkle on top
+      const leaf = (ang, len, col) => {
+        c.save(); c.translate(0, -3); c.rotate(ang);
+        hdBlob(c, cc => { cc.moveTo(-4.6, 0); cc.quadraticCurveTo(-5, -len * .55, 0, -len); cc.quadraticCurveTo(5, -len * .55, 4.6, 0); cc.closePath(); }, col, 0, -len * .45, len * .6);
+        for (const t of [.25, .45, .65]) { c.beginPath(); c.arc(t > .4 && t < .5 ? 1.4 : -1.2, -len * t, 1.05, 0, TAU); c.fillStyle = 'rgba(235,255,225,.8)'; c.fill(); }
         c.restore();
-      }
-      hdBall(c, 6, -30, 7.5, 7, '#fbe8ff', { specA: .5 });
-      for (let i = 0; i < 7; i++) { c.beginPath(); c.arc(6 + Math.cos(i) * 4, -30 + Math.sin(i) * 4, 1.7, 0, TAU); c.fillStyle = '#e6a8f0'; c.fill(); }
-      // dew drop
-      hdBall(c, -9, -14, 2.8, 3.2, '#bfeaff', { specA: 1, olk: .6 });
+      };
+      leaf(-1.25, 19, '#3f9f6a'); leaf(1.25, 19, '#3f9f6a'); leaf(-.68, 25, '#4bb478'); leaf(.68, 25, '#4bb478'); leaf(0, 30, '#62c98a');
+      hdBall(c, 0, -3, 7, 4, '#3a8f5e', { noSpec: true, olk: .7 });
+      c.save(); c.translate(11, -31); c.fillStyle = '#ffffff'; c.strokeStyle = '#3f9a5a'; c.lineWidth = 1.3; c.beginPath(); rrect(c, -1.8, -5, 3.6, 10, 1.4); rrect(c, -5, -1.8, 10, 3.6, 1.4); c.stroke(); c.fill(); c.restore();
       break;
     }
     case 'dandelion': {
@@ -602,7 +617,7 @@ hdPlant = function (c, kind, x, y, s = 1, o = {}) {
     for (const dx of [-3.5, 3.5]) { c.beginPath(); c.moveTo(dx * .6, -21); c.quadraticCurveTo(dx * 1.4, -11, dx * .6, -1); c.stroke(); }
     hdSpec(c, -4, -17, 2.4, 4.5, .2, .8);
   }
-  if (kind === 'rose' || kind === 'pepper' || kind === 'clover') { fxStar(c, -12, -27, 2.6, '#ffffff'); }
+  if (kind === 'rose' || kind === 'pepper') { fxStar(c, -12, -27, 2.6, '#ffffff'); }
   if (kind === 'corn') { hdBall(c, -9, -18, 2.4, 2.8, '#bfeaff', { olk: .5 }); }
   c.restore();
 };
