@@ -114,9 +114,13 @@ const visField = () => [(FA[0] - ox) / ws, (FA[1] - oy) / ws, FA[2] / ws, FA[3] 
 // clips fixed elements at the short window's edge). Only when the width matches the screen and the difference is a
 // strip, not a keyboard. The window height itself is not watched: iOS switches it back and forth.
 const IOS_PWA = navigator.standalone === true && /iPhone|iPod/.test(navigator.userAgent || '');
+// But on newer iOS (26.x, seen 2026-11-20) the window starts below the status bar (its safe-area top is 0) and iOS
+// paints a frosted edge above it: stretching the page to the screen then pushed its bottom 55 pt off the screen. So
+// the page is stretched only when it really lies under the status bar (safe-area top > 20).
+let underBar = true;
 function fullHeight() {
   const iw = innerWidth, ih = innerHeight;
-  if (!IOS_PWA || !screen.width || !screen.height) return ih;
+  if (!IOS_PWA || !underBar || !screen.width || !screen.height) return ih;
   const portrait = ih >= iw, sh = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
   const sw = portrait ? Math.min(screen.width, screen.height) : Math.max(screen.width, screen.height);
   return Math.abs(sw - iw) < 2 && sh > ih && sh - ih < 120 ? sh : ih;
@@ -124,6 +128,7 @@ function fullHeight() {
 function resize() {
   // installed on an iPhone: laid out to the screen's height even when the window is that tall itself right now (iOS
   // stretches and shortens it by turns; the layout must not follow)
+  underBar = !IOS_PWA || safeInsets().t > 20 || innerWidth > innerHeight; // (on its side the status bar is hidden)
   const vw = innerWidth, vh = fullHeight(), was = PORT, sh = vh > vw ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
   const tall = IOS_PWA && (vh !== innerHeight || vh === sh);
   document.documentElement.style.setProperty('--app-h', tall ? `${vh}px` : '');
@@ -891,9 +896,14 @@ function showHome(on) {
 }
 const LOCK = '<svg width="18" height="20" viewBox="0 0 18 20"><rect x="2" y="8" width="14" height="11" rx="3" fill="#8a6a4a"/><path d="M5 8V6a4 4 0 0 1 8 0v2" stroke="#8a6a4a" stroke-width="2.6" fill="none"/></svg>';
 function showModal(html) { $('modal').hidden = !html; if (html) $('card').innerHTML = html; }
+// iPhone home-screen app only: the sizes the layout is built from, to read off a screenshot when something is cut off
+function screenInfo() {
+  const i = safeInsets(), r = (v) => Math.round(v), h = getComputedStyle(document.documentElement).getPropertyValue('--app-h') || '-';
+  return `окно ${innerWidth}×${innerHeight} · экран ${screen.width}×${screen.height} · vv ${r(visualViewport?.height || 0)} · safe ${r(i.t)}/${r(i.b)}/${r(i.l)}/${r(i.r)} · app-h ${h} · ${document.documentElement.className}`;
+}
 function openPause() {
   paused = true;
-  showModal(`<h2>${T.pause}</h2><div class="row"><button class="btn" id="mResume">${T.resume}</button><button class="btn alt" id="mRestart">${T.restart}</button><button class="btn alt" id="mHome">${T.levels}</button></div>`);
+  showModal(`<h2>${T.pause}</h2><div class="row"><button class="btn" id="mResume">${T.resume}</button><button class="btn alt" id="mRestart">${T.restart}</button><button class="btn alt" id="mHome">${T.levels}</button></div>${IOS_PWA ? `<p class="diag">${screenInfo()}</p>` : ''}`);
   $('mResume').onclick = () => { showModal(null); paused = false; };
   $('mRestart').onclick = () => startLevel(levelIdx);
   $('mHome').onclick = () => { showModal(null); showHome(true); };
