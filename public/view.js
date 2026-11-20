@@ -32,9 +32,9 @@ const T = {
   fresh: (list) => `Новое: ${list.join(', ')}. Зажми, чтобы узнать подробнее`, lvl: (n) => `уровень ${n}`,
   problem: { busy: 'Здесь занято', bug: 'Здесь жук', blocks: 'Нельзя закрыть жукам путь', poor: 'Не хватает росы' },
   gain: (n) => (n > 0 ? `путь +${n}` : n < 0 ? `путь ${n}` : 'путь тот же'),
-  hint1: 'Тапни по траве и выбери растение — жуки пойдут в обход. Готов — тапни ▶ у муравейника',
+  hint1: 'Тапни по траве и выбери растение — жуки пойдут в обход. Готов — жми ▶ у муравейника',
   holdHint: 'Зажми растение или жука — узнаешь, кто это',
-  pick: 'Что посадить?',
+  pick: 'Что посадить?', pickHint: 'Тапни растение — расскажу о нём',
   hint2: 'Дальше волны придут сами. Тапнешь ▶ раньше — получишь росу',
   zoomHint: 'Поле можно приблизить двумя пальцами',
   won: 'Яблоко спасено!', lost: 'Жуки съели яблоко', retry: 'Ещё раз', levels: 'Уровни', nextLevel: 'Дальше', resume: 'Продолжить',
@@ -72,7 +72,9 @@ const offEntry = (first) => (PORT ? [first[0], -60] : [FW() + 40, first[1]]);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 // HUD bands in UI units: portrait has a row on top and one at the bottom, landscape a column on each side
 const PTOP = 46, PBOT = 52, LLEFT = 104, LRIGHT = 52;
-let TOPY = 0, BOTY = 0; // portrait: room kept above the top row and below the bottom row, in UI units
+// room kept free, in UI units: TOPY above the portrait top row, BOTY below the bottom buttons, CORN at the sides of the
+// portrait bottom row (rounded screen corners of the home-screen app)
+let TOPY = 0, BOTY = 0, CORN = 0;
 // The phone's safe areas (notch, home bar) in CSS px, read from CSS env() through a probe element.
 function safeInsets() {
   const d = document.createElement('div');
@@ -111,7 +113,9 @@ function resize() {
   const gw = FW() + 2 * M, gh = FH() + 2 * M;
   // An iPhone home-screen app blurs the top of the page under the status bar: keep the top row below that.
   const ins = safeInsets(), edge = PORT && navigator.standalone ? 36 : 0;
-  TOPY = PORT ? (ins.t + edge) / uk : 0; BOTY = Math.max(0, ins.b - 8) / uk;
+  // the home-screen app also has its rounded screen corners and the home bar right at the page's bottom
+  const app = !!navigator.standalone;
+  TOPY = PORT ? (ins.t + edge) / uk : 0; BOTY = Math.max(app ? 14 : 0, ins.b - 8) / uk; CORN = app ? 10 : 0;
   // landscape: equal bands on both sides, so the field sits in the middle of the screen
   const side = Math.max(LLEFT, LRIGHT) * uk;
   FA = PORT ? [6, (TOPY + PTOP) * uk, vw - 12, vh - (TOPY + PTOP + PBOT + BOTY) * uk] : [side, 6, vw - side * 2, vh - 12];
@@ -288,7 +292,7 @@ function handleEvents() {
       case 'chew': { const [x, y] = cellCenter(e.p.i, e.p.j); for (let n = 0; n < 6; n++) fx.push({ k: 'crumb', x, y: y - 6, vx: (Math.random() - .5) * 50, vy: -20 - Math.random() * 30, t: 0, life: .5, col: e.p.type === 'pumpkin' ? '#f7a23a' : '#6cc04a' }); bump(e.p, .2); break; }
       case 'wave': banner(T.wave(e.n, game.waves), 1.4); if (AP.mood === 'happy') appleMood('idle', 0); break;
       case 'waveDone': appleMood('happy', 2.6); appleCheer(); banner(T.waveDone(e.bonus), 1.8); if (levelIdx === 0 && e.n === 1) banner(T.hint2, 6, true); break;
-      case 'early': ufx.push({ k: 'gain', x: GO[0], y: GO[1] - 30, t: 0, life: 1.2, txt: T.early(e.bonus) }); break;
+      case 'early': ufx.push({ k: 'gain', x: GOB[0] + GOB[2] / 2, y: GOB[1] - 8, t: 0, life: 1.2, txt: T.early(e.bonus) }); break;
       case 'power': if (e.kind === 'frost') ufx.push({ k: 'flash', t: 0, life: .6, col: 'rgba(190,240,255,' }); else for (let n = 0; n < 70; n++) ufx.push({ k: 'rain', x: Math.random() * UW, y: -Math.random() * UH, t: 0, life: 1.2 }); break;
       case 'won': case 'lost': { if (e.t === 'won') appleCheer(); const g = game; setTimeout(() => { if (game === g) endScreen(e.t === 'won'); }, 900); break; }
     }
@@ -345,7 +349,7 @@ function draw(dt) {
   setUI();
   drawFx(dt, ufx);
   drawHud(t);
-  GO = goPos(); // before the banners: in portrait they keep clear of it
+  if (game.phase === 'build') { GOB = goLayout(); GO = [GOB[0] + GO_DX, GOB[1] + GOB[3] / 2]; } // before the banners: they keep clear of it
   drawBanners(dt);
   if (game.phase === 'build') goIcon(t); // over the hints: they talk about it
   if (ghost) drawPicker(t);
@@ -505,7 +509,13 @@ function nearCell(i, j) {
 function drawPicker(t) {
   const list = game.L.plants, n = list.length, bw = 50, bh = 58, gap = 6, pad = 8;
   const cols = n * (bw + gap) - gap + pad * 2 <= UW - 12 ? n : Math.ceil(n / 2), rows = Math.ceil(n / cols);
-  const w = Math.max(cols * (bw + gap) - gap + pad * 2, 190), h = 30 + rows * (bh + gap) - gap + pad;
+  const w = Math.max(cols * (bw + gap) - gap + pad * 2, 190), g = ghost, tw0 = w - pad * 2 - 34;
+  // under the buttons: what the chosen plant does (until it is planted), and the close button at the bottom right
+  // the height fits the longest description, so the buttons stay put when a plant is chosen
+  const text = (tp) => { c.save(); c.font = '800 12px Nunito'; const a = wrap(T.about[tp], tw0); c.font = '900 11px Nunito'; const b = wrap(statLine(tp).join(' · '), tw0); c.restore(); return [a, b]; };
+  const [lines, stats] = g.type ? text(g.type) : [[], []];
+  const most = Math.max(...list.map((tp) => { const [a, b] = text(tp); return a.length * 15 + b.length * 14; }));
+  const top2 = 30 + rows * (bh + gap) - gap, foot = Math.max(40, 12 + most), h = top2 + foot;
   const hc = CELL / 2 * ws / uk, [fx0, fy0, fw, fh] = faUI(), [ux, y0] = toUI(...cellCenter(ghost.i, ghost.j)), uy = clamp(y0, fy0 + hc, fy0 + fh - hc);
   // above the plant on the cell if it fits, else below; on a screen too small for both, the side that overflows less
   const yUp = uy - hc * 2.3 - h - 8, yDown = uy + hc + 10, over = yDown + h - (UH - 4);
@@ -517,7 +527,6 @@ function drawPicker(t) {
   if (above) { c.moveTo(tx - 9, y + h - 1.5); c.lineTo(tx, y + h + 8); c.lineTo(tx + 9, y + h - 1.5); } else { c.moveTo(tx - 9, y + 1.5); c.lineTo(tx, y - 8); c.lineTo(tx + 9, y + 1.5); }
   c.fillStyle = '#fff3d6'; c.fill(); c.lineWidth = 2.5; c.strokeStyle = '#6a3e1c'; c.stroke(); c.restore();
   // title
-  const g = ghost;
   if (!g.type) A.hdText(c, T.pick, x + w / 2, y + 16, 14, '#6a3e1c', { stroke: null });
   else {
     const tag = g.ok ? T.gain(g.gain) : T.problem[g.problem] || '', col = !g.ok ? '#e2483a' : g.gain > 0 ? '#3f9a2a' : '#8a7a5a';
@@ -532,6 +541,12 @@ function drawPicker(t) {
     plantButton(type, bx, by, bw, bh, on, poor, on && g.ok, t);
     ui.push({ x: bx - gap / 2, y: by - gap / 2, w: bw + gap, h: bh + gap, fn: () => choose(type), s: 'u', card: type });
   });
+  const dy = y + top2 + 16;
+  if (!g.type) A.hdText(c, T.pickHint, x + pad + 2, dy, 12, '#a08060', { stroke: null, align: 'left', weight: 800 });
+  lines.forEach((l, k) => A.hdText(c, l, x + pad + 2, dy + k * 15, 12, '#8a5a32', { stroke: null, align: 'left', weight: 800 }));
+  stats.forEach((l, k) => A.hdText(c, l, x + pad + 2, dy + 2 + lines.length * 15 + k * 14, 11, '#3f8a2a', { stroke: null, align: 'left' }));
+  const cx = x + w - pad - 13, cy = y + h - pad - 11;
+  button(cx, cy, 13, '#e0884a', (bx, by) => { c.save(); c.lineCap = 'round'; c.lineWidth = 3; c.strokeStyle = '#fff'; c.beginPath(); c.moveTo(bx - 4.5, by - 4.5); c.lineTo(bx + 4.5, by + 4.5); c.moveTo(bx + 4.5, by - 4.5); c.lineTo(bx - 4.5, by + 4.5); c.stroke(); c.restore(); }, () => { ghost = null; });
 }
 function plantButton(type, x, y, w, h, on, poor, ready, t) {
   c.save(); if (on) { c.shadowColor = ready ? 'rgba(90,220,60,.9)' : 'rgba(255,220,60,.9)'; c.shadowBlur = 12; }
@@ -594,7 +609,7 @@ function drawFx(dt, list) {
 }
 function drawBanners(dt) {
   // portrait: below the anthill and its start button
-  let topY = PORT ? Math.max(TOPY + PTOP + 40, game.phase === 'build' ? GO[1] + 52 : 0) : 26; const midX = (FA[0] + FA[2] / 2) / uk;
+  let topY = PORT ? Math.max(TOPY + PTOP + 40, game.phase === 'build' ? GOB[1] + GOB[3] + 26 : 0) : 26; const midX = (FA[0] + FA[2] / 2) / uk;
   for (const b of banners) {
     b.t += dt; const k = b.t / b.life; if (k >= 1) continue;
     const a = Math.min(1, b.t * 5, (1 - k) * 5); const text = typeof b.text === 'function' ? b.text() : b.text;
@@ -618,40 +633,52 @@ function drawHud(t) {
     dewPill(6, ty + 7, 86, 32); hpPill(98, ty + 7, 70, 32);
     waveBar(174, ty + 9, UW - 174 - 46, 28, waveText, 12);
     pauseBtn(UW - 22, ty + 23);
-    powerBtns([28, by], [74, by]);
-    speedBtn(UW - 24, by);
-    if (build) previewRow(102, by, UW - 44 - 102);
+    powerBtns([28 + CORN, by], [74 + CORN, by]);
+    speedBtn(UW - 24 - CORN, by);
   } else { // left: dew, fruit, wave, next wave; right: pause, speed, powers
     const x = 8, w = LLEFT - 16, cx = UW - LRIGHT / 2;
     dewPill(x, 8, w, 32); hpPill(x, 46, w, 32);
     waveBar(x, 86, w, 26, build && game.nextIn != null ? `${game.wave + 1}/${game.waves} · ${Math.ceil(game.nextIn)} с` : `${build ? game.wave + 1 : game.wave} / ${game.waves}`, 12);
-    if (build) previewColumn(x, 120, w, UH - 128);
     pauseBtn(cx, 24); speedBtn(cx, 64);
     powerBtns([cx, UH - BOTY - 74], [cx, UH - BOTY - 28]);
   }
 }
 // The next wave is called from a round button by the anthill; it shows the countdown and the dew for starting early.
 let GO = [0, 0];
-// right on the anthill: its cell can't be planted, so the button takes no taps meant for the grass
-function goPos() {
-  const [fx0, fy0, fw, fh] = faUI(), r = 21, [x, y] = toUI(...cellCenter(...game.entry));
-  return [clamp(x, fx0 + r + 4, fx0 + fw - r - 4), clamp(y, fy0 + r + 4, fy0 + fh - r - 22)];
+// The start button sits next to the anthill (not on it) with who comes next and the dew for starting early:
+// [▶ 2/6 ant×10 beetle×2 +14]. The whole plate starts the wave; holding a bug shows what it is.
+let GOB = [0, 0, 0, 0]; const GO_R = 15, GO_DX = 6 + GO_R; // the ▶ circle: radius and centre from the plate's left
+function goLayout() {
+  const prev = wavePreview(game), bonus = earlyBonus(game), end = bonus ? 52 : 56, w = 40 + 30 + prev.length * 42 + end, h = 36;
+  const [ex, ey] = cellCenter(...game.entry), [ax, ay] = toUI(...(PORT ? [ex, ey - 14] : [ex + 16, ey + 4]));
+  const [fx0, fy0, fw, fh] = faUI(), hc = CELL / 2 * ws / uk;
+  let x, y;
+  if (PORT) { // beside the anthill, on the side with more room; under it if neither side fits
+    const right = ax < fx0 + fw / 2; x = right ? ax + hc * 1.3 : ax - hc * 1.3 - w; y = ay - h / 2 + 2;
+    if (x < fx0 + 2 || x + w > fx0 + fw - 2) { x = ax - w / 2; y = ay + hc * 1.4; }
+  } else { // above the anthill, or under it on the top rows
+    x = ax + hc - w; y = ay - hc * 1.4 - h; if (y < fy0 + 2) y = ay + hc * 1.3;
+  }
+  return [clamp(x, fx0 + 2, fx0 + fw - w - 2), clamp(y, fy0 + 2, fy0 + fh - h - 2), w, h];
 }
 function goIcon(t) {
-  const r = 21, [x, y] = GO;
-  const k = game.nextIn != null ? game.nextIn / BREAK : 1, p = 1 + Math.sin(t * 5) * .05, bonus = earlyBonus(game);
-  c.save(); c.translate(x, y); c.scale(p, p);
-  c.shadowColor = 'rgba(80,200,40,.8)'; c.shadowBlur = 12; c.beginPath(); c.arc(0, 0, r, 0, A.TAU); c.fillStyle = '#5cc23e'; c.fill(); c.shadowBlur = 0;
-  c.lineWidth = 2.5; c.strokeStyle = '#1f6a17'; c.stroke();
-  if (game.nextIn != null) { c.beginPath(); c.arc(0, 0, r - 4, -Math.PI / 2, -Math.PI / 2 + A.TAU * k); c.lineWidth = 3.5; c.lineCap = 'round'; c.strokeStyle = '#eaffd8'; c.stroke(); }
-  c.beginPath(); c.moveTo(-5, -9); c.lineTo(10, 0); c.lineTo(-5, 9); c.closePath(); c.fillStyle = '#fff'; c.fill(); c.lineWidth = 2; c.lineJoin = 'round'; c.strokeStyle = '#1f5a14'; c.stroke();
+  const [x, y, w, h] = GOB, cy = y + h / 2, r = GO_R, cx = x + GO_DX, bonus = earlyBonus(game), start = () => { ghost = null; pop = null; startWave(game); };
+  c.save(); c.shadowColor = 'rgba(0,0,0,.3)'; c.shadowBlur = 8; A.uiPanel(c, x, y, w, h, h / 2, '#fff3d6', { ol: '#6a3e1c', olw: 2.5 }); c.restore();
+  const k = game.nextIn != null ? game.nextIn / BREAK : 1, p = 1 + Math.sin(t * 5) * .05;
+  c.save(); c.translate(cx, cy); c.scale(p, p);
+  c.shadowColor = 'rgba(80,200,40,.8)'; c.shadowBlur = 10; c.beginPath(); c.arc(0, 0, r, 0, A.TAU); c.fillStyle = '#5cc23e'; c.fill(); c.shadowBlur = 0;
+  c.lineWidth = 2.2; c.strokeStyle = '#1f6a17'; c.stroke();
+  if (game.nextIn != null) { c.beginPath(); c.arc(0, 0, r - 3.5, -Math.PI / 2, -Math.PI / 2 + A.TAU * k); c.lineWidth = 3; c.lineCap = 'round'; c.strokeStyle = '#eaffd8'; c.stroke(); }
+  c.beginPath(); c.moveTo(-4, -7); c.lineTo(8, 0); c.lineTo(-4, 7); c.closePath(); c.fillStyle = '#fff'; c.fill(); c.lineWidth = 1.8; c.lineJoin = 'round'; c.strokeStyle = '#1f5a14'; c.stroke();
   c.restore();
-  const label = bonus ? `+${bonus}` : T.go; c.save(); c.font = '900 12px Nunito'; const lw = c.measureText(label).width + (bonus ? 26 : 16); c.restore();
-  const lx = x - lw / 2, ly = y + r + 2;
-  A.uiPanel(c, lx, ly, lw, 18, 9, bonus ? '#fff3d6' : '#5cc23e', { ol: bonus ? '#2a6fa8' : '#1f6a17', olw: 2 });
-  if (bonus) { A.hdDrop(c, lx + 9, ly + 9.5, 4.5); A.hdText(c, label, lx + lw / 2 + 5, ly + 9.5, 12, '#2a6fa8', { stroke: null }); }
-  else A.hdText(c, label, x, ly + 9.5, 12, '#fff', { stroke: '#1f5a14', sw: 3 });
-  ui.push({ x: x - r - 2, y: y - r - 2, w: r * 2 + 4, h: r * 2 + 4, fn: () => { ghost = null; pop = null; startWave(game); }, s: 'u' });
+  A.hdText(c, `${game.wave + 1}/${game.waves}`, x + 54, cy + .5, 11, '#8a5a32', { stroke: null });
+  const prev = wavePreview(game);
+  prev.forEach(([kind, n], i) => { const bx = x + 78 + i * 42; bugChip(kind, n, bx, cy, () => {}); }); // hold for info
+  const ex = x + 72 + prev.length * 42, ew = w - (ex - x) - 6;
+  if (bonus) { c.save(); c.beginPath(); A.rrect(c, ex, cy - 10, ew, 20, 10); c.fillStyle = '#d8f0ff'; c.fill(); c.restore(); A.hdDrop(c, ex + 10, cy + .5, 4.5); A.hdText(c, `+${bonus}`, ex + ew / 2 + 5, cy + .5, 12, '#2a6fa8', { stroke: null }); }
+  else { c.save(); c.beginPath(); A.rrect(c, ex, cy - 11, ew, 22, 11); c.fillStyle = '#5cc23e'; c.fill(); c.restore(); A.hdText(c, T.go, ex + ew / 2, cy + .5, 12, '#fff', { stroke: '#1f5a14', sw: 3 }); }
+  ui.push({ x: x + 2, y, w: 42, h, fn: start, s: 'u' }); // only ▶ starts the wave
+  const gx = x + 72 + prev.length * 42; ui.push({ x: gx - 2, y, w: x + w - gx + 2, h, fn: start, s: 'u' }); // and the bonus / «В бой!» end
 }
 function dewPill(x, y, w, h) {
   DEW = [x + 18, y + h / 2];
@@ -666,22 +693,11 @@ function hpPill(x, y, w, h) {
   c.beginPath(); A.rrect(c, bx, y + h / 2 - 7, Math.max(10, bw * k), 14, 7); const g = c.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, '#ff8a8a'); g.addColorStop(1, '#e02c3a'); c.fillStyle = g; c.fill(); c.restore();
   A.hdText(c, String(game.hp), bx + bw / 2, y + h / 2 + 1, 11, '#fff', { stroke: '#7a1010', sw: 3 });
 }
-function bugChip(k, n, cx, cy) {
+function bugChip(k, n, cx, cy, fn) {
   const s = bugSprite(k, 0), sc = (k === 'rhino' ? 46 : 38) / s.w;
-  ui.push({ x: cx - 14, y: cy - 14, w: 40, h: 28, fn: () => {}, s: 'u', info: { bug: k } });
+  ui.push({ x: cx - 14, y: cy - 16, w: 40, h: 32, fn, s: 'u', info: { bug: k } });
   c.save(); c.translate(cx, cy); c.rotate(-Math.PI / 2); c.scale(sc, sc); blit(s, -s.w / 2, -s.h / 2); c.restore();
   A.hdText(c, '×' + n, cx + 12, cy + 3, 12, '#fff', { stroke: '#4a2a12', sw: 3.5, align: 'left' });
-}
-// who comes in the next wave: a row (portrait, bottom band) or a column (landscape, left band)
-function previewRow(x, cy, w) {
-  const prev = wavePreview(game), cw = 44, tw = prev.length * cw + 34, x0 = x + (w - tw) / 2;
-  A.uiPanel(c, x0, cy - 15, tw, 30, 15, 'rgba(60,35,18,.78)', { ol: '#2a1a0e' });
-  A.hdText(c, `${game.wave + 1}/${game.waves}`, x0 + 17, cy + .5, 11, '#ffe9a0', { stroke: null });
-  prev.forEach(([k, n], i) => bugChip(k, n, x0 + 38 + i * cw, cy));
-}
-function previewColumn(x, y, w, hmax) {
-  const prev = wavePreview(game), rh = Math.min(28, hmax / Math.max(1, prev.length));
-  prev.forEach(([k, n], i) => { const cy = y + rh * i + rh / 2; A.uiPanel(c, x + 6, cy - 12, w - 12, 24, 12, 'rgba(60,35,18,.7)', { ol: '#2a1a0e', olw: 1.5 }); bugChip(k, n, x + 26, cy); });
 }
 function pauseBtn(x, y) { button(x, y, 16, '#7ac8ff', (bx, by) => { c.save(); c.fillStyle = '#fff'; c.strokeStyle = '#1f5a8a'; c.lineWidth = 1.5; for (const dx of [-5, 2]) { c.beginPath(); A.rrect(c, bx + dx, by - 6, 4, 12, 1.5); c.fill(); c.stroke(); } c.restore(); }, openPause); }
 function speedBtn(x, y) { button(x, y, 16, speed > 1 ? '#ff9a2a' : '#ffcf3a', (bx, by) => A.hdText(c, '×' + speed, bx, by + 1, 13, '#fff', { stroke: '#8a5a00', sw: 3.5 }), () => { speed = speed > 1 ? 1 : 2; }); }

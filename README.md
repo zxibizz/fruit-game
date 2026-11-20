@@ -4,7 +4,7 @@ A browser tower-defense game for the family. Bugs crawl from the anthill to the 
 field and the plants are the towers. Bugs always take the shortest way, so every plant you put down reshapes their
 trail — you build the maze yourself (the way can never be closed completely). The 14×8 field fits whole in landscape
 and in portrait (turned there); tap a free cell to get the plant menu, hold a plant or a bug to read about it.
-After the first wave the waves come by themselves; the ▶ on the anthill calls the next one early for extra dew. No ads, works offline (PWA),
+After the first wave the waves come by themselves; the ▶ plate next to the anthill (it also shows who comes next) calls the next one early for extra dew. No ads, works offline (PWA),
 Russian for now.
 
 - `public/data.js` — plants, bugs and the three levels with their waves.
