@@ -291,10 +291,14 @@ function frame(ts) {
 }
 
 function draw(dt) {
-  if (terrainDirty) buildTerrain();
+  // ?blank, ?nofield, ?nosprite, ?nohud switch parts of the frame off, to find what makes it soft on a phone
+  if ('blank' in Q) { c.setTransform(1, 0, 0, 1, 0, 0); c.fillStyle = '#4f8a32'; c.fillRect(0, 0, cv.width, cv.height); ui.length = 0; return; }
+  if (terrainDirty && !('nofield' in Q)) buildTerrain();
   ui.length = 0;
   // the field layer is copied pixel for pixel at a whole-pixel offset: any resampling would soften it
-  c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(terrain, Math.round(dpr * (ox + VB[0] * ws)), Math.round(dpr * (oy + VB[1] * ws)));
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  if ('nofield' in Q) { c.fillStyle = '#4f8a32'; c.fillRect(0, 0, cv.width, cv.height); }
+  else c.drawImage(terrain, Math.round(dpr * (ox + VB[0] * ws)), Math.round(dpr * (oy + VB[1] * ws)));
   setWorld();
   const t = now / 1000;
   if (sel) drawGrid();
@@ -305,7 +309,7 @@ function draw(dt) {
   for (const p of game.plants) items.push([cellCenter(p.i, p.j)[1] + 14, () => drawPlant(p, t)]);
   for (const b of game.bugs) if (!b.fly) items.push([sp(b.x, b.y)[1], () => drawBug(b, t, dt)]);
   const [fxx, fyy] = cellCenter(...game.fruit); items.push([fyy + 12, () => drawApple(fxx, fyy, dt)]);
-  items.sort((a, b) => a[0] - b[0]); for (const [, f] of items) f();
+  items.sort((a, b) => a[0] - b[0]); if (!('nosprite' in Q)) for (const [, f] of items) f();
   for (const p of game.plants) if (p.hp < p.maxHp) { const [x, y] = cellCenter(p.i, p.j); A.hdHp(c, x, y - 32, 28, p.hp / p.maxHp, '#ffb03a'); }
   if (ghost) drawGhost(t);
   for (const d of game.drops) drawDrop(d, t);
@@ -316,9 +320,7 @@ function draw(dt) {
   if (pop) drawPop();
   setUI();
   drawFx(dt, ufx);
-  drawHud(t);
-  if (sel && !ghost) drawInfo(sel);
-  drawBanners(dt);
+  if (!('nohud' in Q)) { drawHud(t); if (sel && !ghost) drawInfo(sel); drawBanners(dt); }
   drawScroll();
 }
 function vignette() { const g = c.createRadialGradient(UW / 2, UH / 2, Math.min(UW, UH) * .45, UW / 2, UH / 2, Math.max(UW, UH) * .62); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(20,40,10,.3)'); c.fillStyle = g; c.fillRect(0, 0, UW, UH); }
