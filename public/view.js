@@ -35,18 +35,23 @@ const T = {
   gain: (n) => (n > 0 ? `путь +${n}` : n < 0 ? `путь ${n}` : 'путь тот же'),
   hint1: () => `Выбери растение ${PORT ? 'внизу' : 'слева'} и посади на траву — жуки пойдут в обход`,
   hint2: 'Посадки удлиняют путь. Когда готов — «В бой!»',
+  panV: 'Поле листается пальцем вверх-вниз', panH: 'Поле листается пальцем влево-вправо',
   won: 'Яблоко спасено!', lost: 'Жуки съели яблоко', again: 'Ещё раз', levels: 'Уровни', nextLevel: 'Дальше', resume: 'Продолжить',
   pause: 'Пауза', restart: 'Заново', waveDone: (b) => `Волна пройдена  +${b}`, newPlant: 'Новое растение',
 };
 
 const CELL = 42, TRAY = 80;
 const cv = document.getElementById('cv'), c = cv.getContext('2d');
-let dpr = 1, scale = 1, W = 844, H = 390, gx0 = 80, gy0 = 48, PORT = false, DEW = [28, 24];
+// Two coordinate spaces: the world (the field, CELL = 42 per cell, origin at the field's top-left corner) and the UI
+// (HUD, shelf, panels). Each has its own scale, so the UI stays big while the field fits or scrolls.
+let dpr = 1, uk = 1, ws = 1, UW = 844, UH = 390, ox = 0, oy = 0, cam = 0, camMax = 0, PORT = null, DEW = [28, 24];
+let BASE = [0, 0], FBOX = [0, 0, 1, 1], VB = [0, 0, 1, 1], SPACE = 'u';
 let game = null, levelIdx = 0, speed = 1, paused = true, now = 0;
 let sel = null, ghost = null, pop = null, blockCache = null;
 let fx = [], banners = [], terrain = null, grassLayer = null, terrainDirty = true;
 const sprites = new Map(), angles = new Map(), anim = new Map();
-const ui = []; // tap targets rebuilt every frame: {x, y, w, h, r, fn}
+const ui = []; // tap targets rebuilt every frame: {x, y, w, h, fn, s: 'u' | 'w'}
+let ufx = []; // effects in UI space
 
 const progress = JSON.parse(localStorage.getItem('fruit.progress') || '{"stars":[]}');
 const saveProgress = () => localStorage.setItem('fruit.progress', JSON.stringify(progress));
@@ -54,30 +59,46 @@ const saveProgress = () => localStorage.setItem('fruit.progress', JSON.stringify
 // ---------- geometry ----------
 // Landscape: the grid as it is, entrance on the right. Portrait: the grid turned a quarter, entrance at the top,
 // fruit at the bottom. Game coordinates (x along the 18 columns, y along the 8 rows) map to logical screen pixels.
-const sp = (x, y) => (PORT ? [gx0 + y * CELL, gy0 + (COLS - x) * CELL] : [gx0 + x * CELL, gy0 + y * CELL]);
+const sp = (x, y) => (PORT ? [y * CELL, (COLS - x) * CELL] : [x * CELL, y * CELL]);
 const cellCenter = (i, j) => sp(i + .5, j + .5);
 const FW = () => (PORT ? ROWS : COLS) * CELL, FH = () => (PORT ? COLS : ROWS) * CELL;
-function cellAt(x, y) { const a = Math.floor((x - gx0) / CELL), b = Math.floor((y - gy0) / CELL); return PORT ? [COLS - 1 - b, a] : [a, b]; }
+function cellAt(x, y) { const a = Math.floor(x / CELL), b = Math.floor(y / CELL); return PORT ? [COLS - 1 - b, a] : [a, b]; }
 const screenAngle = (vx, vy) => (PORT ? Math.atan2(-vx, vy) : Math.atan2(vy, vx));
-const offEntry = (first) => (PORT ? [first[0], -60] : [W + 40, first[1]]);
-const PTOP = 66, PBOT = 80; // portrait: two HUD rows on top, the card shelf at the bottom
+const offEntry = (first) => (PORT ? [first[0], -60] : [FW() + 40, first[1]]);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const PTOP = 66, PBOT = 92, LTOP = 46, MIN_CELL = 38; // portrait: HUD rows on top, card shelf below; smallest cell in CSS px
+const toUI = (wx, wy) => [(ox + wx * ws) / uk, (oy + wy * ws) / uk];
+function applyCam() { ox = BASE[0] - (PORT ? 0 : cam); oy = BASE[1] - (PORT ? cam : 0); }
+// world rect of the field area that is on screen now
+const visField = () => [(FBOX[0] - ox) / ws, (FBOX[1] - oy) / ws, FBOX[2] / ws, FBOX[3] / ws];
 function resize() {
-  const vw = innerWidth, vh = innerHeight;
+  const vw = innerWidth, vh = innerHeight, was = PORT;
   PORT = vh > vw;
-  const fw = PORT ? ROWS * CELL + 40 : 844, fh = PORT ? PTOP + COLS * CELL + PBOT : 390;
-  scale = Math.min(vw / fw, vh / fh); W = vw / scale; H = vh / scale;
   dpr = Math.min(devicePixelRatio || 1, 3);
+  uk = PORT ? clamp(Math.min(vw / 300, vh / 520), 1, 1.8) : clamp(Math.min(vw / 720, vh / 330), 1, 1.8);
+  UW = vw / uk; UH = vh / uk;
   cv.width = Math.round(vw * dpr); cv.height = Math.round(vh * dpr); cv.style.width = vw + 'px'; cv.style.height = vh + 'px';
-  A.setView(W, H);
-  if (PORT) { gx0 = (W - ROWS * CELL) / 2; gy0 = PTOP + Math.max(0, (H - PTOP - PBOT - COLS * CELL) / 2); }
-  else { gx0 = TRAY + Math.max(0, (W - TRAY - COLS * CELL - 8) / 2); gy0 = 46 + Math.max(0, (H - 46 - ROWS * CELL - 4) / 2); }
+  const fl = PORT ? 4 : TRAY * uk, ft = (PORT ? PTOP : LTOP) * uk, aw = vw - fl - (PORT ? 4 : 6), ah = vh - ft - (PORT ? PBOT * uk : 4);
+  FBOX = [fl, ft, aw, ah];
+  const fw = FW(), fh = FH(), cross = PORT ? aw / fw : ah / fh, long = PORT ? ah / fh : aw / fw;
+  ws = Math.min(cross, Math.max(long, MIN_CELL / CELL));
+  camMax = Math.max(0, (PORT ? fh : fw) * ws - (PORT ? ah : aw));
+  BASE = PORT ? [fl + (aw - fw * ws) / 2, ft + Math.max(0, (ah - fh * ws) / 2)] : [fl + Math.max(0, (aw - fw * ws) / 2), ft + (ah - fh * ws) / 2];
+  if (was !== PORT) cam = PORT ? camMax : 0; // start where the fruit is
+  cam = clamp(cam, 0, camMax); applyCam();
+  // world area to paint: the whole screen at both ends of the scroll
+  const xs = [], ys = [];
+  for (const cc of [0, camMax]) { const x0 = BASE[0] - (PORT ? 0 : cc), y0 = BASE[1] - (PORT ? cc : 0); xs.push(-x0 / ws, (vw - x0) / ws); ys.push(-y0 / ws, (vh - y0) / ws); }
+  VB = [Math.min(...xs) - 4, Math.min(...ys) - 4, Math.max(...xs) - Math.min(...xs) + 8, Math.max(...ys) - Math.min(...ys) + 8];
   sprites.clear(); grassLayer = null; terrainDirty = true;
 }
-function layer(w = W, h = H) {
-  const k = scale * dpr, cnv = document.createElement('canvas');
+function layer(w, h, k = Math.max(ws, uk) * dpr) {
+  const cnv = document.createElement('canvas');
   cnv.width = Math.ceil(w * k); cnv.height = Math.ceil(h * k);
   const x = cnv.getContext('2d'); x.setTransform(k, 0, 0, k, 0, 0); return [cnv, x];
 }
+const setWorld = () => { c.setTransform(dpr * ws, 0, 0, dpr * ws, dpr * ox, dpr * oy); SPACE = 'w'; };
+const setUI = () => { c.setTransform(dpr * uk, 0, 0, dpr * uk, 0, 0); SPACE = 'u'; };
 function sprite(key, w, h, draw) {
   let s = sprites.get(key);
   if (!s) { const [cnv, x] = layer(w, h); draw(x); s = { cnv, w, h }; sprites.set(key, s); }
@@ -87,11 +108,14 @@ const blit = (s, x, y) => c.drawImage(s.cnv, x, y, s.w, s.h);
 
 // ---------- terrain ----------
 function buildGrass() {
-  const [cnv, x] = layer(); A.hdGrass(x, { seed: 5 + levelIdx }); A.hdBorderBushes(x, 2 + levelIdx); grassLayer = cnv;
+  const [cnv, x] = layer(VB[2], VB[3], ws * dpr); A.setView(VB[2], VB[3]);
+  A.hdGrass(x, { seed: 5 + levelIdx }); A.hdBorderBushes(x, 2 + levelIdx); grassLayer = cnv;
 }
 function buildTerrain() {
   if (!grassLayer) buildGrass();
-  const [cnv, x] = layer(); x.drawImage(grassLayer, 0, 0, W, H);
+  const k = ws * dpr, [cnv, x] = layer(VB[2], VB[3], k); A.setView(VB[2], VB[3]);
+  x.drawImage(grassLayer, 0, 0, VB[2], VB[3]);
+  x.setTransform(k, 0, 0, k, -VB[0] * k, -VB[1] * k); // world coordinates from here
   const cells = trail(game), pts = cells.map(([i, j]) => cellCenter(i, j));
   pts.unshift(offEntry(pts[0]));
   A.hdPath(x, A.chaikin(pts, 3), 30, 1 + levelIdx);
@@ -105,13 +129,12 @@ function buildTerrain() {
     else if (o.type) A.hdSoil(x, cx, cy + 15);
   }
   const [fx0, fy0] = cellCenter(...game.fruit); A.hdStump(x, fx0, fy0 + 12, 23);
-  const [ex, ey] = cellCenter(...game.entry); if (PORT) A.hdAnthill(x, ex, Math.max(gy0 - 6, ey - 14), 1); else A.hdAnthill(x, Math.min(W - 26, ex + 16), ey + 4, 1);
-  A.hdDapple(x); A.hdSun2(x); A.hdGrade(x); A.hdVignette(x);
+  const [ex, ey] = cellCenter(...game.entry); if (PORT) A.hdAnthill(x, ex, ey - 14, 1); else A.hdAnthill(x, ex + 16, ey + 4, 1);
+  x.setTransform(k, 0, 0, k, 0, 0);
+  A.hdDapple(x); A.hdSun2(x); A.hdGrade(x);
   // a little more colour; done here, not as a CSS filter on the canvas: Safari renders filtered canvases blurry
-  if ('filter' in x) { const [pop, y] = layer(); y.filter = 'saturate(1.12) contrast(1.04)'; y.drawImage(cnv, 0, 0, W, H); terrain = pop; } else terrain = cnv;
+  if ('filter' in x) { const [pop, y] = layer(VB[2], VB[3], k); y.filter = 'saturate(1.12) contrast(1.04)'; y.drawImage(cnv, 0, 0, VB[2], VB[3]); terrain = pop; } else terrain = cnv;
   terrainDirty = false; blockCache = null;
-  return;
-  terrain = cnv; terrainDirty = false; blockCache = null;
 }
 
 // ---------- sprites ----------
@@ -137,7 +160,8 @@ function startLevel(n) {
   levelIdx = n; game = createGame(n, Date.now() & 0xffff);
   sel = ghost = pop = null; fx = []; banners = []; angles.clear(); anim.clear(); speed = 1;
   grassLayer = null; terrainDirty = true; paused = false;
-  showHome(false); showModal(null);
+  showHome(false); showModal(null); ufx = []; cam = PORT ? camMax : 0; applyCam();
+  if (camMax > 0) banner(PORT ? T.panV : T.panH, 4, true);
   if (n === 0) banner(T.hint1, 8, true);
   const plants = n ? LEVELS[n].plants.filter((p) => !LEVELS[n - 1].plants.includes(p)) : LEVELS[n].plants;
   const seen = new Set(LEVELS.slice(0, n).flatMap(bugsOf)), bugs = bugsOf(LEVELS[n]).filter((b) => !seen.has(b));
@@ -204,14 +228,14 @@ function handleEvents() {
       case 'fire': { const [x, y] = cellCenter(e.p.i, e.p.j); fx.push({ k: 'fire', x, y, t: 0, life: .45, r: PLANTS.pepper.range[e.p.lvl - 1] * CELL }); bump(e.p, .2); break; }
       case 'shoot': bump(e.p, .12); break;
       case 'bite': { angles.delete(e.b.id); const [x, y] = cellCenter(...game.fruit); fx.push({ k: 'dmg', x, y: y - 40, t: 0, life: .9, txt: `-${BUGS[e.b.kind].bite}`, red: true }); anim.set('apple', 0); break; }
-      case 'collect': { const [x, y] = sp(e.d.x, e.d.y); fx.push({ k: 'fly', x, y, t: 0, life: .5 }); break; }
+      case 'collect': { const [x, y] = toUI(...sp(e.d.x, e.d.y)); ufx.push({ k: 'fly', x, y, t: 0, life: .5 }); break; }
       case 'place': bump(e.p, .35, true); dust(e.p); terrainDirty = true; break;
       case 'upgrade': { const [x, y] = cellCenter(e.p.i, e.p.j); for (let n = 0; n < 6; n++) fx.push({ k: 'spark', x: x + (Math.random() - .5) * 30, y: y - 10 - Math.random() * 30, t: n * .05, life: .5 }); bump(e.p, .3, true); break; }
       case 'sell': case 'plantDead': dust(e.p); terrainDirty = true; if (pop === e.p) pop = null; if (e.t === 'plantDead') banner(`${T.plant[e.p.type]} ${T.eaten[e.p.type]}!`, 1.4); break;
       case 'chew': { const [x, y] = cellCenter(e.p.i, e.p.j); for (let n = 0; n < 6; n++) fx.push({ k: 'crumb', x, y: y - 6, vx: (Math.random() - .5) * 50, vy: -20 - Math.random() * 30, t: 0, life: .5, col: e.p.type === 'pumpkin' ? '#f7a23a' : '#6cc04a' }); bump(e.p, .2); break; }
       case 'wave': banner(T.wave(e.n, game.waves), 1.4); break;
       case 'waveDone': banner(T.waveDone(e.bonus), 1.8); if (levelIdx === 0 && e.n === 1) banner(T.hint2, 5, true); break;
-      case 'power': if (e.kind === 'frost') fx.push({ k: 'flash', t: 0, life: .6, col: 'rgba(190,240,255,' }); else for (let n = 0; n < 70; n++) fx.push({ k: 'rain', x: Math.random() * W, y: -Math.random() * H, t: 0, life: 1.2 }); break;
+      case 'power': if (e.kind === 'frost') ufx.push({ k: 'flash', t: 0, life: .6, col: 'rgba(190,240,255,' }); else for (let n = 0; n < 70; n++) ufx.push({ k: 'rain', x: Math.random() * UW, y: -Math.random() * UH, t: 0, life: 1.2 }); break;
       case 'won': case 'lost': { const g = game; setTimeout(() => { if (game === g) endScreen(e.t === 'won'); }, 900); break; }
     }
   }
@@ -233,9 +257,8 @@ function frame(ts) {
 
 function draw(dt) {
   if (terrainDirty) buildTerrain();
-  c.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
-  c.drawImage(terrain, 0, 0, W, H);
   ui.length = 0;
+  setWorld(); c.drawImage(terrain, VB[0], VB[1], VB[2], VB[3]);
   const t = now / 1000;
   if (sel) drawGrid();
   if (pop && PLANTS[pop.type].range) ring(...cellCenter(pop.i, pop.j), PLANTS[pop.type].range[pop.lvl - 1] * CELL);
@@ -247,14 +270,28 @@ function draw(dt) {
   const [fxx, fyy] = cellCenter(...game.fruit); items.push([fyy + 12, () => drawApple(fxx, fyy, dt)]);
   items.sort((a, b) => a[0] - b[0]); for (const [, f] of items) f();
   for (const p of game.plants) if (p.hp < p.maxHp) { const [x, y] = cellCenter(p.i, p.j); A.hdHp(c, x, y - 32, 28, p.hp / p.maxHp, '#ffb03a'); }
-  if (ghost) drawGhost(t); else if (sel) drawInfo(sel);
+  if (ghost) drawGhost(t);
   for (const d of game.drops) drawDrop(d, t);
   for (const s of game.shots) drawShot(s);
   for (const b of game.bugs) if (b.fly) drawBug(b, t, dt);
   for (const b of game.bugs) if (b.hp < b.maxHp) A.hdHp(c, sp(b.x, b.y)[0], sp(b.x, b.y)[1] - (b.kind === 'rhino' ? 44 : 24), b.kind === 'rhino' ? 56 : 26, b.hp / b.maxHp, b.kind === 'rhino' ? '#ff5a5a' : '#7be05a');
-  drawFx(dt);
+  drawFx(dt, fx);
+  if (pop) drawPop();
+  setUI();
+  vignette();
+  drawFx(dt, ufx);
   drawHud(t);
+  if (sel && !ghost) drawInfo(sel);
   drawBanners(dt);
+  drawScroll();
+}
+function vignette() { const g = c.createRadialGradient(UW / 2, UH / 2, Math.min(UW, UH) * .45, UW / 2, UH / 2, Math.max(UW, UH) * .62); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(20,40,10,.3)'); c.fillStyle = g; c.fillRect(0, 0, UW, UH); }
+function drawScroll() {
+  if (!camMax) return;
+  const [fx0, fy0, fw, fh] = FBOX.map((v) => v / uk), tot = (PORT ? FH() : FW()) * ws / uk, vis = PORT ? fh : fw, len = Math.max(30, vis * vis / tot), pos = cam / uk / (tot - vis) * (vis - len);
+  c.save(); c.globalAlpha = .55; c.fillStyle = '#2a1a0e'; c.beginPath();
+  if (PORT) A.rrect(c, UW - 7, fy0 + pos, 4, len, 2); else A.rrect(c, fx0 + pos, UH - 6, len, 4, 2);
+  c.fill(); c.restore();
 }
 
 function ring(x, y, r) { c.save(); c.beginPath(); c.arc(x, y, r, 0, A.TAU); c.fillStyle = 'rgba(255,255,255,.13)'; c.fill(); c.setLineDash([8, 6]); c.lineWidth = 2.2; c.strokeStyle = 'rgba(255,255,255,.85)'; c.stroke(); c.restore(); }
@@ -304,7 +341,7 @@ function drawDrop(d, t) {
   if (d.age > 4 && Math.floor(t * 8) % 2) return;
   c.save(); const g = c.createRadialGradient(x, y, 1, x, y, 18); g.addColorStop(0, 'rgba(200,245,255,.7)'); g.addColorStop(1, 'rgba(200,245,255,0)'); c.fillStyle = g; c.fillRect(x - 18, y - 18, 36, 36); c.restore();
   A.hdDrop(c, x, y, 8);
-  ui.push({ x: x - 22, y: y - 24, w: 44, h: 44, fn: () => collectDrop(game, d.id) });
+  ui.push({ x: x - 22, y: y - 24, w: 44, h: 44, fn: () => collectDrop(game, d.id), s: 'w' });
 }
 function drawShot(s) {
   const [x, y] = sp(s.x, s.y), [tx, ty] = sp(s.tx, s.ty), ang = Math.atan2(ty - y, tx - x);
@@ -320,7 +357,7 @@ function drawGhost(t) {
   if (PLANTS[sel].range) ring(x, y, PLANTS[sel].range[0] * CELL);
   c.save(); c.globalAlpha = ok ? .85 : .45; blit(plantSprite(sel, 1), x - 35, y + 14 - 66); c.restore();
   // buttons below the cell (above on the bottom row), the label above (below on the top row)
-  const below = y + 56 < gy0 + FH(), above = y - 60 > gy0 - 8;
+  const vf = visField(), below = y + 56 < Math.min(FH(), vf[1] + vf[3]), above = y - 60 > Math.max(0, vf[1]) - 8;
   const by = below ? y + 38 : y - 38, ly = above ? (below ? y - 44 : y - 76) : (below ? y + 74 : y + 44);
   if (ok) {
     labelPill(T.gain(ghost.gain), x, ly, ghost.gain > 0 ? '#5cc23e' : '#8a9a7a', ghost.gain > 0 ? '#1f6a17' : '#4a5a3a');
@@ -334,7 +371,7 @@ function wrap(text, maxW) {
   if (line) out.push(line); return out;
 }
 function drawInfo(type) {
-  const w = PORT ? W - 16 : 400, x = PORT ? 8 : gx0 + 8, y = PORT ? gy0 + 4 : 48;
+  const w = PORT ? UW - 16 : 400, x = PORT ? 8 : TRAY + 8, y = PORT ? PTOP + 4 : LTOP + 4;
   c.save(); c.font = '800 12px Nunito'; const lines = wrap(T.about[type], w - 84); c.font = '900 11px Nunito'; const stats = wrap(statLine(type).join(' · '), w - 84); c.restore();
   const h = 30 + lines.length * 15 + stats.length * 14 + 8;
   c.save(); c.shadowColor = 'rgba(0,0,0,.3)'; c.shadowBlur = 10; A.uiPanel(c, x, y, w, h, 16, '#fff3d6', { ol: '#6a3e1c', olw: 2.5 }); c.restore();
@@ -345,17 +382,17 @@ function drawInfo(type) {
 }
 function labelPill(txt, x, y, col, ol) {
   c.save(); c.font = '900 13px Nunito'; const w = Math.max(70, c.measureText(txt).width + 26); c.restore();
-  const xx = Math.max((PORT ? 4 : gx0) + w / 2, Math.min(W - w / 2 - 4, x));
+  const vf = visField(), xx = Math.max(vf[0] + w / 2 + 4, Math.min(vf[0] + vf[2] - w / 2 - 4, x));
   A.uiPanel(c, xx - w / 2, y - 13, w, 26, 13, col, { ol }); A.hdText(c, txt, xx, y, 13, '#fff', { stroke: ol, sw: 3.5 });
 }
 function button(x, y, r, col, drawIcon, fn, disabled = false) {
   A.uiRound(c, x, y, r, disabled ? '#9a9a90' : col, drawIcon);
-  if (!disabled) ui.push({ x: x - r - 4, y: y - r - 4, w: r * 2 + 8, h: r * 2 + 8, fn });
+  if (!disabled) ui.push({ x: x - r - 4, y: y - r - 4, w: r * 2 + 8, h: r * 2 + 8, fn, s: SPACE });
 }
 
 // ---------- effects ----------
-function drawFx(dt) {
-  for (const f of fx) {
+function drawFx(dt, list) {
+  for (const f of list) {
     f.t += dt; if (f.t < 0) continue; const k = f.t / f.life; if (k >= 1) continue;
     if (f.vx != null) { f.x += f.vx * dt; f.y += f.vy * dt; if (f.k !== 'ember') f.vy += 160 * dt; }
     c.save(); c.globalAlpha = Math.min(1, (1 - k) * 1.6);
@@ -370,26 +407,26 @@ function drawFx(dt) {
       case 'ember': c.beginPath(); c.arc(f.x, f.y, 2.2 * (1 - k), 0, A.TAU); c.fillStyle = '#ffb02e'; c.fill(); break;
       case 'spark': A.fxStar(c, f.x, f.y - k * 16, 5 * (1 - k), '#fff6a0'); break;
       case 'fly': { const [tx, ty] = DEW, e = k * k; const x = f.x + (tx - f.x) * e, y = f.y + (ty - f.y) * e - Math.sin(k * Math.PI) * 40; c.globalAlpha = 1; A.hdDrop(c, x, y, 7); break; }
-      case 'flash': c.globalAlpha = 1; c.fillStyle = f.col + (.5 * (1 - k)) + ')'; c.fillRect(0, 0, W, H); break;
-      case 'rain': { const y = f.y + k * H * 1.6; c.globalAlpha = .7; c.strokeStyle = 'rgba(190,230,255,.9)'; c.lineWidth = 1.6; c.beginPath(); c.moveTo(f.x, y); c.lineTo(f.x - 4, y + 14); c.stroke(); break; }
+      case 'flash': c.globalAlpha = 1; c.fillStyle = f.col + (.5 * (1 - k)) + ')'; c.fillRect(0, 0, UW, UH); break;
+      case 'rain': { const y = f.y + k * UH * 1.6; c.globalAlpha = .7; c.strokeStyle = 'rgba(190,230,255,.9)'; c.lineWidth = 1.6; c.beginPath(); c.moveTo(f.x, y); c.lineTo(f.x - 4, y + 14); c.stroke(); break; }
     }
     c.restore();
   }
-  fx = fx.filter((f) => f.t < f.life);
+  if (list === fx) fx = fx.filter((f) => f.t < f.life); else ufx = ufx.filter((f) => f.t < f.life);
 }
 function drawBanners(dt) {
-  let topY = PORT ? gy0 + (game.phase === 'build' && !sel ? 84 : 22) : 64; const midX = gx0 + FW() / 2;
+  let topY = PORT ? PTOP + (game.phase === 'build' && !sel ? 84 : 22) : 64; const midX = PORT ? UW / 2 : TRAY + (UW - TRAY) / 2;
   for (const b of banners) {
     b.t += dt; const k = b.t / b.life; if (k >= 1) continue;
     if (b.top && sel && !ghost) continue; // the plant info panel is in that spot
     const a = Math.min(1, b.t * 5, (1 - k) * 5); const text = typeof b.text === 'function' ? b.text() : b.text;
     c.save(); c.globalAlpha = a;
     if (b.top) {
-      c.font = '900 14px Nunito'; const lines = wrap(text, W - 44), w = Math.min(W - 12, Math.max(...lines.map((l) => c.measureText(l).width)) + 30), h = 12 + lines.length * 18, x = midX;
+      c.font = '900 14px Nunito'; const lines = wrap(text, UW - 44), w = Math.min(UW - 12, Math.max(...lines.map((l) => c.measureText(l).width)) + 30), h = 12 + lines.length * 18, x = midX;
       A.uiPanel(c, x - w / 2, topY - 15, w, h, 15, '#fff3d6', { ol: '#6a3e1c' });
       lines.forEach((l, k) => A.hdText(c, l, x, topY + k * 18 - 1 + (lines.length > 1 ? 2 : 0), 14, '#6a3e1c', { stroke: null })); topY += h + 8;
     }
-    else { const s = 1 + Math.max(0, .3 - b.t) * 1.5; c.translate(midX, H * .42); if (PORT) c.scale(.8, .8); c.scale(s, s); A.hdText(c, text, 0, 0, 30, '#fff', { stroke: '#6a3a00', sw: 8, grad: ['#fff6a0', '#ffb02e'] }); }
+    else { const s = 1 + Math.max(0, .3 - b.t) * 1.5; c.translate(midX, UH * .42); if (PORT) c.scale(.8, .8); c.scale(s, s); A.hdText(c, text, 0, 0, 30, '#fff', { stroke: '#6a3a00', sw: 8, grad: ['#fff6a0', '#ffb02e'] }); }
     c.restore();
   }
   banners = banners.filter((b) => b.t < b.life);
@@ -399,8 +436,8 @@ function drawBanners(dt) {
 function drawHud(t) {
   // layout: [dew panel], [wave bar], [fruit hp panel], buttons y and x (help, speed, pause)
   const L = PORT
-    ? { dew: [6, 6, 96, 30], wave: [6, 41, W - 12, 20], hp: [108, 6, 104, 30], by: 21, bx: [W - 94, W - 58, W - 22], ts: 12 }
-    : { dew: [8, 7, 112, 32], wave: [Math.max(130, Math.min(W / 2 - 122, W - 330 - 244)), 9, 244, 26], hp: [W - 242, 7, 120, 32], by: 23, bx: [W - 98, W - 60, W - 22], ts: 14 };
+    ? { dew: [6, 6, 86, 30], wave: [UW / 2 - 92, 42, 184, 20], hp: [98, 6, 92, 30], by: 21, bx: [UW - 88, UW - 54, UW - 20], ts: 12 }
+    : { dew: [8, 7, 112, 32], wave: [Math.max(130, Math.min(UW / 2 - 122, UW - 330 - 244)), 9, 244, 26], hp: [UW - 242, 7, 120, 32], by: 23, bx: [UW - 98, UW - 60, UW - 22], ts: 14 };
   const [dx, dy, dw, dh] = L.dew; DEW = [dx + 20, dy + dh / 2];
   A.uiPanel(c, dx, dy, dw, dh, dh / 2, '#fff3d6', { ol: '#6a3e1c' });
   A.hdDrop(c, dx + 20, dy + dh / 2 + 1, 8.5); A.hdText(c, String(game.dew), dx + dw / 2 + 12, dy + dh / 2, 20, '#ffffff', { stroke: '#2a6fa8', sw: 5 });
@@ -424,25 +461,24 @@ function drawHud(t) {
   button(bp, by, 15, '#7ac8ff', (x, y) => { c.save(); c.fillStyle = '#fff'; c.strokeStyle = '#1f5a8a'; c.lineWidth = 1.5; for (const dx of [-5, 2]) { c.beginPath(); A.rrect(c, x + dx, y - 6, 4, 12, 1.5); c.fill(); c.stroke(); } c.restore(); }, openPause);
   drawCards();
   // powers: bottom right, above the shelf in portrait
-  const py0 = PORT ? H - PBOT - 26 : H - 34, pr = PORT ? 19 : 21;
-  button(W - (PORT ? 74 : 86), py0, pr, '#8fd6ff', (x, y) => A.iconFrost(x, y, c), () => usePower(game, 'frost'), !game.powers.frost || game.phase !== 'wave');
-  badge(W - (PORT ? 74 : 86), py0, pr, game.powers.frost);
-  button(W - (PORT ? 28 : 34), py0, pr, '#4aa8ee', (x, y) => A.iconRain(x, y, c), () => usePower(game, 'rain'), !game.powers.rain);
-  badge(W - (PORT ? 28 : 34), py0, pr, game.powers.rain);
+  const py0 = PORT ? UH - PBOT - 26 : UH - 34, pr = PORT ? 19 : 21;
+  button(UW - (PORT ? 74 : 86), py0, pr, '#8fd6ff', (x, y) => A.iconFrost(x, y, c), () => usePower(game, 'frost'), !game.powers.frost || game.phase !== 'wave');
+  badge(UW - (PORT ? 74 : 86), py0, pr, game.powers.frost);
+  button(UW - (PORT ? 28 : 34), py0, pr, '#4aa8ee', (x, y) => A.iconRain(x, y, c), () => usePower(game, 'rain'), !game.powers.rain);
+  badge(UW - (PORT ? 28 : 34), py0, pr, game.powers.rain);
   if (game.phase === 'build' && !(PORT && sel)) drawWavePanel(t);
-  if (pop) drawPop();
 }
 function badge(x, y, r, n) { if (!n) return; c.save(); c.beginPath(); c.arc(x + r * .72, y - r * .68, 9, 0, A.TAU); c.fillStyle = '#ff4646'; c.fill(); c.lineWidth = 2; c.strokeStyle = '#fff'; c.stroke(); c.restore(); A.hdText(c, String(n), x + r * .72, y - r * .68 + .5, 11, '#fff', { stroke: null }); }
 function drawCards() {
   const list = game.L.plants, n = list.length, gap = 5;
   let cw, ch, pos;
   if (PORT) {
-    const top = H - PBOT + 8; cw = Math.min(56, (W - 12 - gap * (n - 1)) / n); ch = 60;
-    const x0 = (W - (n * cw + (n - 1) * gap)) / 2; pos = (k, on) => [x0 + k * (cw + gap), on ? top - 6 : top];
-    shelf(-14, top - 8, W + 28, PBOT + 20, 0, 0, 0, top + 80);
+    const top = UH - PBOT + 10; cw = Math.min(62, (UW - 12 - gap * (n - 1)) / n); ch = 66;
+    const x0 = (UW - (n * cw + (n - 1) * gap)) / 2; pos = (k, on) => [x0 + k * (cw + gap), on ? top - 6 : top];
+    shelf(-14, top - 10, UW + 28, PBOT + 20, 0, 0, 0, top + 90);
   } else {
-    const top = 46; ch = Math.min(52, (H - top - 8 - gap * (n - 1)) / n); cw = 62; pos = (k, on) => [on ? 10 : 5, top + k * (ch + gap)];
-    shelf(-14, top - 6, TRAY - 2, H - top + 20, 0, 0, TRAY, 0);
+    const top = 46; ch = Math.min(52, (UH - top - 8 - gap * (n - 1)) / n); cw = 62; pos = (k, on) => [on ? 10 : 5, top + k * (ch + gap)];
+    shelf(-14, top - 6, TRAY - 2, UH - top + 20, 0, 0, TRAY, 0);
   }
   list.forEach((type, k) => {
     const P = PLANTS[type], on = sel === type, [x, y] = pos(k, on), poor = game.dew < P.cost;
@@ -452,7 +488,7 @@ function drawCards() {
     c.save(); c.beginPath(); A.rrect(c, x + cw - 31, y + ch - 17, 29, 15, 7.5); c.fillStyle = 'rgba(40,25,10,.8)'; c.fill(); c.restore();
     A.hdText(c, String(P.cost), x + cw - 16, y + ch - 9.5, 11, poor ? '#ff9a8a' : '#fff', { stroke: null }); A.hdDrop(c, x + cw - 35, y + ch - 10, 4);
     if (poor) { c.save(); c.beginPath(); A.rrect(c, x, y, cw, ch, 11); c.fillStyle = 'rgba(60,40,30,.35)'; c.fill(); c.restore(); }
-    ui.push(PORT ? { x: x - gap / 2, y: y - 8, w: cw + gap, h: ch + 20, fn: () => selectCard(type) } : { x: 0, y, w: TRAY, h: ch + gap, fn: () => selectCard(type) });
+    ui.push(PORT ? { x: x - gap / 2, y: y - 8, w: cw + gap, h: ch + 20, fn: () => selectCard(type), s: 'u' } : { x: 0, y, w: TRAY, h: ch + gap, fn: () => selectCard(type), s: 'u' });
   });
 }
 function shelf(x, y, w, h, gx0_, gy0_, gx1, gy1) {
@@ -461,16 +497,16 @@ function shelf(x, y, w, h, gx0_, gy0_, gx1, gy1) {
   c.save(); c.beginPath(); A.rrect(c, x, y, w, h, 16); c.lineWidth = 2.5; c.strokeStyle = '#4a2a12'; c.stroke(); c.restore();
 }
 function drawWavePanel(t) {
-  const prev = wavePreview(game), step = PORT ? 54 : 62, pw = Math.min(W - 12, Math.max(250, 110 + prev.length * step)), ph = 56, x = gx0 + FW() / 2 - pw / 2, y = PORT ? gy0 + 6 : H - ph - 8;
+  const prev = wavePreview(game), step = PORT ? 54 : 62, pw = Math.min(UW - 12, Math.max(250, 110 + prev.length * step)), ph = 56, x = (PORT ? UW / 2 : TRAY + (UW - TRAY) / 2) - pw / 2, y = PORT ? PTOP + 6 : UH - ph - 8;
   c.save(); c.shadowColor = 'rgba(0,0,0,.35)'; c.shadowBlur = 12; A.uiPanel(c, x, y, pw, ph, 18, '#fff3d6', { ol: '#6a3e1c', olw: 2.5 }); c.restore();
   prev.forEach(([k, n], i) => { const bx = x + 28 + i * step, by = y + ph / 2; const s = bugSprite(k === 'rhino' ? 'rhino' : k, 0); c.save(); c.translate(bx, by); c.rotate(-Math.PI / 2); const sc = k === 'rhino' ? .45 : .8; c.scale(sc, sc); blit(s, -s.w / 2, -s.h / 2); c.restore(); A.hdText(c, '×' + n, bx + 22, by + 12, 13, '#fff', { stroke: '#6a3e1c', sw: 4 }); });
   const bw = 96, bx = x + pw - bw - 10, by = y + 12, pulse = 1 + Math.sin(t * 5) * .03;
   c.save(); c.translate(bx + bw / 2, by + 16); c.scale(pulse, pulse); c.shadowColor = 'rgba(80,200,40,.7)'; c.shadowBlur = 12; A.uiPanel(c, -bw / 2, -16, bw, 32, 16, '#5cc23e', { ol: '#1f6a17', olw: 2.5 }); c.restore();
   A.hdText(c, T.go, bx + bw / 2, by + 16, 17, '#fff', { stroke: '#1f5a14', sw: 4.5 });
-  ui.push({ x: bx - 4, y: by - 4, w: bw + 8, h: 40, fn: () => { sel = null; ghost = null; pop = null; startWave(game); } });
+  ui.push({ x: bx - 4, y: by - 4, w: bw + 8, h: 40, fn: () => { sel = null; ghost = null; pop = null; startWave(game); }, s: 'u' });
 }
 function drawPop() {
-  const p = pop, [x0, y] = cellCenter(p.i, p.j), x = Math.max(66, Math.min(W - 66, x0)), up = upgradeCost(p), yy = y - 96 > (PORT ? PTOP : 44) ? y - 56 : y + 50;
+  const p = pop, vf = visField(), [x0, y] = cellCenter(p.i, p.j), x = clamp(x0, vf[0] + 66, vf[0] + vf[2] - 66), up = upgradeCost(p), yy = y - 96 > vf[1] ? y - 56 : y + 50;
   A.uiPanel(c, x - 62, yy - 26, 124, 52, 18, '#fff3d6', { ol: '#6a3e1c' });
   button(x - 30, yy, 17, up == null ? '#c8b070' : '#5cc23e', (bx, by) => { if (up == null) A.hdText(c, '★', bx, by + 1, 16, '#fff', { stroke: '#8a6a10', sw: 3 }); else { A.hdText(c, '⬆', bx, by - 4, 13, '#fff', { stroke: '#1f5a14', sw: 3 }); A.hdText(c, String(up), bx, by + 8, 10, '#fff', { stroke: '#1f5a14', sw: 3 }); } }, () => { upgrade(game, p); }, up == null || game.dew < up);
   button(x + 30, yy, 17, '#e0884a', (bx, by) => { A.hdText(c, '✕', bx, by - 4, 12, '#fff', { stroke: '#7a3a10', sw: 3 }); A.hdText(c, '+' + refund(p), bx, by + 8, 10, '#fff', { stroke: '#7a3a10', sw: 3 }); }, () => { removePlant(game, p); pop = null; });
@@ -478,13 +514,28 @@ function drawPop() {
 }
 
 // ---------- input ----------
+// Taps act on release; a drag across the field scrolls it when it does not fit.
+let press = null;
+const hit = (list, x, y) => { for (let k = list.length - 1; k >= 0; k--) { const u = list[k]; if (x >= u.x && y >= u.y && x <= u.x + u.w && y <= u.y + u.h) return u; } return null; };
+function tap(px, py) {
+  const u = hit(ui.filter((q) => q.s === 'u'), px / uk, py / uk); if (u) { u.fn(); return; }
+  const wx = (px - ox) / ws, wy = (py - oy) / ws, w = hit(ui.filter((q) => q.s === 'w'), wx, wy); if (w) { w.fn(); return; }
+  const [i, j] = cellAt(wx, wy);
+  if (wx >= 0 && wy >= 0 && i >= 0 && j >= 0 && i < COLS && j < ROWS) tapCell(i, j); else { ghost = null; pop = null; }
+}
 cv.addEventListener('pointerdown', (e) => {
   if (!game || paused) return;
-  const x = e.clientX / scale, y = e.clientY / scale;
-  for (let k = ui.length - 1; k >= 0; k--) { const u = ui[k]; if (x >= u.x && y >= u.y && x <= u.x + u.w && y <= u.y + u.h) { u.fn(); return; } }
-  const [i, j] = cellAt(x, y);
-  if (x >= gx0 && y >= gy0 && i >= 0 && j >= 0 && i < COLS && j < ROWS) tapCell(i, j); else { ghost = null; pop = null; }
+  press = { id: e.pointerId, x: e.clientX, y: e.clientY, cam0: cam, moved: false, onUI: !!hit(ui.filter((q) => q.s === 'u'), e.clientX / uk, e.clientY / uk) };
 });
+cv.addEventListener('pointermove', (e) => {
+  if (!press || e.pointerId !== press.id || !camMax || press.onUI) return;
+  const d = PORT ? e.clientY - press.y : e.clientX - press.x;
+  if (!press.moved && Math.abs(d) > 10) press.moved = true;
+  if (press.moved) { cam = clamp(press.cam0 - d, 0, camMax); applyCam(); }
+});
+cv.addEventListener('pointerup', (e) => { if (!press || e.pointerId !== press.id) return; const p = press; press = null; if (!p.moved && game && !paused) tap(p.x, p.y); });
+cv.addEventListener('pointercancel', () => { press = null; });
+cv.addEventListener('wheel', (e) => { if (!camMax) return; cam = clamp(cam + (e.deltaY || e.deltaX), 0, camMax); applyCam(); }, { passive: true });
 addEventListener('resize', resize);
 document.addEventListener('visibilitychange', () => { if (document.hidden && game && !paused && game.phase !== 'won' && game.phase !== 'lost') openPause(); });
 
@@ -539,7 +590,7 @@ async function boot() {
   resize(); drawLogo(); showHome(true);
   game = createGame(0); paused = true; // a field behind the menu
   requestAnimationFrame(frame);
-  if (new URLSearchParams(location.search).has('dev')) window.__fd = { get game() { return game; }, startLevel, set speed(v) { speed = v; }, cell: (i, j) => cellCenter(i, j).map((v) => v * scale), layout: () => ({ card: ui.filter((u) => u.h > 40 && u.w < 90).map((u) => [(u.x + u.w / 2) * scale, (u.y + u.h / 2) * scale]) }) };
+  if (new URLSearchParams(location.search).has('dev')) window.__fd = { get game() { return game; }, startLevel, set speed(v) { speed = v; }, cell: (i, j) => { const [x, y] = cellCenter(i, j); return [ox + x * ws, oy + y * ws]; }, scroll: (v) => { cam = clamp(v, 0, camMax); applyCam(); }, get camMax() { return camMax; }, layout: () => ({ card: ui.filter((u) => u.s === 'u' && u.h > 40 && u.w < 90).map((u) => [(u.x + u.w / 2) * uk, (u.y + u.h / 2) * uk]) }) };
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 boot();
