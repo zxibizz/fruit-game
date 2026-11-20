@@ -75,8 +75,7 @@ function anim(t) {
     x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, cv.width, cv.height);
     if (k === 2) { x.setTransform(dpr * .905, 0, 0, dpr * .905, -dpr * 40.3, -dpr * 211.7); x.drawImage(big, -10, -20, 1200 / 2.7, 2600 / 2.7); }
     x.setTransform(dpr, 0, 0, dpr, 0, 0);
-    if (k === 3) { x.setTransform(dpr * 1.1, 0, 0, dpr * 1.1, 0, 0); x.scale(1 / 1.1, 1 / 1.1); }
-    text(x);
+    if (k === 3) { x.setTransform(dpr * 1.1, 0, 0, dpr * 1.1, 0, 0); text(x, 1 / 1.1); } else text(x);
     if (k === 1) { const g = x.createRadialGradient(150, 28, 10, 150, 28, 200); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(20,40,10,.3)'); x.fillStyle = g; x.setTransform(dpr, 0, 0, dpr, 0, 0); x.fillRect(0, 0, 300, 56); }
     x.setTransform(dpr, 0, 0, dpr, 0, 0); x.fillStyle = '#c0392b'; x.fillRect(290 - (t / 20 % 60), 4, 4, 4);
   });
