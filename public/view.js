@@ -2,7 +2,7 @@
 import * as A from './art.js';
 import {
   createGame, step, place, placeProblem, blockingCells, previewTrail, trail, upgrade, upgradeCost, removePlant, refund,
-  startWave, wavePreview, usePower, collectDrop, stars, COLS, ROWS, VERSION,
+  startWave, wavePreview, usePower, collectDrop, stars, COLS, ROWS,
 } from './game.js';
 import { PLANTS, BUGS, LEVELS } from './data.js';
 
@@ -41,9 +41,9 @@ const T = {
 };
 
 const CELL = 42, TRAY = 80;
-// ?late takes the 2D context only after the canvas got its size, ?fresh makes a new canvas element on every resize
-const QS = new URLSearchParams(location.search);
-let cv = document.getElementById('cv'), c = QS.has('late') || QS.has('fresh') ? null : cv.getContext('2d');
+// The canvas is made anew from code on every resize. With the <canvas> from the page itself, Chrome on iPhone showed
+// the picture soft (as if at a third of the resolution), however the canvas was sized; a canvas made by script is sharp.
+let cv = document.getElementById('cv'), c = null;
 // Two coordinate spaces: the world (the field, CELL = 42 per cell, origin at the field's top-left corner) and the UI
 // (HUD, shelf, panels). Each has its own scale, so the UI stays big while the field fits or scrolls.
 let dpr = 1, uk = 1, ws = 1, UW = 844, UH = 390, ox = 0, oy = 0, cam = 0, camMax = 0, PORT = null, DEW = [28, 24];
@@ -76,12 +76,13 @@ const visField = () => [(FBOX[0] - ox) / ws, (FBOX[1] - oy) / ws, FBOX[2] / ws, 
 function resize() {
   const vw = innerWidth, vh = innerHeight, was = PORT;
   PORT = vh > vw;
-  dpr = Math.min(pixelRatio(vw), 5, Q.dpr || 9); seen = [vw, vh, devicePixelRatio, visualViewport?.scale || 1]; DIAG.resizes++;
+  dpr = Math.min(pixelRatio(vw), 5); seen = [vw, vh, devicePixelRatio, visualViewport?.scale || 1];
   uk = PORT ? clamp(Math.min(vw / 340, vh / 560), 1, 1.8) : clamp(Math.min(vw / 740, vh / 340), 1, 1.8);
   UW = vw / uk; const sz = cardSize(); PBOT = sz[1] + 16;
   UW = vw / uk; UH = vh / uk;
-  if (QS.has('fresh')) { const n = document.createElement('canvas'); n.id = 'cv'; n.width = Math.round(vw * dpr); n.height = Math.round(vh * dpr); n.style.width = vw + 'px'; n.style.height = vh + 'px'; c = n.getContext('2d'); cv.replaceWith(n); cv = n; bindCanvas(); }
-  else { cv.width = Math.round(vw * dpr); cv.height = Math.round(vh * dpr); cv.style.width = vw + 'px'; cv.style.height = vh + 'px'; if (!c) c = cv.getContext('2d'); }
+  const n = document.createElement('canvas'); n.id = 'cv';
+  n.width = Math.round(vw * dpr); n.height = Math.round(vh * dpr); n.style.width = vw + 'px'; n.style.height = vh + 'px';
+  c = n.getContext('2d'); cv.replaceWith(n); cv = n; bindCanvas();
   const fl = PORT ? 4 : TRAY * uk, ft = (PORT ? PTOP : LTOP) * uk, aw = vw - fl - (PORT ? 4 : 6), ah = vh - ft - (PORT ? PBOT * uk : 4);
   FBOX = [fl, ft, aw, ah];
   const fw = FW(), fh = FH(), cross = PORT ? aw / fw : ah / fh, long = PORT ? ah / fh : aw / fw;
@@ -110,20 +111,6 @@ function pixelRatio(vw) {
 function cardSize() { const n = game ? game.L.plants.length : 4, cw = Math.min(64, (UW - 16 - 6 * (n - 1)) / n); return [cw, Math.min(66, cw + 6)]; }
 function free(cnv) { if (cnv && cnv.width) { cnv.width = 0; cnv.height = 0; } }
 let seen = [0, 0, 0];
-// ?diag draws a 1:1 test patch and live numbers in the corner; ?dpr=2 caps the canvas density
-const Q = Object.fromEntries(new URLSearchParams(location.search)); Q.dpr = Number(Q.dpr) || 0;
-const DIAG = { on: 'diag' in Q, resizes: 0, frames: 0, fps: 0, t0: 0 };
-function drawDiag(ts) {
-  DIAG.frames++; if (ts - DIAG.t0 > 1000) { DIAG.fps = DIAG.frames * 1000 / (ts - DIAG.t0); DIAG.frames = 0; DIAG.t0 = ts; }
-  if (!DIAG.on) return;
-  c.setTransform(1, 0, 0, 1, 0, 0);
-  const x0 = Math.round(8 * dpr), y0 = Math.round((PORT ? PTOP + 30 : 50) * uk * dpr), w = Math.round(250 * dpr), h = Math.round(64 * dpr);
-  c.fillStyle = '#fff8ea'; c.fillRect(x0, y0, w, h);
-  for (let i = 0; i < 24; i++) { c.fillStyle = i % 2 ? '#000' : '#fff'; c.fillRect(x0 + Math.round(6 * dpr) + i, y0 + Math.round(6 * dpr), 1, Math.round(20 * dpr)); }
-  c.fillStyle = '#5a3a1c'; c.font = `700 ${Math.round(13 * dpr)}px system-ui`; c.textBaseline = 'top';
-  c.fillText(`fps ${DIAG.fps.toFixed(0)} · пересозданий ${DIAG.resizes}`, x0 + Math.round(40 * dpr), y0 + Math.round(8 * dpr));
-  c.fillText(`холст ${cv.width}×${cv.height} @${dpr.toFixed(2)} ui ${uk.toFixed(2)} поле ${ws.toFixed(2)}`, x0 + Math.round(6 * dpr), y0 + Math.round(36 * dpr));
-}
 function layer(w, h, k = Math.max(ws, uk) * dpr) {
   const cnv = document.createElement('canvas');
   cnv.width = Math.ceil(w * k); cnv.height = Math.ceil(h * k);
@@ -285,23 +272,16 @@ function frame(ts) {
     handleEvents();
   }
   if (innerWidth !== seen[0] || innerHeight !== seen[1] || devicePixelRatio !== seen[2] || (visualViewport?.scale || 1) !== seen[3]) resize();
-  // ?freeze stops drawing after 3 s: a still frame tells whether the blur comes from redrawing every frame
-  if ('freeze' in Q && ts > 3000 && DIAG.frozen) { requestAnimationFrame(frame); return; }
   if (game) draw(paused ? 0 : dt);
-  drawDiag(ts);
-  if ('freeze' in Q && ts > 3000 && game && !paused) { DIAG.frozen = true; c.setTransform(1, 0, 0, 1, 0, 0); c.fillStyle = '#c0392b'; c.font = `700 ${Math.round(13 * dpr)}px system-ui`; c.fillText('кадр заморожен', Math.round(12 * dpr), Math.round(((PORT ? PTOP + 30 : 50) * uk + 74) * dpr)); }
   requestAnimationFrame(frame);
 }
 
 function draw(dt) {
-  // ?blank, ?nofield, ?nosprite, ?nohud switch parts of the frame off, to find what makes it soft on a phone
-  if ('blank' in Q) { c.setTransform(1, 0, 0, 1, 0, 0); c.fillStyle = '#4f8a32'; c.fillRect(0, 0, cv.width, cv.height); ui.length = 0; return; }
-  if (terrainDirty && !('nofield' in Q)) buildTerrain();
+  if (terrainDirty) buildTerrain();
   ui.length = 0;
   // the field layer is copied pixel for pixel at a whole-pixel offset: any resampling would soften it
   c.setTransform(1, 0, 0, 1, 0, 0);
-  if ('nofield' in Q) { c.fillStyle = '#4f8a32'; c.fillRect(0, 0, cv.width, cv.height); }
-  else c.drawImage(terrain, Math.round(dpr * (ox + VB[0] * ws)), Math.round(dpr * (oy + VB[1] * ws)));
+  c.drawImage(terrain, Math.round(dpr * (ox + VB[0] * ws)), Math.round(dpr * (oy + VB[1] * ws)));
   setWorld();
   const t = now / 1000;
   if (sel) drawGrid();
@@ -312,7 +292,7 @@ function draw(dt) {
   for (const p of game.plants) items.push([cellCenter(p.i, p.j)[1] + 14, () => drawPlant(p, t)]);
   for (const b of game.bugs) if (!b.fly) items.push([sp(b.x, b.y)[1], () => drawBug(b, t, dt)]);
   const [fxx, fyy] = cellCenter(...game.fruit); items.push([fyy + 12, () => drawApple(fxx, fyy, dt)]);
-  items.sort((a, b) => a[0] - b[0]); if (!('nosprite' in Q)) for (const [, f] of items) f();
+  items.sort((a, b) => a[0] - b[0]); for (const [, f] of items) f();
   for (const p of game.plants) if (p.hp < p.maxHp) { const [x, y] = cellCenter(p.i, p.j); A.hdHp(c, x, y - 32, 28, p.hp / p.maxHp, '#ffb03a'); }
   if (ghost) drawGhost(t);
   for (const d of game.drops) drawDrop(d, t);
@@ -323,7 +303,9 @@ function draw(dt) {
   if (pop) drawPop();
   setUI();
   drawFx(dt, ufx);
-  if (!('nohud' in Q)) { drawHud(t); if (sel && !ghost) drawInfo(sel); drawBanners(dt); }
+  drawHud(t);
+  if (sel && !ghost) drawInfo(sel);
+  drawBanners(dt);
   drawScroll();
 }
 function vignette() { const g = c.createRadialGradient(UW / 2, UH / 2, Math.min(UW, UH) * .45, UW / 2, UH / 2, Math.max(UW, UH) * .62); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(20,40,10,.3)'); c.fillStyle = g; c.fillRect(0, 0, UW, UH); }
@@ -613,7 +595,7 @@ const LOCK = '<svg width="18" height="20" viewBox="0 0 18 20"><rect x="2" y="8" 
 function showModal(html) { $('modal').hidden = !html; if (html) $('card').innerHTML = html; }
 function openPause() {
   paused = true;
-  showModal(`<h2>${T.pause}</h2><div class="diag">${VERSION} · ${innerWidth}×${innerHeight} @${devicePixelRatio} · холст ${cv.width}×${cv.height} · ui ${uk.toFixed(2)} · поле ${ws.toFixed(2)}${visualViewport && visualViewport.scale !== 1 ? ' · зум ' + visualViewport.scale.toFixed(2) : ''}</div><div class="row"><button class="btn" id="mResume">${T.resume}</button><button class="btn alt" id="mRestart">${T.restart}</button><button class="btn alt" id="mHome">${T.levels}</button></div>`);
+  showModal(`<h2>${T.pause}</h2><div class="row"><button class="btn" id="mResume">${T.resume}</button><button class="btn alt" id="mRestart">${T.restart}</button><button class="btn alt" id="mHome">${T.levels}</button></div>`);
   $('mResume').onclick = () => { showModal(null); paused = false; };
   $('mRestart').onclick = () => startLevel(levelIdx);
   $('mHome').onclick = () => { showModal(null); showHome(true); };
@@ -641,10 +623,8 @@ function drawLogo() {
 }
 
 async function boot() {
-  if (QS.has('nocss')) { document.documentElement.style.cssText = 'overflow:visible;height:auto'; document.body.style.cssText = 'overflow:visible;height:auto;touch-action:auto;-webkit-user-select:auto;user-select:auto;-webkit-touch-callout:default'; }
   try { await document.fonts.load('900 16px Nunito'); } catch { /* font is optional */ }
   resize(); drawLogo(); showHome(true);
-  $('diag').textContent = `${VERSION} · ${innerWidth}×${innerHeight} @${devicePixelRatio} → ${dpr.toFixed(2)} · экран ${screen.width}×${screen.height}`;
   game = createGame(0); paused = true; // a field behind the menu
   requestAnimationFrame(frame);
   if (new URLSearchParams(location.search).has('dev')) window.__fd = { get game() { return game; }, startLevel, set speed(v) { speed = v; }, cell: (i, j) => { const [x, y] = cellCenter(i, j); return [ox + x * ws, oy + y * ws]; }, scroll: (v) => { cam = clamp(v, 0, camMax); applyCam(); }, get camMax() { return camMax; }, layout: () => ({ card: ui.filter((u) => u.s === 'u' && u.h > 40 && u.w < 90).map((u) => [(u.x + u.w / 2) * uk, (u.y + u.h / 2) * uk]) }) };
