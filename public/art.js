@@ -345,6 +345,7 @@ function hdApple(c, x, y, r, o = {}) {
   hdSpec(c, -r * .2, -r * .55, r * .08, r * .06, 0, .9);
   hdBlob(c, cc => { cc.moveTo(-1.5, -r * .66); cc.quadraticCurveTo(-1, -r * 1.05, 3, -r * 1.15); cc.lineTo(4, -r * 1.05); cc.quadraticCurveTo(2, -r, 2, -r * .66); cc.closePath(); }, '#6b4423', 1, -r * .9, 4);
   hdLeaf(c, 3, -r * 1.0, r * .62, -.45, '#5bbf45', { w: .45 });
+  if (o.noFace) { c.restore(); return; } // the game draws a live face on top
   // face looking at the bugs
   const lk = o.look || [1, 0];
   hdEye(c, -r * .25, -r * .02, r * .2, lk); hdEye(c, r * .22, -r * .02, r * .2, lk);

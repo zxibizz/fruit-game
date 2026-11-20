@@ -39,6 +39,7 @@ const T = {
   zoomHint: 'Поле можно приблизить двумя пальцами',
   won: 'Яблоко спасено!', lost: 'Жуки съели яблоко', retry: 'Ещё раз', levels: 'Уровни', nextLevel: 'Дальше', resume: 'Продолжить',
   pause: 'Пауза', restart: 'Заново', waveDone: (b) => `Волна пройдена  +${b}`, early: (b) => `+${b} за смелость`,
+  screams: ['Ай!', 'Ой-ой!', 'Больно!', 'Кусь?!', 'Ай-ай!'],
 };
 
 const CELL = 42, M = 10, MAXPX = 8e6; // M: world margin kept around the grid; MAXPX: field layer cap
@@ -71,6 +72,14 @@ const offEntry = (first) => (PORT ? [first[0], -60] : [FW() + 40, first[1]]);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 // HUD bands in UI units: portrait has a row on top and one at the bottom, landscape a column on each side
 const PTOP = 46, PBOT = 52, LLEFT = 104, LRIGHT = 52;
+let TOPY = 0, BOTY = 0; // portrait: room kept above the top row and below the bottom row, in UI units
+// The phone's safe areas (notch, home bar) in CSS px, read from CSS env() through a probe element.
+function safeInsets() {
+  const d = document.createElement('div');
+  d.style.cssText = 'position:fixed;visibility:hidden;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)';
+  document.body.append(d); const cs = getComputedStyle(d), v = (k) => parseFloat(cs[k]) || 0;
+  const r = { t: v('paddingTop'), r: v('paddingRight'), b: v('paddingBottom'), l: v('paddingLeft') }; d.remove(); return r;
+}
 const toUI = (wx, wy) => [(ox + wx * ws) / uk, (oy + wy * ws) / uk];
 const faUI = () => FA.map((v) => v / uk); // field area in UI units
 // The camera keeps the grid (with its margin) covering the field area when zoomed in, and centred when it fits.
@@ -100,7 +109,12 @@ function resize() {
   c = n.getContext('2d'); cv.replaceWith(n); free(cv); cv = n; bindCanvas();
   // the field area: everything but the HUD bands
   const gw = FW() + 2 * M, gh = FH() + 2 * M;
-  FA = PORT ? [6, PTOP * uk, vw - 12, vh - (PTOP + PBOT) * uk] : [LLEFT * uk, 6, vw - (LLEFT + LRIGHT) * uk, vh - 12];
+  // An iPhone home-screen app blurs the top of the page under the status bar: keep the top row below that.
+  const ins = safeInsets(), edge = PORT && navigator.standalone ? 36 : 0;
+  TOPY = PORT ? (ins.t + edge) / uk : 0; BOTY = Math.max(0, ins.b - 8) / uk;
+  // landscape: equal bands on both sides, so the field sits in the middle of the screen
+  const side = Math.max(LLEFT, LRIGHT) * uk;
+  FA = PORT ? [6, (TOPY + PTOP) * uk, vw - 12, vh - (TOPY + PTOP + PBOT + BOTY) * uk] : [side, 6, vw - side * 2, vh - 12];
   fit = Math.min(FA[2] / gw, FA[3] / gh);
   zmax = clamp(58 / (CELL * fit), 1, 3); // up to cells of about 58 CSS px
   if (was !== PORT) zoom = 1;
@@ -190,14 +204,12 @@ function bugSprite(kind, frame) {
     A.setLeg(0);
   });
 }
-function appleSprite(mood) {
-  return sprite(`apple:${mood}`, 70, 70, (x) => A.hdApple(x, 35, 38, 24, { bite: mood > 0, worried: mood > 1, sweat: mood > 2, look: [1, 0] }));
-}
+const appleBody = (bitten) => sprite(`appleBody:${bitten}`, 70, 70, (x) => A.hdApple(x, 35, 38, 24, { bite: bitten, noFace: true }));
 
 // ---------- game flow ----------
 function startLevel(n) {
   levelIdx = n; game = createGame(n, Date.now() & 0xffff); resize();
-  sel = ghost = pop = null; fx = []; banners = []; angles.clear(); anim.clear(); speed = 1;
+  sel = ghost = pop = null; fx = []; banners = []; appleMood('idle', 0); angles.clear(); anim.clear(); speed = 1;
   grassLayer = null; terrainDirty = true; paused = false;
   showHome(false); showModal(null); ufx = []; zoom = 1; applyCam(); dropLayers();
   if (zmax > 1.4 && matchMedia('(pointer: coarse)').matches && !localStorage.getItem('fruit.zoomHint')) { banner(T.zoomHint, 5, true); localStorage.setItem('fruit.zoomHint', '1'); }
@@ -268,20 +280,24 @@ function handleEvents() {
       case 'splash': { const [x, y] = sp(e.x, e.y); for (let n = 0; n < 8; n++) fx.push({ k: 'kern', x, y, vx: (Math.random() - .5) * 90, vy: -30 - Math.random() * 50, t: 0, life: .4 }); break; }
       case 'fire': { const [x, y] = cellCenter(e.p.i, e.p.j); fx.push({ k: 'fire', x, y, t: 0, life: .45, r: PLANTS.pepper.range[e.p.lvl - 1] * CELL }); bump(e.p, .2); break; }
       case 'shoot': bump(e.p, .12); break;
-      case 'bite': { angles.delete(e.b.id); const [x, y] = cellCenter(...game.fruit); fx.push({ k: 'dmg', x, y: y - 40, t: 0, life: .9, txt: `-${BUGS[e.b.kind].bite}`, red: true }); anim.set('apple', 0); break; }
+      case 'bite': { angles.delete(e.b.id); const [x, y] = cellCenter(...game.fruit); fx.push({ k: 'dmg', x: x + 20, y: y - 30, t: 0, life: .9, txt: `-${BUGS[e.b.kind].bite}`, red: true }); appleMood('scream', .9); appleSay(T.screams[Math.floor(Math.random() * T.screams.length)]); break; }
       case 'collect': { const [x, y] = toUI(...sp(e.d.x, e.d.y)); ufx.push({ k: 'fly', x, y, t: 0, life: .5 }); break; }
       case 'place': bump(e.p, .35, true); dust(e.p); terrainDirty = true; break;
       case 'upgrade': { const [x, y] = cellCenter(e.p.i, e.p.j); for (let n = 0; n < 6; n++) fx.push({ k: 'spark', x: x + (Math.random() - .5) * 30, y: y - 10 - Math.random() * 30, t: n * .05, life: .5 }); bump(e.p, .3, true); break; }
       case 'sell': case 'plantDead': dust(e.p); terrainDirty = true; if (pop === e.p) pop = null; if (e.t === 'plantDead') banner(`${T.plant[e.p.type]} ${T.eaten[e.p.type]}!`, 1.4); break;
       case 'chew': { const [x, y] = cellCenter(e.p.i, e.p.j); for (let n = 0; n < 6; n++) fx.push({ k: 'crumb', x, y: y - 6, vx: (Math.random() - .5) * 50, vy: -20 - Math.random() * 30, t: 0, life: .5, col: e.p.type === 'pumpkin' ? '#f7a23a' : '#6cc04a' }); bump(e.p, .2); break; }
-      case 'wave': banner(T.wave(e.n, game.waves), 1.4); break;
-      case 'waveDone': banner(T.waveDone(e.bonus), 1.8); if (levelIdx === 0 && e.n === 1) banner(T.hint2, 6, true); break;
+      case 'wave': banner(T.wave(e.n, game.waves), 1.4); if (AP.mood === 'happy') appleMood('idle', 0); break;
+      case 'waveDone': appleMood('happy', 2.6); appleCheer(); banner(T.waveDone(e.bonus), 1.8); if (levelIdx === 0 && e.n === 1) banner(T.hint2, 6, true); break;
       case 'early': ufx.push({ k: 'gain', x: GO[0], y: GO[1] - 30, t: 0, life: 1.2, txt: T.early(e.bonus) }); break;
       case 'power': if (e.kind === 'frost') ufx.push({ k: 'flash', t: 0, life: .6, col: 'rgba(190,240,255,' }); else for (let n = 0; n < 70; n++) ufx.push({ k: 'rain', x: Math.random() * UW, y: -Math.random() * UH, t: 0, life: 1.2 }); break;
-      case 'won': case 'lost': { const g = game; setTimeout(() => { if (game === g) endScreen(e.t === 'won'); }, 900); break; }
+      case 'won': case 'lost': { if (e.t === 'won') appleCheer(); const g = game; setTimeout(() => { if (game === g) endScreen(e.t === 'won'); }, 900); break; }
     }
   }
   game.events.length = 0;
+}
+function heart(x, y, r) {
+  c.beginPath(); c.moveTo(x, y + r * .9); c.bezierCurveTo(x - r * 1.6, y - r * .1, x - r * .7, y - r * 1.3, x, y - r * .45); c.bezierCurveTo(x + r * .7, y - r * 1.3, x + r * 1.6, y - r * .1, x, y + r * .9);
+  c.fillStyle = '#ff5a7a'; c.fill(); c.lineWidth = 1.5; c.strokeStyle = '#a01838'; c.stroke();
 }
 function bump(p, k, grow = false) { anim.set(p.id, { t: 0, k, grow }); }
 function dust(p) { const [x, y] = cellCenter(p.i, p.j); for (let n = 0; n < 8; n++) fx.push({ k: 'dust', x: x + (Math.random() - .5) * 20, y: y + 12, vx: (Math.random() - .5) * 50, vy: -10 - Math.random() * 20, t: 0, life: .5, r: 3 + Math.random() * 3 }); }
@@ -329,6 +345,7 @@ function draw(dt) {
   setUI();
   drawFx(dt, ufx);
   drawHud(t);
+  GO = goPos(); // before the banners: in portrait they keep clear of it
   drawBanners(dt);
   if (game.phase === 'build') goIcon(t); // over the hints: they talk about it
   if (ghost) drawPicker(t);
@@ -373,10 +390,78 @@ function drawBug(b, t, dt) {
   if (b.frozen > 0) A.fxIced(c, x, y, 13 * sc);
   if (b.burn > 0 && Math.random() < .4) fx.push({ k: 'ember', x: x + (Math.random() - .5) * 14, y: y - 4, vx: 0, vy: -30, t: 0, life: .35 });
 }
+// ---------- the apple ----------
+// The apple watches the nearest bug, gets scared as bugs come close, screams when bitten, jumps for joy when a wave is
+// beaten and cries when the level is lost. The body is a cached sprite, the face is drawn live.
+const AP = { mood: 'idle', mt: 0, blink: 2, look: [1, 0], t: 0 }; // t: the apple's own clock, stopped on pause
+function appleMood(mood, life) { AP.mood = mood; AP.mt = life; }
+function appleSay(text) { const [x, y] = cellCenter(...game.fruit); fx = fx.filter((f) => f.k !== 'say'); fx.push({ k: 'say', x, y: y - 46, t: 0, life: 1, txt: text }); }
+function appleCheer() {
+  const [x, y] = cellCenter(...game.fruit);
+  for (let n = 0; n < 10; n++) { const a = n / 10 * A.TAU; fx.push({ k: 'spark', x: x + Math.cos(a) * 26, y: y - 14 + Math.sin(a) * 22, t: n * .04, life: .7 }); }
+  fx.push({ k: 'heart', x: x - 18, y: y - 30, t: .1, life: 1.3 }); fx.push({ k: 'heart', x: x + 20, y: y - 36, t: .35, life: 1.3 });
+}
 function drawApple(x, y, dt) {
-  const r = game.hp / game.maxHp, mood = r < .3 ? 3 : r < .55 ? 2 : r < .8 ? 1 : 0, s = appleSprite(mood);
-  let dx = 0; const a = anim.get('apple'); if (a != null) { const at = a + dt; anim.set('apple', at); dx = Math.sin(at * 50) * 4 * Math.max(0, 1 - at * 3); if (at > .4) anim.delete('apple'); }
-  blit(s, x - 35 + dx, y - 47);
+  AP.t += dt; const t = AP.t;
+  if (AP.mt > 0) AP.mt -= dt;
+  if (game.phase === 'won') AP.mood = 'happy'; else if (game.phase === 'lost') AP.mood = 'sad'; else if (AP.mt <= 0) AP.mood = 'idle';
+  const cy = y - 9; // the apple's centre (the sprite stands on the stump at y + 12)
+  let nb = null, nd = 1e9;
+  for (const b of game.bugs) { const [bx, by] = bugPos(b), d = Math.hypot(bx - x, by - cy); if (d < nd) { nd = d; nb = [bx, by]; } }
+  const fear = AP.mood === 'idle' && nb ? clamp((3.8 - nd / CELL) / 2.6, 0, 1) : 0;
+  // eyes: on the nearest bug, else a lazy look around
+  let tx = Math.sin(t * .7) * .7, ty = Math.sin(t * .43) * .4;
+  if (nb) { const l = Math.hypot(nb[0] - x, nb[1] - cy) || 1; tx = (nb[0] - x) / l; ty = (nb[1] - cy) / l; }
+  const e = Math.min(1, dt * 9); AP.look[0] += (tx - AP.look[0]) * e; AP.look[1] += (ty - AP.look[1]) * e;
+  AP.blink -= dt; if (AP.blink < -.13) AP.blink = 1.8 + Math.random() * 3.2;
+  // the body: breathing, jumping, trembling, stretching in a scream
+  let dx = 0, dy = 0, sx = 1, sy = 1; const br = Math.sin(t * 2.4) * .018; sx -= br; sy += br;
+  if (AP.mood === 'happy') { const h = Math.abs(Math.sin(t * 7)); dy = -h * 10; const land = h < .2 ? 1 - h / .2 : 0; sx += land * .12; sy -= land * .14; }
+  else if (AP.mood === 'scream') { const k = Math.min(1, AP.mt * 3); dx = Math.sin(t * 70) * 2.6 * k; sx -= .08 * k; sy += .12 * k; }
+  else if (AP.mood === 'sad') { sx += .04; sy -= .05; }
+  else if (fear) { dx = Math.sin(t * 48) * fear * 1.5; sy -= fear * .04; }
+  c.save(); c.translate(x + dx, y + 12 + dy); c.scale(sx, sy);
+  blit(appleBody(game.hp < game.maxHp), -35, -59);
+  c.translate(0, -21); appleFace(24, AP.mood, fear, t);
+  c.restore();
+}
+function appleFace(r, mood, fear, t) {
+  const ink = '#4a1010', L = AP.look, blink = AP.blink < 0, eyes = [[-r * .25, -r * .04], [r * .22, -r * .04]], er = r * .2;
+  c.save(); c.lineCap = 'round'; c.lineJoin = 'round'; c.strokeStyle = ink;
+  // blush
+  c.save(); c.globalAlpha = mood === 'happy' ? .75 : .5; for (const sg of [-1, 1]) { c.beginPath(); c.ellipse(sg * r * .45, r * .25, r * .13, r * .075, 0, 0, A.TAU); c.fillStyle = '#ff8f98'; c.fill(); } c.restore();
+  // eyes
+  c.lineWidth = 2;
+  for (const [ex, ey] of eyes) {
+    if (mood === 'happy') { c.beginPath(); c.arc(ex, ey + er * .35, er * .8, Math.PI + .35, -.35); c.stroke(); continue; } // ^ ^
+    if (mood === 'scream') { const s = ex < 0 ? 1 : -1; c.beginPath(); c.moveTo(ex - er * .8 * s, ey - er * .7); c.lineTo(ex + er * .6 * s, ey); c.lineTo(ex - er * .8 * s, ey + er * .7); c.stroke(); continue; } // > <
+    if (mood === 'sad' || blink) { c.beginPath(); if (mood === 'sad') c.arc(ex, ey - er * .2, er * .75, .35, Math.PI - .35); else { c.moveTo(ex - er * .8, ey); c.lineTo(ex + er * .8, ey); } c.stroke(); continue; }
+    const grow = 1 + fear * .18;
+    c.beginPath(); c.ellipse(ex, ey, er * .9 * grow, er * 1.08 * grow, 0, 0, A.TAU); c.fillStyle = '#fff'; c.fill(); c.lineWidth = 1.6; c.stroke();
+    const pr = er * (.56 - fear * .2), px = ex + L[0] * er * .42, py = ey + L[1] * er * .5;
+    c.beginPath(); c.arc(px, py, pr, 0, A.TAU); c.fillStyle = '#2a1408'; c.fill();
+    c.beginPath(); c.arc(px - pr * .35, py - pr * .4, pr * .38, 0, A.TAU); c.fillStyle = '#fff'; c.fill();
+  }
+  // brows
+  c.lineWidth = 2;
+  if (fear > .25 || mood === 'scream' || mood === 'sad') {
+    const k = mood === 'idle' ? fear : 1;
+    for (const [ex, ey] of eyes) { const s = ex < 0 ? 1 : -1; c.beginPath(); c.moveTo(ex - er * s, ey - er * 1.5 + k * 1); c.lineTo(ex + er * .6 * s, ey - er * 1.5 - k * 3.5); c.stroke(); }
+  } else if (mood === 'happy') for (const [ex, ey] of eyes) { c.beginPath(); c.arc(ex, ey - er * .9, er * .9, Math.PI + .5, -.5); c.stroke(); }
+  // mouth
+  if (mood === 'scream') {
+    const o = 1 + Math.sin(t * 30) * .08; c.beginPath(); c.ellipse(0, r * .36, r * .2 * o, r * .27 * o, 0, 0, A.TAU); c.fillStyle = '#5a0f0f'; c.fill(); c.lineWidth = 1.6; c.stroke();
+    c.beginPath(); c.ellipse(0, r * .5, r * .12, r * .08, 0, 0, A.TAU); c.fillStyle = '#ff7a8a'; c.fill();
+  } else if (mood === 'happy') {
+    c.beginPath(); c.moveTo(-r * .24, r * .2); c.quadraticCurveTo(0, r * .62, r * .24, r * .2); c.closePath(); c.fillStyle = '#5a0f0f'; c.fill(); c.lineWidth = 1.6; c.stroke();
+    c.save(); c.clip(); c.beginPath(); c.ellipse(0, r * .44, r * .13, r * .09, 0, 0, A.TAU); c.fillStyle = '#ff7a8a'; c.fill(); c.restore();
+  } else if (mood === 'sad') { c.beginPath(); c.arc(0, r * .48, r * .15, Math.PI + .4, -.4); c.stroke(); }
+  else if (fear > .2) { const q = 1 + Math.sin(t * 22) * .1; c.beginPath(); c.ellipse(0, r * .34, (r * .06 + fear * r * .07) * q, (r * .07 + fear * r * .09) / q, 0, 0, A.TAU); c.fillStyle = '#5a0f0f'; c.fill(); } // a small trembling "o"
+  else { c.beginPath(); c.arc(0, r * .2, r * .17, .25, Math.PI - .25); c.stroke(); }
+  // sweat and tears
+  if ((mood === 'idle' && fear > .5) || mood === 'scream') { const k = (t * 1.3) % 1; A.hdDrop(c, r * .66, -r * .45 + k * r * .4, 2.6 + (1 - k)); }
+  if (mood === 'sad' || mood === 'scream') for (const s of [-1, 1]) { const k = (t * 1.6 + (s > 0 ? .5 : 0)) % 1; c.save(); c.globalAlpha = 1 - k; A.hdDrop(c, s * r * .3, r * .08 + k * r * .5, 2.2); c.restore(); }
+  c.restore();
 }
 function drawDrop(d, t) {
   const [x, y0] = sp(d.x, d.y), y = y0 - 6 + Math.sin(t * 4 + d.id) * 3;
@@ -497,6 +582,8 @@ function drawFx(dt, list) {
       case 'fire': c.globalAlpha = 1 - k; A.fxFire(c, f.x, f.y, f.r * (.6 + k * .5)); break;
       case 'ember': c.beginPath(); c.arc(f.x, f.y, 2.2 * (1 - k), 0, A.TAU); c.fillStyle = '#ffb02e'; c.fill(); break;
       case 'spark': A.fxStar(c, f.x, f.y - k * 16, 5 * (1 - k), '#fff6a0'); break;
+      case 'say': { const s = Math.min(1, f.t * 8) * (1 + Math.max(0, .15 - f.t) * 2); c.translate(f.x, f.y - k * 10); c.scale(s, s); A.hdText(c, f.txt, 0, 0, 15 * tz, '#ffffff', { stroke: '#a01818', sw: 5 }); break; }
+      case 'heart': heart(f.x + Math.sin(f.t * 6) * 4, f.y - k * 26, 6 * (1 - k * .3)); break;
       case 'fly': { const [tx, ty] = DEW, e = k * k; const x = f.x + (tx - f.x) * e, y = f.y + (ty - f.y) * e - Math.sin(k * Math.PI) * 40; c.globalAlpha = 1; A.hdDrop(c, x, y, 7); break; }
       case 'flash': c.globalAlpha = 1; c.fillStyle = f.col + (.5 * (1 - k)) + ')'; c.fillRect(0, 0, UW, UH); break;
       case 'rain': { const y = f.y + k * UH * 1.6; c.globalAlpha = .7; c.strokeStyle = 'rgba(190,230,255,.9)'; c.lineWidth = 1.6; c.beginPath(); c.moveTo(f.x, y); c.lineTo(f.x - 4, y + 14); c.stroke(); break; }
@@ -507,7 +594,7 @@ function drawFx(dt, list) {
 }
 function drawBanners(dt) {
   // portrait: below the anthill and its start button
-  let topY = PORT ? PTOP + 84 : 26; const midX = (FA[0] + FA[2] / 2) / uk;
+  let topY = PORT ? Math.max(TOPY + PTOP + 40, game.phase === 'build' ? GO[1] + 52 : 0) : 26; const midX = (FA[0] + FA[2] / 2) / uk;
   for (const b of banners) {
     b.t += dt; const k = b.t / b.life; if (k >= 1) continue;
     const a = Math.min(1, b.t * 5, (1 - k) * 5); const text = typeof b.text === 'function' ? b.text() : b.text;
@@ -527,10 +614,10 @@ function drawBanners(dt) {
 function drawHud(t) {
   const build = game.phase === 'build', waveText = build && game.nextIn != null ? T.soon(game.wave + 1, Math.ceil(game.nextIn)) : T.wave(build ? game.wave + 1 : game.wave, game.waves);
   if (PORT) { // top: dew, fruit, wave, pause; bottom: powers, next wave, speed
-    const by = UH - PBOT / 2;
-    dewPill(6, 7, 86, 32); hpPill(98, 7, 70, 32);
-    waveBar(174, 9, UW - 174 - 46, 28, waveText, 12);
-    pauseBtn(UW - 22, 23);
+    const by = UH - BOTY - PBOT / 2, ty = TOPY;
+    dewPill(6, ty + 7, 86, 32); hpPill(98, ty + 7, 70, 32);
+    waveBar(174, ty + 9, UW - 174 - 46, 28, waveText, 12);
+    pauseBtn(UW - 22, ty + 23);
     powerBtns([28, by], [74, by]);
     speedBtn(UW - 24, by);
     if (build) previewRow(102, by, UW - 44 - 102);
@@ -540,16 +627,18 @@ function drawHud(t) {
     waveBar(x, 86, w, 26, build && game.nextIn != null ? `${game.wave + 1}/${game.waves} · ${Math.ceil(game.nextIn)} с` : `${build ? game.wave + 1 : game.wave} / ${game.waves}`, 12);
     if (build) previewColumn(x, 120, w, UH - 128);
     pauseBtn(cx, 24); speedBtn(cx, 64);
-    powerBtns([cx, UH - 74], [cx, UH - 28]);
+    powerBtns([cx, UH - BOTY - 74], [cx, UH - BOTY - 28]);
   }
 }
 // The next wave is called from a round button by the anthill; it shows the countdown and the dew for starting early.
 let GO = [0, 0];
+// right on the anthill: its cell can't be planted, so the button takes no taps meant for the grass
+function goPos() {
+  const [fx0, fy0, fw, fh] = faUI(), r = 21, [x, y] = toUI(...cellCenter(...game.entry));
+  return [clamp(x, fx0 + r + 4, fx0 + fw - r - 4), clamp(y, fy0 + r + 4, fy0 + fh - r - 22)];
+}
 function goIcon(t) {
-  // right on the anthill: its cell can't be planted, so the button takes no taps meant for the grass
-  const [wx, wy] = cellCenter(...game.entry);
-  const [fx0, fy0, fw, fh] = faUI(), r = 21;
-  let [x, y] = toUI(wx, wy); x = clamp(x, fx0 + r + 4, fx0 + fw - r - 4); y = clamp(y, fy0 + r + 4, fy0 + fh - r - 22); GO = [x, y];
+  const r = 21, [x, y] = GO;
   const k = game.nextIn != null ? game.nextIn / BREAK : 1, p = 1 + Math.sin(t * 5) * .05, bonus = earlyBonus(game);
   c.save(); c.translate(x, y); c.scale(p, p);
   c.shadowColor = 'rgba(80,200,40,.8)'; c.shadowBlur = 12; c.beginPath(); c.arc(0, 0, r, 0, A.TAU); c.fillStyle = '#5cc23e'; c.fill(); c.shadowBlur = 0;
@@ -759,7 +848,7 @@ async function boot() {
   resize(); drawLogo(); showHome(true);
   game = createGame(0); paused = true; // a field behind the menu
   requestAnimationFrame(frame);
-  if (new URLSearchParams(location.search).has('dev')) window.__fd = { get game() { return game; }, startLevel, set speed(v) { speed = v; }, cell: (i, j) => { const [x, y] = cellCenter(i, j); return [ox + x * ws, oy + y * ws]; }, scroll: () => {}, zoom: (z, x = innerWidth / 2, y = innerHeight / 2) => zoomTo(z, x, y), get view() { return { zoom, zmax, cell: CELL * ws, FA }; }, layout: () => ({ card: ui.filter((u) => u.card).map((u) => [(u.x + u.w / 2) * uk, (u.y + u.h / 2) * uk]), chips: ui.filter((u) => u.info).map((u) => [(u.x + 14) * uk, (u.y + u.h / 2) * uk]), go: [GO[0] * uk, GO[1] * uk] }) };
+  if (new URLSearchParams(location.search).has('dev')) window.__fd = { get game() { return game; }, startLevel, set speed(v) { speed = v; }, cell: (i, j) => { const [x, y] = cellCenter(i, j); return [ox + x * ws, oy + y * ws]; }, scroll: () => {}, apple: (m, life = 99) => appleMood(m, life), get pause() { return paused; }, set pause(v) { paused = v; }, zoom: (z, x = innerWidth / 2, y = innerHeight / 2) => zoomTo(z, x, y), get view() { return { zoom, zmax, cell: CELL * ws, FA }; }, layout: () => ({ card: ui.filter((u) => u.card).map((u) => [(u.x + u.w / 2) * uk, (u.y + u.h / 2) * uk]), chips: ui.filter((u) => u.info).map((u) => [(u.x + 14) * uk, (u.y + u.h / 2) * uk]), go: [GO[0] * uk, GO[1] * uk] }) };
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 boot();
