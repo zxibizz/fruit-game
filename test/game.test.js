@@ -1,9 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame, step, place, placeProblem, trail, trails, startWave, removePlant, upgrade, usePower, earlyBonus, regrow, regrowCost, stubAt, heal, healCost, refund, pstat, clearWeed, snapshot, restore, bugHp, COLS, ROWS, BREAK } from '../public/game.js';
-import { LEVELS, PLANTS, BUGS, PLANT_ORDER, PERKS, PERK_ORDER, REGROW, WEED_COST, FERTILE } from '../public/data.js';
-import { playLevel } from './bot.mjs';
-import { run as zone } from './zone.mjs';
+import { LEVELS, PLANTS, BUGS, PLANT_ORDER, PERKS, PERK_ORDER, REGROW, WEED_COST, FERTILE, FATIGUE } from '../public/data.js';
+import { playLevel, expectedMeta, fullMeta } from './bot.mjs';
 
 test('every level has a way from the entrance to the fruit', () => {
   LEVELS.forEach((L, n) => {
@@ -65,31 +64,35 @@ test('bugs never walk into plants; a plant put on a cell with bugs lets them out
   assert.ok(fresh.size > 0); assert.equal(g.phase, 'build');
 });
 
-test('the bot wins every level with the whole field planted (balance check)', () => {
+// Balance. The smart bot (test/bot.mjs) plays as the level asks: a maze over the whole field led through mud and
+// nettles, the best plants where bugs are slowest and most tired, upgrades where they pay, holes mended, frost and
+// rain used. It has the perks of a player who took two stars on every earlier level.
+const smart = LEVELS.map((_, n) => playLevel(n, { meta: expectedMeta(n) }));
+test('played with thought, every level is won', () => {
+  smart.forEach((r, n) => { assert.ok(r.won, `level ${n + 1} lost at wave ${r.wave}`); assert.ok(r.plants >= 40, `level ${n + 1}: ${r.plants} plants`); });
+});
+
+test('a garden beside the untouched trail loses every level, even with every perk and endless dew from the start', () => {
   for (let n = 0; n < LEVELS.length; n++) {
-    const r = playLevel(n);
-    assert.ok(r.won, `level ${n + 1} lost at wave ${r.wave}`);
-    assert.ok(r.plants >= 40, `level ${n + 1}: the dew of the level should fill the field, got ${r.plants} plants`);
+    assert.equal(playLevel(n, { maze: false, meta: fullMeta(), bank: 60000 }).won, false, `level ${n + 1}`);
   }
 });
 
-// The exploit gardens must lose. On a few levels one of them still scrapes through (peppers on the mud level, flyers
-// over the pond make a maze matter less there), so the tests ask for most levels, and for all of them against the
-// kill zones by the anthill.
-test('a garden on half of the field loses almost every level, however well it is upgraded', () => {
-  const won = LEVELS.map((_, n) => playLevel(n, { maxPlants: 28 }).won).filter(Boolean).length;
-  assert.ok(won <= 1, `half a garden won ${won} levels`);
+test('half a garden loses; without frost and rain, without the perks or blind to the ground the levels go worse', () => {
+  const score = (list) => list.reduce((s, r) => s + (r.won ? r.hp / r.maxHp : -1), 0), some = [1, 2, 4, 6, 7];
+  const base = score(some.map((n) => smart[n]));
+  for (const n of some) assert.equal(playLevel(n, { maxPlants: 30, meta: expectedMeta(n) }).won, false, `half a garden, level ${n + 1}`);
+  assert.ok(score(some.map((n) => playLevel(n, { powers: false, meta: expectedMeta(n) }))) < base, 'no powers');
+  assert.ok(score(some.map((n) => playLevel(n))) < base, 'no perks');
+  assert.ok(score(some.map((n) => playLevel(n, { terrain: false, meta: expectedMeta(n) }))) <= base, 'blind to the ground');
 });
 
-test('without a maze the levels are lost: shooters along the straight trail, a kill zone by the anthill', () => {
-  let straight = 0;
-  for (let n = 0; n < LEVELS.length; n++) {
-    if (playLevel(n, { maze: false }).won) straight++;
-    assert.equal(zone(n, 99, false).won, false, `level ${n + 1}, kill zone`);
-    assert.equal(zone(n, 11, false).won, false, `level ${n + 1}, kill zone of 11`);
-    assert.equal(zone(n, 99, true).won, false, `level ${n + 1}, wide zone`);
-  }
-  assert.ok(straight <= 2, `a straight trail won ${straight} levels`);
+test('bugs tire on the way: the same hit hurts more after a long walk, and flyers do not tire', () => {
+  const g = createGame(0); g.dew = 1000; send(g, 'snail');
+  for (let k = 0; k < 60 * 12; k++) step(g, 1 / 60);
+  const b = g.bugs[0]; assert.ok(b.walk > 3);
+  place(g, 'rose', Math.floor(b.x) - 1, Math.floor(b.y) + 1); const hit = () => { for (let k = 0; k < 600; k++) { step(g, 1 / 60); const e = g.events.find((q) => q.t === 'hit'); g.events.length = 0; if (e) return e; } };
+  const e = hit(); assert.ok(Math.abs(e.dmg - PLANTS.rose.dmg[0] * (1 + FATIGUE * e.b.walk)) < .5, `${e.dmg}`);
 });
 
 test('levels are long and their waves grow', () => {
@@ -234,12 +237,12 @@ test('bosses: the queen lets ants out, the slug king splits, the spider webs pla
   assert.ok(bugHp(createGame(0), 'rhino', 10) < BUGS.rhino.hp * 5, 'a mid-level boss is weaker than its wave');
 });
 
-test('new plants: a flytrap swallows a bug whole, a bell makes its neighbours shoot more often, level 3 tricks', () => {
+test('new plants: a flytrap bites hard and swallows small bugs, a bell makes its neighbours shoot more often, level 3 tricks', () => {
   const g = createGame(8); g.dew = 5000; place(g, 'flytrap', 12, 2); place(g, 'bell', 12, 3); place(g, 'rose', 11, 3); place(g, 'rose', 5, 7);
   assert.ok(g.plants[2].buff > 0); assert.equal(g.plants[3].buff, 0);
-  send(g, 'snail'); let eaten = null;
+  send(g, 'ant'); let eaten = null;
   for (let k = 0; k < 60 * 20 && !eaten; k++) { step(g, 1 / 60); eaten = g.events.find((e) => e.t === 'eat'); }
-  assert.ok(eaten && eaten.b.hp <= 0, 'swallowed');
+  assert.ok(eaten && eaten.whole && eaten.b.hp <= 0, 'a small bug is swallowed whole');
   const rose = g.plants[2]; upgrade(g, rose); upgrade(g, rose); assert.equal(pstat(g, rose, 'multi'), 2);
   for (const k of PLANT_ORDER) assert.ok(LEVELS.some((L) => L.plants.includes(k)), `${k} is used`);
 });

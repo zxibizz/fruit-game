@@ -2,7 +2,7 @@
 import * as A from './art.js';
 import {
   createGame, step, place, placeProblem, blockingCells, previewTrails, trails, upgrade, upgradeCost, removePlant, refund, isFresh,
-  startWave, earlyBonus, wavePreview, usePower, stars, regrow, regrowCost, clearStub, stubAt, heal, healCost, bugHp, pstat, clearWeed,
+  startWave, earlyBonus, wavePreview, usePower, stars, regrow, regrowCost, clearStub, stubAt, heal, healCost, bugHp, bugReward, pstat, clearWeed, tired,
   snapshot, restore, COLS, ROWS, BREAK,
 } from './game.js';
 import { PLANTS, BUGS, LEVELS, PERKS, PERK_ORDER, PLANT_ORDER, WEED_COST, FERTILE } from './data.js';
@@ -13,7 +13,7 @@ const T = {
   plant: { pumpkin: 'Тыква', rose: 'Шиповник', aloe: 'Алоэ', corn: 'Кукуруза', mint: 'Мята', pepper: 'Перец', dandelion: 'Одуванчик', flytrap: 'Мухоловка', bell: 'Колокольчик' },
   eaten: { pumpkin: 'съедена', rose: 'съеден', aloe: 'съедено', corn: 'съедена', mint: 'съедена', pepper: 'съеден', dandelion: 'съеден', flytrap: 'съедена', bell: 'съеден' },
   // a few words for the card under the plant's name
-  role: { pumpkin: 'Стена', rose: 'Стрелок', aloe: 'Лекарь', corn: 'Бьёт по толпе', mint: 'Замедляет', pepper: 'Огонь вокруг', dandelion: 'Дальний, по летающим', flytrap: 'Глотает целиком', bell: 'Помощник' },
+  role: { pumpkin: 'Стена', rose: 'Стрелок', aloe: 'Лекарь', corn: 'Бьёт по толпе', mint: 'Замедляет', pepper: 'Огонь вокруг', dandelion: 'Только по летающим', flytrap: 'Сильный укус', bell: 'Помощник' },
   about: {
     pumpkin: 'Живая стена. Не стреляет, зато крепкая и дешёвая: из тыкв строят лабиринт, чтобы жуки шли дольше.',
     rose: 'Колет шипами одного жука на соседних клетках. Достаёт и летающих. Быстрый и недорогой.',
@@ -21,8 +21,8 @@ const T = {
     corn: 'Кидает зёрна навесом: взрыв задевает всех жуков рядом с целью. Хороша против толпы. Летающих не достаёт.',
     mint: 'Холодит: жуки рядом ползут медленнее и дольше остаются под обстрелом. Сама не бьёт — ставь рядом со стрелками.',
     pepper: 'Обжигает сразу всех жуков вокруг себя и поджигает их. Огонь не замечает броню.',
-    dandelion: 'Бьёт очень далеко и сильно, по летающим — вдвое. Стреляет редко.',
-    flytrap: 'Проглатывает жука целиком, каким бы толстым он ни был, потом долго жуёт. Босса только кусает.',
+    dandelion: 'Сбивает только летающих — зато очень далеко и сильно. Ставь так, чтобы доставал до яблока: туда летят все.',
+    flytrap: 'Кусает одного жука очень сильно — броня не спасает. Мелких глотает целиком. Потом жуёт.',
     bell: 'Звенит — и растения на соседних клетках стреляют чаще. Сам не бьёт.',
   },
   // what the third level adds
@@ -46,7 +46,7 @@ const T = {
     grasshopper: 'Быстрый, но хилый.',
     snail: 'Медленная и очень крепкая. Мята её не замедляет.',
     pillbug: 'Вся в броне: шипы от неё отскакивают. Жги перцем или бей сильными ударами.',
-    butterfly: 'Летит напрямик над лабиринтом. Бьют её шиповник и одуванчик, мята замедляет.',
+    butterfly: 'Летит напрямик над лабиринтом и не устаёт. Бьют её шиповник и одуванчик, мята замедляет.',
     wasp: 'Летит напрямик, быстрая и крепче бабочки.',
     firefly: 'Лечит жуков вокруг себя. Бей его первым!',
     cricket: 'Идёт к яблоку напрямик и прогрызает стены на пути — остальные жуки побегут в дыру. Выбирает растения послабее.',
@@ -78,10 +78,13 @@ const T = {
   roots: (name) => `${name}: корни`, rootsHint: 'Корни отрастут сами. Тапни по ним — отрастут сразу, за росу', powersBack: 'Мороз и дождь снова с тобой', regrown: 'Отросло!', lvl: (n) => `уровень ${n}`,
   problem: { busy: 'Здесь занято', blocks: 'Нельзя закрыть жукам путь', poor: 'Не хватает росы', nettle: 'На крапиве ничего не растёт', outside: '' },
   gain: (n) => (n > 0 ? `путь +${n}` : n < 0 ? `путь ${n}` : 'путь тот же'),
-  hint1: 'Перетащи растение с полки на поле. Сажай так, чтобы тропинка петляла мимо грядок. Готов — жми ▶',
+  hint1: 'Перетащи растение с полки на поле. Первый уровень растения дешёвый — строй из них длинную петляющую тропинку. Готов — жми ▶',
   holdHint: 'Зажми растение или жука — узнаешь, кто это',
   dragHint: 'Сначала выбери растение на полке — или просто перетащи его на поле',
   hint2: 'Дальше волны придут сами. Нажмёшь ▶ раньше — получишь росу',
+  tiredHint: 'Жуки устают в пути: чем дольше ползут, тем больнее им достаётся. Делай тропинку длиннее, а лучшие растения ставь ближе к её концу',
+  upHint: 'Улучшения дорогие — копи росу и усиливай те растения, мимо которых жуки ползут дольше всего',
+  tiredNote: 'Жуки устают: каждая пройденная клетка добавляет 3% к урону по ним. Летающие не устают.',
   zoomHint: 'Поле можно приблизить двумя пальцами',
   undoHint: 'Ошиблась клеткой? Пока волна не началась, растение продаётся за полную цену',
   won: 'Яблоко спасено!', lost: 'Жуки съели яблоко', retry: 'Ещё раз', levels: 'Уровни', nextLevel: 'Дальше', resume: 'Продолжить',
@@ -391,7 +394,8 @@ function bugStats(kind, b) {
   if (B.dig) out.push('прогрызает стены');
   if (B.chew) out.push('кусает растения');
   if (B.mend) out.push('лечит жуков');
-  out.push(`кусает яблоко на ${B.bite}`, `+${B.reward} росы`);
+  if (b && tired(b) >= 1.1) out.push(`устал: урон +${Math.round((tired(b) - 1) * 100)}%`);
+  out.push(`кусает яблоко на ${B.bite}`, `+${game && !paused ? bugReward(game, kind) : B.reward} росы`);
   return out;
 }
 // The numbers of a plant: [label, value at this level, value at the next one or null]. On the field (p given) they
@@ -403,7 +407,7 @@ function statRows(type, lvl, p = null) {
   const add = (label, name, f = num) => { if (P[name] == null) return; const a = v(name, lvl), b = nx ? v(name, nx) : null; if (!a && !b) return; rows.push([label, f(a), b != null && f(b) !== f(a) ? f(b) : null]); };
   add('Урон', 'dmg'); add('Целей', 'multi'); add('Огонь/с', 'burn');
   add('Выстрелов/с', 'rate', (r) => num(r));
-  add('Глотает раз в', 'eat', (s) => `${num(s)} с`); add('Урон боссу', 'bossDmg');
+  add('Укус', 'chomp'); add('Кусает раз в', 'eat', (s) => `${num(s)} с`);
   add('Замедление', 'slow', (s) => `${Math.round(s * 100)}%`);
   add('Лечит/с', 'heal'); add('Отращивает за', 'regrow', (s) => `${num(s)} с`);
   add('Соседи чаще на', 'buff', (s) => `${Math.round(s * 100)}%`);
@@ -411,7 +415,7 @@ function statRows(type, lvl, p = null) {
   add('Прочность', 'hp');
   return rows;
 }
-const statLine = (type, l = 1) => statRows(type, l).map(([a, b]) => `${a.toLowerCase()} ${b}`).concat(PLANTS[type].dmg ? [PLANTS[type].air ? 'бьёт летающих' : 'летающих не бьёт'] : []);
+const statLine = (type, l = 1) => statRows(type, l).map(([a, b]) => `${a.toLowerCase()} ${b}`).concat(PLANTS[type].dmg ? [PLANTS[type].airOnly ? 'только по летающим' : PLANTS[type].air ? 'бьёт и летающих' : 'летающих не бьёт'] : []);
 function banner(text, life = 2, top = false) { banners.push({ text, t: 0, life, top }); }
 // Planting. A plant is dragged from the shelf onto a cell; or picked on the shelf with a tap, and then every tap on a
 // free cell plants one. A mistake costs nothing: until the wave starts, a fresh plant sells for its full price.
@@ -466,7 +470,7 @@ function handleEvents() {
       case 'charge': { const [x, y] = bugPos(e.b); fx.push({ k: 'note', x, y: y - 30, t: 0, life: 1.1, txt: 'Разгон!' }); sfx.web(); break; }
       case 'brood': { const [x, y] = bugPos(e.b); for (let n = 0; n < 6; n++) fx.push({ k: 'dust', x, y, vx: (Math.random() - .5) * 70, vy: -10 - Math.random() * 30, t: 0, life: .5, r: 3 + Math.random() * 3 }); break; }
       case 'web': for (const p of e.plants) { const [x, y] = cellCenter(p.i, p.j); fx.push({ k: 'star', x, y: y - 10, t: 0, life: .25, r: 16 }); } sfx.web(); break;
-      case 'eat': { const [x, y] = cellCenter(e.p.i, e.p.j); bump(e.p, .5, true); fx.push({ k: 'note', x, y: y - 34, t: 0, life: .8, txt: 'Ам!' }); sfx.chomp(); break; }
+      case 'eat': { const [x, y] = cellCenter(e.p.i, e.p.j); bump(e.p, .5, true); if (e.whole) fx.push({ k: 'note', x, y: y - 34, t: 0, life: .8, txt: 'Ам!' }); sfx.chomp(); break; }
       case 'chill': { const [x, y] = cellCenter(e.p.i, e.p.j); fx.push({ k: 'chill', x, y, t: 0, life: .5, r: pstat(game, e.p, 'range') * CELL }); bump(e.p, .25); sfx.frost(); break; }
       case 'weed': { dust({ i: e.i, j: e.j }); terrainDirty = true; pop = null; sfx.sell(); break; }
       case 'splash': { const [x, y] = sp(e.x, e.y); for (let n = 0; n < 8; n++) fx.push({ k: 'kern', x, y, vx: (Math.random() - .5) * 90 * e.r, vy: -30 - Math.random() * 50, t: 0, life: .4 }); break; }
@@ -484,7 +488,7 @@ function handleEvents() {
       case 'sell': case 'plantDead': dust(e.p); terrainDirty = true; if (pop === e.p) pop = null; if (e.t === 'sell') sfx.sell(); else { sfx.eaten(); banner(`${T.plant[e.p.type]} ${T.eaten[e.p.type]}!`, 1.4); if (!localStorage.getItem('fruit.rootsHint')) { banner(T.rootsHint, 8, true); localStorage.setItem('fruit.rootsHint', '1'); } } break;
       case 'chew': { const [x, y] = cellCenter(e.p.i, e.p.j); for (let n = 0; n < 6; n++) fx.push({ k: 'crumb', x, y: y - 6, vx: (Math.random() - .5) * 50, vy: -20 - Math.random() * 30, t: 0, life: .5, col: e.p.type === 'pumpkin' ? '#f7a23a' : '#6cc04a' }); bump(e.p, .2); sfx.chew(); break; }
       case 'wave': banner(T.wave(e.n, game.waves), 1.4); sfx.waveStart(); { const nb = newBugs(e.n).filter((k) => !isBoss(k)); if (nb.length && !(levelIdx === 0 && e.n === 1)) banner(T.freshBug(nb.map((k) => T.bug[k].toLowerCase())), 7, true); } if (AP.mood === 'happy') appleMood('idle', 0); break;
-      case 'waveDone': appleMood('happy', 2.6); appleCheer(); banner(T.waveDone(e.bonus), 1.8); sfx.waveDone(); if (e.powers) banner(T.powersBack, 4, true); if (levelIdx === 0 && e.n === 1) banner(T.hint2, 6, true); break;
+      case 'waveDone': appleMood('happy', 2.6); appleCheer(); banner(T.waveDone(e.bonus), 1.8); sfx.waveDone(); if (e.powers) banner(T.powersBack, 4, true); if (levelIdx === 0 && e.n === 1) { banner(T.hint2, 6, true); banner(T.tiredHint, 10, true); } if (levelIdx === 0 && e.n === 3) banner(T.upHint, 9, true); break;
       case 'early': ufx.push({ k: 'gain', x: GO[0] + 30, y: GO[1] + 26, t: 0, life: 1.2, txt: T.early(e.bonus) }); sfx.early(e.bonus); break;
       case 'power': if (e.kind === 'frost') { ufx.push({ k: 'flash', t: 0, life: .6, col: 'rgba(190,240,255,' }); sfx.frost(); } else { for (let n = 0; n < 70; n++) ufx.push({ k: 'rain', x: Math.random() * UW, y: -Math.random() * UH, t: 0, life: 1.2 }); sfx.rain(); terrainDirty = true; } break;
       case 'won': case 'lost': { dropSave(); if (e.t === 'won') appleCheer(); const g = game; setTimeout(() => { if (game === g) endScreen(e.t === 'won'); }, 900); break; }
@@ -614,6 +618,7 @@ function drawBug(b, t, dt) {
   if (b.hit > 0 || b.sting > 0) c.filter = 'brightness(1.8)';
   blit(s, -s.w / 2, -s.h / 2); c.restore();
   if (b.frozen > 0) A.fxIced(c, x, y, 13 * sc);
+  const tr = tired(b); if (tr >= 1.3 && !b.fly) for (let n = 0; n < (tr >= 2 ? 3 : tr >= 1.6 ? 2 : 1); n++) { const q = (t * 1.4 + n * .37 + b.id * .13) % 1; c.save(); c.globalAlpha = (1 - q) * .9; A.hdDrop(c, x + (n - 1) * 7 * sc + 6, y - 9 * sc - q * 9, 2.6); c.restore(); }
   if (b.mended > 0 && Math.random() < .15) fx.push({ k: 'spark', x: x + (Math.random() - .5) * 12, y: y - 6, t: 0, life: .4 });
   if (b.burn > 0 && Math.random() < .4) fx.push({ k: 'ember', x: x + (Math.random() - .5) * 14, y: y - 4, vx: 0, vy: -30, t: 0, life: .35 });
 }
@@ -1223,7 +1228,7 @@ function openGuide() {
     ? `<div class="item"><img src="${bugPic(k)}" alt=""><div class="tx"><h3>${T.bug[k]}${isBoss(k) ? ' <span class="tag" style="margin:0;background:#ffd0d8;color:#a01838">босс</span>' : ''}</h3><p>${T.bugAbout[k]}</p><div class="st">${bugStats(k).slice(1).join(' · ')}</div></div></div>`
     : `<div class="item off"><div class="tx"><h3>???</h3><p>${T.unknown}</p></div></div>`);
   showModal(`<div class="tabs"><button class="tab${guideTab === 'plants' ? ' on' : ''}" id="tP">${T.plantsTab}</button><button class="tab${guideTab === 'bugs' ? ' on' : ''}" id="tB">${T.bugsTab}</button></div>
-    <div class="body scroll">${guideTab === 'plants' ? PLANT_ORDER.map(plant).join('') : Object.keys(BUGS).map(bug).join('')}</div><div class="row foot"><button class="btn" id="mOk">${T.close}</button></div>`, true);
+    <div class="body scroll">${guideTab === 'plants' ? PLANT_ORDER.map(plant).join('') : `<p style="font-size:13px;margin:0 0 8px">${T.tiredNote}</p>` + Object.keys(BUGS).map(bug).join('')}</div><div class="row foot"><button class="btn" id="mOk">${T.close}</button></div>`, true);
   $('tP').onclick = () => { guideTab = 'plants'; sfx.tap(); openGuide(); }; $('tB').onclick = () => { guideTab = 'bugs'; sfx.tap(); openGuide(); };
   $('mOk').onclick = () => { showModal(null); if (!$('home').hidden) return; paused = false; };
 }

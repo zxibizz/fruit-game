@@ -16,10 +16,13 @@ and in portrait (turned there).
   nettles (sting the bugs, nothing grows), weeds (cleared for dew), two anthills. A boss comes in the middle and at
   the end of every level: the rhino beetle runs, the queen lets ants out, the slug king splits into snails, the
   hornet flies over the maze, the spider webs the plants.
-- **Balance**: plants reach only the cells next to them and no plant makes dew (it comes from beaten bugs, finished
-  waves and waves called early), so the trail has to wind through the whole field. Caterpillars bite plants, mole
+- **Balance**: a level is meant to be hard and to be won by thought. Plants that hit walkers reach only the cells
+  next to them; bugs tire as they walk (every cell adds 3% to the damage they take), so a long winding trail with the
+  best plants near its end does several times more than the same plants by a straight road. The first level of a
+  plant is cheap — a trail is quick to shape — and the upgrades are dear: there is never dew for all of them. No
+  plant makes dew (it comes from beaten bugs, finished waves and waves called early). Caterpillars bite plants, mole
   crickets eat through walls; eaten plants leave roots that grow back by themselves, faster by an aloe, or at once
-  for dew.
+  for dew. Freezes do not chain; dandelions shoot only at flyers, which cross the maze in a straight line.
 - **Stars and perks**: up to three stars a level; they buy permanent perks (more dew at the start, a sturdier apple,
   a stronger plant…), which can be taken back and dealt again for free.
 - A level in progress is kept between waves and can be continued from the home screen.
@@ -38,8 +41,11 @@ and in portrait (turned there).
   `?dev&insets=top,right,bottom,left` fakes the safe areas (e.g. `0,59,21,59` for an iPhone on its side).
 - `server/` — Node 22, no dependencies: static files and `/healthz`.
 - `node --test test/*.test.js` — pathing and placement rules, economy, repairs, bosses, the ground, perks, saving, server, offline
-  cache list, and a bot that must win every level with a maze over the whole field, while gardens on half of it or without
-  a maze lose (`test/zone.mjs`: a kill zone by the anthill; one or two levels are allowed to slip). `node test/bot.mjs [levels...]` prints how the bot did, wave by wave.
+  cache list, and the balance: the smart bot of `test/bot.mjs` (a maze through mud and nettles, plants where bugs are
+  slowest and most tired, mended holes, frost and rain, the perks of two stars a level) must win every level, a fully
+  grown garden beside the untouched trail must lose every level even with every perk and endless dew, and half a
+  garden, no powers, no perks or no eye for the ground must do worse. The suite takes a few minutes.
+  `node test/bot.mjs [levels...]` prints how the bot did, wave by wave.
 - [docs/research.md](docs/research.md) — the genre study the design started from (in Russian).
 
 When anything in `public/` changes, bump `VERSION` in both `public/game.js` and `public/sw.js`.
