@@ -11,7 +11,8 @@ Russian for now.
 - `public/data.js` — plants, bugs and the three levels with their waves.
 - `public/game.js` — simulation (no DOM): distance field to the fruit, placement rules, bugs, shots, waves, powers.
 - `public/art.js` — every picture is drawn by code (volume shading, sprites, terrain, effects, UI pieces).
-- `public/view.js` — drawing with cached sprites, input, HUD, menus. `?dev` exposes `window.__fd` for scripted checks.
+- `public/view.js` — drawing with cached sprites, input, HUD, menus. `?dev` exposes `window.__fd` for scripted checks;
+  `?dev&insets=top,right,bottom,left` fakes the safe areas (e.g. `0,59,21,59` for an iPhone on its side).
 - `server/` — Node 22, no dependencies: static files and `/healthz`.
 - `node --test test/*.test.js` — pathing and placement rules, economy, server, offline cache list, and a bot that must win
   every level. `node test/bot.mjs [levels...]` prints how the bot did, wave by wave.

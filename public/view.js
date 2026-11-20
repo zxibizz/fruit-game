@@ -79,13 +79,16 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const PTOP = 46, PBOT = 52, LLEFT = 104, LRIGHT = 52, LPLATE = 52; // LPLATE: landscape start plate, left of the right buttons
 // room kept free, in UI units: TOPY above the portrait top row, BOTY below the bottom buttons, CORN at the sides of the
 // portrait bottom row (rounded screen corners of the home-screen app)
-let TOPY = 0, BOTY = 0, CORN = 0, LX = 0, RX = 0; // LX, RX: landscape side safe areas
+let TOPY = 0, BOTY = 0, CORN = 0, LX = 0, RX = 0, LROW = false; // LX, RX: landscape side safe areas; LROW: landscape with the HUD row on top
 // The phone's safe areas (notch, home bar) in CSS px, read from CSS env() through a probe element.
 function safeInsets() {
   const d = document.createElement('div');
   d.style.cssText = 'position:fixed;visibility:hidden;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)';
   document.body.append(d); const cs = getComputedStyle(d), v = (k) => parseFloat(cs[k]) || 0;
-  const r = { t: v('paddingTop'), r: v('paddingRight'), b: v('paddingBottom'), l: v('paddingLeft') }; d.remove(); return r;
+  const r = { t: v('paddingTop'), r: v('paddingRight'), b: v('paddingBottom'), l: v('paddingLeft') }; d.remove();
+  const q = new URLSearchParams(location.search), fake = q.has('dev') && q.get('insets'); // for checks: ?dev&insets=top,right,bottom,left
+  if (fake) { const v = fake.split(',').map((x) => parseFloat(x) || 0); [r.t, r.r, r.b, r.l] = [0, 1, 2, 3].map((k) => v[k] || 0); }
+  return r;
 }
 const toUI = (wx, wy) => [(ox + wx * ws) / uk, (oy + wy * ws) / uk];
 const faUI = () => FA.map((v) => v / uk); // field area in UI units
@@ -138,9 +141,17 @@ function resize() {
   // under it, so the top row steps down 16 px more (the `pwa` class, set in index.html before the first paint).
   const ins = safeInsets(), pwa = document.documentElement.classList.contains('pwa');
   TOPY = (ins.t + (pwa && PORT ? 16 : 0)) / uk; BOTY = ins.b / uk; LX = ins.l / uk; RX = ins.r / uk; CORN = pwa && PORT ? 10 : 0;
-  // landscape: equal bands on both sides, so the field sits in the middle of the screen
-  const side = Math.max(LLEFT + LX, LPLATE + LRIGHT + RX) * uk;
-  FA = PORT ? [6, (TOPY + PTOP) * uk, vw - 12, vh - (TOPY + PTOP + PBOT + BOTY) * uk] : [side, 6 + ins.t, vw - side * 2, vh - 12 - ins.t - ins.b];
+  // Landscape has two layouts, and the one with the bigger cells wins: columns on both sides (best on a low screen
+  // with no notch), or a row on top with a narrow column on the right (an iPhone, whose notch and rounded corners eat
+  // ~59 px on each side). Either way the bands are equal on both sides, so the field sits in the middle of the screen.
+  LROW = false;
+  if (PORT) FA = [6, (TOPY + PTOP) * uk, vw - 12, vh - (TOPY + PTOP + PBOT + BOTY) * uk];
+  else {
+    const side = Math.max(LLEFT + LX, LPLATE + LRIGHT + RX) * uk, a = [side, 6 + ins.t, vw - side * 2, vh - 12 - ins.t - ins.b];
+    const edge = Math.max(LX * uk + 6, (LRIGHT + RX) * uk + 2), b = [edge, (TOPY + PTOP) * uk, vw - edge * 2, vh - (TOPY + PTOP) * uk - Math.max(6, ins.b)];
+    const fa = Math.min(a[2] / gw, a[3] / gh), fb = Math.min(b[2] / gw, b[3] / gh);
+    LROW = fb > fa * 1.02; FA = LROW ? b : a;
+  }
   fit = Math.min(FA[2] / gw, FA[3] / gh);
   zmax = clamp(58 / (CELL * fit), 1, 3); // up to cells of about 58 CSS px
   if (was !== PORT) zoom = 1;
@@ -537,7 +548,7 @@ function nearCell(i, j) {
 function drawPicker(t) {
   const list = game.L.plants, n = list.length, bw = 50, bh = 58, gap = 6, pad = 8;
   const cols = n * (bw + gap) - gap + pad * 2 <= UW - 12 ? n : Math.ceil(n / 2), rows = Math.ceil(n / cols);
-  const w = Math.max(cols * (bw + gap) - gap + pad * 2, 190), g = ghost, tw0 = w - pad * 2 - 34;
+  const w = Math.max(cols * (bw + gap) - gap + pad * 2, Math.min(330, UW - 12)), g = ghost, tw0 = w - pad * 2 - 34;
   // under the buttons: what the chosen plant does (until it is planted), and the close button at the bottom right
   // the height fits the longest description, so the buttons stay put when a plant is chosen
   const text = (tp) => { c.save(); c.font = '800 12px Nunito'; const a = wrap(T.about[tp], tw0); c.font = '900 11px Nunito'; const b = wrap(statLine(tp).join(' · '), tw0); c.restore(); return [a, b]; };
@@ -637,7 +648,7 @@ function drawFx(dt, list) {
 }
 function drawBanners(dt) {
   // portrait: under the anthill strip
-  let topY = PORT ? Math.max(TOPY + PTOP, toUI(...hillPos())[1] + E / 2 * ws / uk, game.phase === 'build' ? GOB[1] + GOB[3] : 0) + 22 : 26 + TOPY; const midX = (FA[0] + FA[2] / 2) / uk;
+  let topY = LROW ? TOPY + PTOP + 22 : PORT ? Math.max(TOPY + PTOP, toUI(...hillPos())[1] + E / 2 * ws / uk, game.phase === 'build' ? GOB[1] + GOB[3] : 0) + 22 : 26 + TOPY; const midX = (FA[0] + FA[2] / 2) / uk;
   for (const b of banners) {
     b.t += dt; const k = b.t / b.life; if (k >= 1) continue;
     const a = Math.min(1, b.t * 5, (1 - k) * 5); const text = typeof b.text === 'function' ? b.text() : b.text;
@@ -663,6 +674,12 @@ function drawHud(t) {
     pauseBtn(UW - 22, ty + 23);
     powerBtns([28 + CORN, by], [74 + CORN, by]);
     speedBtn(UW - 24 - CORN, by);
+  } else if (LROW) { // top: dew, fruit, wave, speed, pause; right column: the start plate, powers
+    const x = 6 + LX, cx = UW - RX - LRIGHT / 2, ty = TOPY;
+    dewPill(x, ty + 7, 86, 32); hpPill(x + 92, ty + 7, 70, 32);
+    waveBar(x + 168, ty + 9, Math.min(240, cx - 62 - x - 168), 28, waveText, 12);
+    pauseBtn(cx, ty + 23); speedBtn(cx - 40, ty + 23);
+    powerBtns([cx, UH - BOTY - 74], [cx, UH - BOTY - 28]);
   } else { // left: dew, fruit, wave, next wave; right: pause, speed, powers
     const x = 8 + LX, w = LLEFT - 16, cx = UW - RX - LRIGHT / 2;
     dewPill(x, 8, w, 32); hpPill(x, 46, w, 32);
@@ -689,8 +706,12 @@ function goLayout() {
     const x = right ? hx + hw : hx - hw - w;
     return [clamp(x, fx0 + 2, fx0 + fw - w - 2), clamp(hy - h / 2, fy0 + 2, fy0 + fh - h - 2), w, h, false, num, end];
   }
-  const x = (FA[0] + FA[2]) / uk + 3, w = UW - RX - LRIGHT - 4 - x, h = 40 + 18 + n * 30 + 30, top = 86, bot = UH - BOTY - 100;
-  return [x, clamp(hy - h / 2, top, Math.max(top, bot - h)), w, h, true, true, true];
+  const cx = UW - RX - LRIGHT / 2, x = LROW ? cx - 23 : (FA[0] + FA[2]) / uk + 3, w = LROW ? 46 : UW - RX - LRIGHT - 4 - x;
+  const top = LROW ? TOPY + PTOP + 4 : 86, bot = UH - BOTY - 100, bonus = earlyBonus(game);
+  // it must not reach the power buttons under it: without the wave number, then without «В бой!» (▶ stays)
+  let num = true, end = true, h = 0;
+  for (const [a, b] of [[true, true], [false, true], [false, !!bonus]]) { num = a; end = b; h = 40 + (num ? 18 : 0) + n * 30 + (end ? 30 : 4); if (h <= bot - top) break; }
+  return [x, clamp(hy - h / 2, top, Math.max(top, bot - h)), w, h, true, num, end];
 }
 function goIcon(t) {
   const [x, y, w, h, up, num, end] = GOB, r = GO_R, bonus = earlyBonus(game), prev = wavePreview(game), start = () => { ghost = null; pop = null; startWave(game); };
@@ -706,7 +727,7 @@ function goIcon(t) {
   c.beginPath(); c.moveTo(-4, -7); c.lineTo(8, 0); c.lineTo(-4, 7); c.closePath(); c.fillStyle = '#fff'; c.fill(); c.lineWidth = 1.8; c.lineJoin = 'round'; c.strokeStyle = '#1f5a14'; c.stroke();
   c.restore(); GO = [cx, cy];
   ui.push(up ? { x, y, w, h: 40, fn: start, s: 'u' } : { x, y, w: 40, h, fn: start, s: 'u' });
-  const n0 = up ? 58 : num ? 70 : 40;
+  const n0 = up ? (num ? 58 : 40) : num ? 70 : 40;
   if (num) { const [wx, wy] = at(up ? 47 : 55); A.hdText(c, `${game.wave + 1}/${game.waves}`, wx, wy + .5, 11, '#8a5a32', { stroke: null }); }
   prev.forEach(([kind, cnt], i) => { const [bx, by] = at(up ? n0 + 15 + i * 30 : n0 + 12 + i * 46); bugChip(kind, cnt, up ? bx - 10 : bx, by, () => {}); });
   if (!end) return;

@@ -1,7 +1,7 @@
 // Simulation: no DOM, plain data. The view reads the state and the events, and calls the actions below.
 import { COLS, ROWS, FRUIT_HP, PLANTS, BUGS, LEVELS, BREAK, EARLY_DEW } from './data.js';
 
-export const VERSION = '0.10.0';
+export const VERSION = '0.10.1';
 export { COLS, ROWS, BREAK };
 
 const DIRS = [[-1, 0], [0, -1], [0, 1], [1, 0]]; // tie order: towards the fruit side first

@@ -1,7 +1,7 @@
 // Offline: every game file goes into the cache on install and is served from it from then on.
 // When any file in public/ changes, bump VERSION here and in game.js — otherwise devices stay on the old version.
 // A new version installs in the background and takes over at once; the running page offers a reload on the home screen.
-const VERSION = '0.10.0';
+const VERSION = '0.10.1';
 const CACHE = `fruit-v${VERSION}`;
 const ASSETS = [
   './',
