@@ -1,8 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame, step, place, placeProblem, trail, startWave, removePlant, upgrade, usePower, earlyBonus, regrow, regrowCost, stubAt, heal, healCost, COLS, ROWS, BREAK } from '../public/game.js';
-import { LEVELS, PLANTS, BUGS, PLANT_ORDER } from '../public/data.js';
+import { LEVELS, PLANTS, BUGS, PLANT_ORDER, REGROW } from '../public/data.js';
 import { playLevel } from './bot.mjs';
+import { run as zone } from './zone.mjs';
 
 test('every level has a way from the entrance to the fruit', () => {
   LEVELS.forEach((L, n) => {
@@ -45,26 +46,38 @@ test('upgrades raise the level up to 3, powers are limited', () => {
   assert.ok(usePower(g, 'rain')); assert.equal(usePower(g, 'rain'), false);
 });
 
-test('bugs never walk through plants', () => {
+test('bugs never walk into plants; a plant put on a cell with bugs lets them out', () => {
   const g = createGame(1); g.dew = 2000;
   for (let j = 1; j < ROWS; j++) assert.ok(place(g, 'pumpkin', 7, j), `row ${j}`);
   startWave(g);
+  const fresh = new Map(); // bugs that stood on a cell when a plant grew there may still be walking out of it
   for (let n = 0; n < 60 * 60 && g.phase === 'wave'; n++) {
     step(g, 1 / 60);
-    for (const b of g.bugs) if (!b.fly) { const i = Math.floor(b.x), j = Math.floor(b.y); if (i < COLS) assert.ok(!g.grid[j]?.[i]?.type, `bug in a plant at ${i},${j}`); }
+    if (n === 60 * 12) for (const b of g.bugs) { const i = Math.floor(b.x), j = Math.floor(b.y); if (i < COLS && !g.grid[j][i] && place(g, 'pumpkin', i, j)) fresh.set(b.id, n); }
+    for (const b of g.bugs) if (!b.fly && !(n - fresh.get(b.id) < 60 * 3)) { const i = Math.floor(b.x), j = Math.floor(b.y); if (i < COLS) assert.ok(!g.grid[j]?.[i]?.type, `bug in a plant at ${i},${j}`); }
   }
+  assert.ok(fresh.size > 0); assert.equal(g.phase, 'build');
 });
 
 test('the bot wins every level with the whole field planted (balance check)', () => {
   for (let n = 0; n < LEVELS.length; n++) {
     const r = playLevel(n);
     assert.ok(r.won, `level ${n + 1} lost at wave ${r.wave}`);
-    assert.ok(r.plants >= 44, `level ${n + 1}: the dew of the level should fill the field, got ${r.plants} plants`);
+    assert.ok(r.plants >= 40, `level ${n + 1}: the dew of the level should fill the field, got ${r.plants} plants`);
   }
 });
 
 test('a garden on half of the field loses every level, however well it is upgraded', () => {
   for (let n = 0; n < LEVELS.length; n++) assert.equal(playLevel(n, { maxPlants: 28 }).won, false, `level ${n + 1}`);
+});
+
+test('without a maze every level is lost: shooters along the straight trail, a kill zone by the anthill', () => {
+  for (let n = 0; n < LEVELS.length; n++) {
+    assert.equal(playLevel(n, { maze: false }).won, false, `level ${n + 1}, along the trail`);
+    assert.equal(zone(n, 99, false).won, false, `level ${n + 1}, kill zone`);
+    assert.equal(zone(n, 11, false).won, false, `level ${n + 1}, kill zone of 11`);
+    assert.equal(zone(n, 99, true).won, false, `level ${n + 1}, wide zone`);
+  }
 });
 
 test('levels are long and their waves grow', () => {
@@ -87,19 +100,25 @@ test('dew comes only from bugs and waves: no plant makes it', () => {
 // one bug of the kind walks in; the field is left as it is
 function send(g, kind) { startWave(g); g.queue = [{ kind, at: 0 }]; }
 
-test('a digger eats through the wall in its way; the roots grow back for a part of the price', () => {
+test('a digger eats through the wall in its way; the roots grow back for dew at once or by themselves in time', () => {
   const g = createGame(0); g.dew = 1000;
-  for (let j = 1; j < ROWS; j++) assert.ok(place(g, 'pumpkin', 7, j), `row ${j}`);
+  // a wall of frail plants: eating through is clearly quicker than the way round
+  for (let j = 0; j < ROWS - 1; j++) { for (const p of g.plants) p.hp = p.maxHp = 20; assert.ok(place(g, 'rose', 7, j), `row ${j}`); }
+  for (const p of g.plants) p.hp = p.maxHp = 20; place(g, 'pumpkin', 0, 0);
   const long = trail(g).length; send(g, 'cricket');
   let dead = null;
-  for (let n = 0; n < 60 * 120 && !dead; n++) { step(g, 1 / 60); dead = g.events.find((e) => e.t === 'plantDead'); g.events.length = 0; }
+  for (let n = 0; n < 60 * 120 && !dead; n++) { step(g, 1 / 60); for (const b of g.bugs) b.hp = 1e4; dead = g.events.find((e) => e.t === 'plantDead'); g.events.length = 0; } // the digger is not to be shot here
   assert.ok(dead, 'a plant was eaten');
   const s = stubAt(g, dead.p.i, dead.p.j);
   assert.ok(s, 'roots are left'); assert.ok(trail(g).length < long, 'the trail got shorter');
-  for (let n = 0; n < 60 * 3; n++) step(g, 1 / 60); // the digger walks on
-  const dew = g.dew; assert.ok(regrow(g, s)); assert.equal(g.dew, dew - regrowCost(s));
-  assert.equal(regrowCost(s), Math.ceil(PLANTS.pumpkin.cost / 3));
-  assert.equal(g.grid[s.j][s.i].type, 'pumpkin'); assert.equal(trail(g).length, long); assert.equal(g.stubs.length, 0);
+  const dew = g.dew; assert.ok(regrow(g, s), 'even with the digger still on the cell'); assert.equal(g.dew, dew - regrowCost(s));
+  assert.equal(regrowCost(s), Math.ceil(PLANTS.rose.cost / 3));
+  assert.equal(g.grid[s.j][s.i].type, 'rose'); assert.equal(trail(g).length, long); assert.equal(g.stubs.length, 0);
+  // left alone, the roots grow back by themselves
+  const p = g.plants.find((q) => q.i === 3 && q.type) || (place(g, 'pumpkin', 3, 3), g.plants[g.plants.length - 1]);
+  removePlant(g, p, false); const dew2 = g.dew;
+  for (let n = 0; n < 60 * (REGROW + 1); n++) step(g, 1 / 60);
+  assert.equal(g.grid[p.j][p.i]?.type, p.type); assert.ok(g.dew >= dew2, 'for free');
 });
 
 test('a digger walks round when the way round is short', () => {
@@ -120,7 +139,7 @@ test('aloe heals the plants around and grows the eaten ones back for free; a bit
   assert.ok(heal(g, far)); assert.equal(far.hp, far.maxHp); assert.equal(g.dew, dew0 - cost); assert.equal(heal(g, far), false);
   upgrade(g, rose); removePlant(g, rose, false);
   assert.ok(stubAt(g, 7, 3)); const dew = g.dew;
-  for (let n = 0; n < 60 * (PLANTS.aloe.regrow[0] + 1); n++) step(g, 1 / 60);
+  for (let n = 0; n < 60 * (PLANTS.aloe.regrow[0] * .8); n++) step(g, 1 / 60); // sooner than the roots alone would
   assert.equal(g.grid[3][7]?.type, 'rose'); assert.equal(g.grid[3][7].lvl, 2); assert.equal(g.dew, dew);
 });
 

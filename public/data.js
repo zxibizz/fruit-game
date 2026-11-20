@@ -9,19 +9,21 @@ export const BREAK = 20, EARLY_DEW = 1;
 // Stats with three values are per plant level 1..3.
 // There is no plant that makes dew: dew comes only from beaten bugs, finished waves and waves called early.
 export const PLANTS = {
-  pumpkin: { cost: 15, up: [20, 30], hp: [80, 140, 220] },
-  rose: { cost: 40, up: [45, 70], hp: [30, 40, 50], range: [2.5, 2.7, 2.9], rate: [1.25, 1.45, 1.65], dmg: [7, 10, 14], air: true, shot: 'thorn', speed: 9 },
-  corn: { cost: 60, up: [55, 80], hp: [30, 40, 50], range: [3, 3.2, 3.4], rate: [.6, .65, .7], dmg: [12, 18, 26], splash: .8, shot: 'kernel', speed: 5 },
+  pumpkin: { cost: 15, up: [20, 30], hp: [120, 200, 300] },
+  rose: { cost: 40, up: [45, 70], hp: [60, 80, 100], range: [1.5, 1.5, 1.6], rate: [1.25, 1.45, 1.65], dmg: [7, 10, 14], air: true, shot: 'thorn', speed: 9 },
+  corn: { cost: 60, up: [55, 80], hp: [60, 80, 100], range: [1.8, 1.9, 1.95], rate: [.6, .65, .7], dmg: [12, 18, 26], splash: .8, shot: 'kernel', speed: 5 },
   // heals the plants around and grows the eaten ones back (regrow: seconds for one)
-  aloe: { cost: 45, up: [40, 60], hp: [40, 50, 60], range: [2.2, 2.6, 3], heal: [3, 5, 8], regrow: [10, 7, 4] },
-  mint: { cost: 50, up: [40, 60], hp: [30, 40, 50], range: [1.7, 1.9, 2.1], slow: [.4, .5, .6], air: true },
-  pepper: { cost: 85, up: [70, 100], hp: [30, 40, 50], range: [1.5, 1.6, 1.7], rate: [.4, .45, .5], dmg: [16, 24, 34], burn: [4, 6, 9] },
-  dandelion: { cost: 90, up: [70, 100], hp: [25, 30, 35], range: [4.5, 5, 5.5], rate: [.45, .5, .55], dmg: [22, 32, 46], airMul: 2, air: true, shot: 'fluff', speed: 11 },
+  aloe: { cost: 45, up: [40, 60], hp: [70, 90, 110], range: [2.2, 2.6, 3], heal: [3, 5, 8], regrow: [6, 4, 2.5] },
+  mint: { cost: 50, up: [40, 60], hp: [60, 80, 100], range: [1.5, 1.6, 1.7], slow: [.4, .5, .6], air: true },
+  pepper: { cost: 85, up: [70, 100], hp: [60, 80, 100], range: [1.5, 1.6, 1.7], rate: [.4, .45, .5], dmg: [16, 24, 34], burn: [4, 6, 9] },
+  dandelion: { cost: 90, up: [70, 100], hp: [50, 65, 80], range: [3, 3.5, 4], rate: [.45, .5, .55], dmg: [22, 32, 46], airMul: 2, air: true, shot: 'fluff', speed: 11 },
 };
 export const PLANT_ORDER = ['pumpkin', 'rose', 'corn', 'aloe', 'mint', 'pepper', 'dandelion'];
-// An eaten plant leaves its roots: growing it back costs this share of the dew spent on it, healing costs the
-// same share of the missing health.
+// An eaten plant leaves its roots: growing it back at once costs this share of the dew spent on it, healing costs
+// the same share of the missing health.
 export const REPAIR = 1 / 3;
+// Left alone, the roots grow back by themselves in REGROW seconds; an aloe nearby adds its own speed to that.
+export const REGROW = 15;
 // Plants get no stronger from wave to wave, so the bite of the plant eaters grows much slower than the bugs' health.
 export const CHEW_GROWTH = .04;
 // Frost and rain come back (up to POWER_MAX of each) after every POWER_EVERY-th wave.
@@ -30,37 +32,42 @@ export const POWER_EVERY = 10, POWER_MAX = 2;
 // w: the weight of a bug when a wave is put together. chew: bites the plants next to the trail in passing.
 // dig: goes straight for the fruit and eats through the plants in its way (damage per second).
 export const BUGS = {
-  ant: { hp: 12, speed: 1.0, bite: 1, reward: 3, w: 1 },
-  beetle: { hp: 44, armor: 2, speed: .7, bite: 2, reward: 8, w: 5 },
-  caterpillar: { hp: 34, speed: .65, bite: 2, reward: 7, chew: 12, w: 4 },
-  grasshopper: { hp: 18, speed: 1.7, bite: 1, reward: 4, w: 1.6 },
-  snail: { hp: 80, speed: .42, bite: 3, reward: 12, noSlow: true, w: 8 },
-  butterfly: { hp: 14, speed: 1.05, bite: 1, reward: 5, fly: true, w: 2 },
-  cricket: { hp: 55, armor: 1, speed: .6, bite: 3, reward: 12, dig: 14, w: 8 },
-  rhino: { hp: 400, armor: 3, speed: .4, bite: 5, reward: 60, boss: true, w: 60 },
+  ant: { hp: 12, speed: 1.0, bite: 1, reward: 6, w: 1 },
+  beetle: { hp: 44, armor: 2, speed: .7, bite: 2, reward: 16, w: 5 },
+  caterpillar: { hp: 34, speed: .65, bite: 2, reward: 14, chew: 8, w: 4 },
+  grasshopper: { hp: 18, speed: 1.7, bite: 1, reward: 8, w: 1.6 },
+  snail: { hp: 80, speed: .42, bite: 3, reward: 24, noSlow: true, w: 8 },
+  butterfly: { hp: 14, speed: 1.05, bite: 1, reward: 10, fly: true, w: 2 },
+  cricket: { hp: 45, armor: 1, speed: .6, bite: 2, reward: 24, dig: 5, w: 8 },
+  rhino: { hp: 400, armor: 3, speed: .4, bite: 5, reward: 120, boss: true, w: 60 },
 };
 
-// Levels are long: the dew of one wave buys a few plants, so the garden fills the field over the whole level and the
-// last waves need it full. The waves are put together by makeWaves from a short recipe:
+// Levels are long, and the balance stands on three things:
+// - plants reach only the cells next to them, so damage grows only with the length of trail that runs past plants;
+// - a straight trail has room for some 26 shooters, and the dew of a level buys about twice that, so the last third
+//   of a level needs a maze that puts the whole field to work (hpLate makes the late waves grow faster);
+// - a hole in a wall lets the whole wave through, so holes are to be closed: by dew at once, by an aloe, or by time.
+// The waves are put together by makeWaves from a short recipe:
 // count, budget [first wave, added per wave] in bug weights, roster [bug, first wave it comes in], boss waves.
+// Bug health in wave w is multiplied by 1 + hpGrowth * (w - 1) + hpLate * (w - 1)^2.
 export const LEVELS = [
   {
     name: 'Лужайка',
-    entry: 3, fruit: [1, 4], dew: 150, hpGrowth: .2, waveBonus: 20,
+    entry: 3, fruit: [1, 4], dew: 150, hpGrowth: .2, hpLate: .021, waveBonus: 20,
     plants: ['pumpkin', 'rose', 'corn', 'aloe'],
     obstacles: [[5, 0, 'rock'], [2, 1, 'rock'], [8, 2, 'rock'], [4, 6, 'rock'], [10, 5, 'rock'], [11, 1, 'stump'], [2, 7, 'log'], [3, 7, 'log']],
     count: 20, budget: [8, 5.2], roster: [['ant', 1], ['beetle', 3], ['grasshopper', 6], ['caterpillar', 9], ['cricket', 13]], boss: [],
   },
   {
     name: 'Опушка',
-    entry: 2, fruit: [1, 5], dew: 160, hpGrowth: .15, waveBonus: 25,
+    entry: 2, fruit: [1, 5], dew: 160, hpGrowth: .2, hpLate: .018, waveBonus: 25,
     plants: ['pumpkin', 'rose', 'corn', 'aloe', 'mint'],
     obstacles: [[6, 1, 'rock'], [6, 2, 'rock'], [9, 5, 'rock'], [9, 6, 'rock'], [3, 3, 'rock'], [11, 6, 'rock'], [4, 0, 'stump'], [8, 7, 'stump'], [10, 3, 'log'], [11, 3, 'log']],
     count: 25, budget: [10, 5], roster: [['ant', 1], ['grasshopper', 2], ['caterpillar', 4], ['beetle', 6], ['cricket', 9], ['snail', 13]], boss: [25],
   },
   {
     name: 'Старый сад',
-    entry: 5, fruit: [1, 2], dew: 200, hpGrowth: .13, waveBonus: 30,
+    entry: 5, fruit: [1, 2], dew: 200, hpGrowth: .25, hpLate: .026, waveBonus: 30,
     plants: ['pumpkin', 'rose', 'corn', 'aloe', 'mint', 'pepper', 'dandelion'],
     obstacles: [[6, 0, 'rock'], [6, 2, 'rock'], [6, 3, 'rock'], [10, 6, 'stump'], [3, 6, 'stump'], [4, 1, 'log'], [5, 1, 'log'], [11, 3, 'log'], [12, 3, 'log'], [9, 0, 'rock']],
     count: 30, budget: [12, 6], roster: [['ant', 1], ['snail', 2], ['butterfly', 3], ['beetle', 5], ['caterpillar', 6], ['cricket', 8], ['grasshopper', 11]], boss: [10, 20, 30],

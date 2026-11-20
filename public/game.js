@@ -1,7 +1,7 @@
 // Simulation: no DOM, plain data. The view reads the state and the events, and calls the actions below.
-import { COLS, ROWS, FRUIT_HP, PLANTS, BUGS, LEVELS, BREAK, EARLY_DEW, REPAIR, CHEW_GROWTH, POWER_EVERY, POWER_MAX } from './data.js';
+import { COLS, ROWS, FRUIT_HP, PLANTS, BUGS, LEVELS, BREAK, EARLY_DEW, REPAIR, REGROW, CHEW_GROWTH, POWER_EVERY, POWER_MAX } from './data.js';
 
-export const VERSION = '0.11.0';
+export const VERSION = '0.12.0';
 export { COLS, ROWS, BREAK };
 
 const DIRS = [[-1, 0], [0, -1], [0, 1], [1, 0]]; // tie order: towards the fruit side first
@@ -79,6 +79,11 @@ function refresh(g) { g.dist = computeDist(g); g.dig = computeDig(g); }
 // Next cell from (i, j) towards the fruit; keeps going straight when that is as short.
 export function nextCell(g, i, j, dir, dist = g.dist) {
   const here = dist[key(i, j)];
+  if (here >= INF) { // a plant grew on this cell under the bug: it steps out to the neighbour nearest to the fruit
+    let best = null, bd = INF;
+    for (const [di, dj] of DIRS) { const ni = i + di, nj = j + dj; if (inside(ni, nj) && dist[key(ni, nj)] < bd) { bd = dist[key(ni, nj)]; best = [ni, nj]; } }
+    return best;
+  }
   if (dir) { const ni = i + dir[0], nj = j + dir[1]; if (inside(ni, nj) && dist[key(ni, nj)] === here - 1) return [ni, nj]; }
   for (const [di, dj] of DIRS) { const ni = i + di, nj = j + dj; if (inside(ni, nj) && dist[key(ni, nj)] === here - 1) return [ni, nj]; }
   return null;
@@ -98,21 +103,18 @@ export function trail(g, dist = g.dist) {
 
 const cellOf = (b) => [Math.floor(b.x), Math.floor(b.y)];
 
-// Why a plant cannot go to (i, j): null when it can.
+// Why a plant cannot go to (i, j): null when it can. A plant may grow on a cell with bugs on it (a hole in a wall
+// is mended while they run through it): they step out of it, so they only need a way on from a cell next to it.
 export function placeProblem(g, i, j) {
   if (!inside(i, j)) return 'outside';
   if (g.grid[j][i]) return 'busy';
   if ((i === g.entry[0] && j === g.entry[1]) || (i === g.fruit[0] && j === g.fruit[1])) return 'busy';
-  for (const b of g.bugs) {
-    if (b.fly) continue;
-    const [bi, bj] = cellOf(b);
-    if ((bi === i && bj === j) || (b.ti === i && b.tj === j)) return 'bug';
-  }
   const d = computeDist(g, key(i, j));
   if (d[key(...g.entry)] >= INF) return 'blocks';
+  const open = (ci, cj) => inside(ci, cj) && d[key(ci, cj)] < INF;
   for (const b of g.bugs) {
-    if (b.fly || b.ti == null || BUGS[b.kind].dig) continue;
-    if (inside(b.ti, b.tj) && d[key(b.ti, b.tj)] >= INF) return 'blocks';
+    if (b.fly || b.ti == null || BUGS[b.kind].dig || !inside(b.ti, b.tj)) continue;
+    if (b.ti === i && b.tj === j ? !DIRS.some(([di, dj]) => open(i + di, j + dj)) : !open(b.ti, b.tj)) return 'blocks';
   }
   return null;
 }
@@ -191,7 +193,7 @@ export function wavePreview(g, n = g.wave) {
 }
 
 // How much stronger the bugs of a wave are than in the first one, and how much harder they bite the plants.
-export const hpMul = (g, wave = g.wave) => 1 + g.L.hpGrowth * (wave - 1);
+export const hpMul = (g, wave = g.wave) => 1 + g.L.hpGrowth * (wave - 1) + (g.L.hpLate || 0) * (wave - 1) ** 2;
 const chewMul = (g) => 1 + CHEW_GROWTH * (g.wave - 1);
 function spawn(g, kind) {
   const B = BUGS[kind], hp = Math.round(B.hp * hpMul(g));
@@ -288,8 +290,7 @@ function updatePlant(g, p, dt) {
     for (const q of g.plants) if (q.hp < q.maxHp && near(q)) q.hp = Math.min(q.maxHp, q.hp + stat(p, 'heal') * dt);
     for (const s of g.stubs.slice()) {
       if (!near(s)) continue;
-      s.grow = Math.min(1, s.grow + dt / stat(p, 'regrow')); // the cell may be busy with a bug: then it waits
-      if (s.grow >= 1) regrow(g, s, true);
+      s.grow = Math.min(1, s.grow + dt / stat(p, 'regrow'));
     }
     return;
   }
@@ -331,6 +332,8 @@ export function step(g, dt) {
     while (g.queue.length && g.queue[0].at <= g.waveTime) spawn(g, g.queue.shift().kind);
   }
   for (const b of g.bugs) b.slow = 1;
+  // roots grow back by themselves (aloes add to it in updatePlant); where that would close the way, they wait
+  for (const s of g.stubs.slice()) { s.grow = Math.min(1, s.grow + dt / REGROW); if (s.grow >= 1) regrow(g, s, true); }
   for (const p of g.plants.slice()) updatePlant(g, p, dt);
   for (const b of g.bugs) { if (b.hit > 0) b.hit -= dt; if (b.hp > 0) updateBug(g, b, dt); }
   for (const s of g.shots) updateShot(g, s, dt);

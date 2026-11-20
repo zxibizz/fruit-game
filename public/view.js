@@ -12,9 +12,9 @@ const T = {
   eaten: { pumpkin: 'съедена', rose: 'съеден', aloe: 'съедено', corn: 'съедена', mint: 'съедена', pepper: 'съеден', dandelion: 'съеден' },
   about: {
     pumpkin: 'Живая стена. Не стреляет, зато крепкая — из тыкв удобно строить лабиринт, чтобы жуки шли дольше. Чем выше уровень, тем дольше её грызть.',
-    rose: 'Стреляет шипами по одному жуку. Достаёт и летающих.',
-    aloe: 'Не воюет: лечит покусанные растения вокруг и сама отращивает съеденные. Ставь там, где грызут.',
-    corn: 'Кидает зёрна навесом — попадает по нескольким жукам рядом. Летающих не достаёт.',
+    rose: 'Колет шипами одного жука из тех, кто ползёт по соседним клеткам. Достаёт и летающих.',
+    aloe: 'Не воюет: лечит покусанные растения вокруг, а съеденные рядом с ним отрастают гораздо быстрее. Ставь там, где грызут.',
+    corn: 'Кидает зёрна навесом чуть дальше шиповника — попадает по нескольким жукам сразу. Летающих не достаёт.',
     mint: 'Холодит: жуки рядом ползут медленнее. Сама не бьёт — ставь рядом со стрелками.',
     pepper: 'Обжигает всех жуков вокруг себя и поджигает их. Бьёт только вблизи.',
     dandelion: 'Бьёт очень далеко и сильно, по летающим — вдвое.',
@@ -31,10 +31,10 @@ const T = {
     rhino: 'Босс: огромный и в броне.',
   },
   fresh: (list) => `Новое: ${list.join(', ')}. Зажми, чтобы узнать подробнее`, freshBug: (list) => `Новый жук: ${list.join(', ')}. Зажми его, чтобы узнать подробнее`,
-  roots: (name) => `${name}: корни`, powersBack: 'Мороз и дождь снова с тобой', regrown: 'Отросло!', lvl: (n) => `уровень ${n}`,
-  problem: { busy: 'Здесь занято', bug: 'Здесь жук', blocks: 'Нельзя закрыть жукам путь', poor: 'Не хватает росы' },
+  roots: (name) => `${name}: корни`, rootsHint: 'Корни отрастут сами. Тапни по ним — отрастут сразу, за росу', powersBack: 'Мороз и дождь снова с тобой', regrown: 'Отросло!', lvl: (n) => `уровень ${n}`,
+  problem: { busy: 'Здесь занято', blocks: 'Нельзя закрыть жукам путь', poor: 'Не хватает росы' },
   gain: (n) => (n > 0 ? `путь +${n}` : n < 0 ? `путь ${n}` : 'путь тот же'),
-  hint1: 'Тапни по траве и выбери растение — жуки пойдут в обход. Готов — жми ▶ у муравейника',
+  hint1: 'Растения бьют только тех, кто ползёт мимо них. Сажай так, чтобы тропинка петляла вдоль грядок. Готов — жми ▶ у муравейника',
   holdHint: 'Зажми растение или жука — узнаешь, кто это',
   pick: 'Что посадить?', pickHint: 'Тапни растение — расскажу о нём',
   hint2: 'Дальше волны придут сами. Тапнешь ▶ раньше — получишь росу',
@@ -337,7 +337,7 @@ function handleEvents() {
       case 'regrow': bump(e.p, .35, true); dust(e.p); terrainDirty = true; if (e.free) { const [x, y] = cellCenter(e.p.i, e.p.j); fx.push({ k: 'gain', x, y: y - 26, t: 0, life: 1, txt: T.regrown }); } break;
       case 'heal':
       case 'upgrade': { const [x, y] = cellCenter(e.p.i, e.p.j); for (let n = 0; n < 6; n++) fx.push({ k: 'spark', x: x + (Math.random() - .5) * 30, y: y - 10 - Math.random() * 30, t: n * .05, life: .5 }); bump(e.p, .3, true); break; }
-      case 'sell': case 'plantDead': dust(e.p); terrainDirty = true; if (pop === e.p) pop = null; if (e.t === 'plantDead') banner(`${T.plant[e.p.type]} ${T.eaten[e.p.type]}!`, 1.4); break;
+      case 'sell': case 'plantDead': dust(e.p); terrainDirty = true; if (pop === e.p) pop = null; if (e.t === 'plantDead') { banner(`${T.plant[e.p.type]} ${T.eaten[e.p.type]}!`, 1.4); if (!localStorage.getItem('fruit.rootsHint')) { banner(T.rootsHint, 8, true); localStorage.setItem('fruit.rootsHint', '1'); } } break;
       case 'chew': { const [x, y] = cellCenter(e.p.i, e.p.j); for (let n = 0; n < 6; n++) fx.push({ k: 'crumb', x, y: y - 6, vx: (Math.random() - .5) * 50, vy: -20 - Math.random() * 30, t: 0, life: .5, col: e.p.type === 'pumpkin' ? '#f7a23a' : '#6cc04a' }); bump(e.p, .2); break; }
       case 'wave': banner(T.wave(e.n, game.waves), 1.4); { const nb = newBugs(e.n); if (nb.length && !(levelIdx === 0 && e.n === 1)) banner(T.freshBug(nb.map((k) => T.bug[k].toLowerCase())), 7, true); } if (AP.mood === 'happy') appleMood('idle', 0); break;
       case 'waveDone': appleMood('happy', 2.6); appleCheer(); banner(T.waveDone(e.bonus), 1.8); if (e.powers) banner(T.powersBack, 4, true); if (levelIdx === 0 && e.n === 1) banner(T.hint2, 6, true); break;

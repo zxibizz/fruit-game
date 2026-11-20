@@ -1,8 +1,9 @@
-// A simple bot that fills the field with a serpentine maze, upgrades it and repairs what the bugs eat. Used by the
-// tests as a balance check: every level must be winnable with the whole field planted, and must be lost with a
-// garden that stops growing halfway. Run directly to see how it did: node test/bot.mjs [level ...]
-import { createGame, computeDist, step, place, upgrade, upgradeCost, startWave, placeProblem, trail, regrow, regrowCost, heal, healCost, COLS, ROWS } from '../public/game.js';
-import { LEVELS, BUGS } from '../public/data.js';
+// A bot that plays the level the way it is meant to be played: a serpentine maze over the whole field, shooters in
+// its walls, holes closed at once. Used by the tests as a balance check: it must win every level, and must lose
+// when its garden stops at half of the field or when it plants along the straight trail without a maze
+// (maze: false). Run directly to see how it did: node test/bot.mjs [level ...] [max=N]
+import { createGame, computeDist, step, place, upgrade, upgradeCost, startWave, placeProblem, trail, regrow, regrowCost, heal, healCost, removePlant, refund, stubAt, COLS, ROWS } from '../public/game.js';
+import { LEVELS, BUGS, PLANTS } from '../public/data.js';
 const inside = (i, j) => i >= 0 && j >= 0 && i < COLS && j < ROWS;
 const show = process.env.MAP ? (await import(process.env.MAP)).show : null;
 
@@ -29,29 +30,6 @@ function layout(level) {
   return best;
 }
 
-function plan(level) {
-  const L = LEVELS[level], has = (p) => L.plants.includes(p), items = [], walls = layout(level);
-  // first two shooters by the entrance
-  items.push(['rose', walls[0][0], L.entry === 0 ? 1 : L.entry - 1], ['rose', walls[0][0], L.entry === ROWS - 1 ? ROWS - 2 : L.entry + 1]);
-  // butterflies fly straight to the fruit: shooters that reach them stand around it
-  const guard = () => { for (const [di, dj] of [[1, -1], [1, 1], [-1, 0], [2, 0]]) if (inside(L.fruit[0] + di, L.fruit[1] + dj)) items.push(['rose', L.fruit[0] + di, L.fruit[1] + dj]); };
-  walls.forEach(([col, gap], k) => {
-    if (k === 1 && L.waves.some((w) => w.some(([kind]) => BUGS[kind].fly))) guard();
-    const cells = [];
-    for (let j = 0; j < ROWS; j++) if (j !== gap) cells.push(j);
-    const near = cells.slice().sort((a, b) => Math.abs(a - gap) - Math.abs(b - gap));
-    const shooters = new Set([near[0], near[2], near[4]]);
-    let s = 0;
-    for (const j of near) {
-      if (!shooters.has(j)) continue;
-      const kind = has('mint') && s === 0 && k > 0 ? 'mint' : has('pepper') && s === 2 ? 'pepper' : s % 2 ? 'corn' : 'rose';
-      items.push([kind, col, j]); s++;
-    }
-    for (const j of cells) if (!shooters.has(j)) items.push([j === near[3] ? 'aloe' : 'pumpkin', col, j]);
-  });
-  return items;
-}
-
 // Free cells off the trail and close enough to it for a shooter.
 function spare(g) {
   const tr = trail(g), on = new Set(tr.map(([i, j]) => i + ',' + j)), out = [];
@@ -62,36 +40,90 @@ function spare(g) {
   return out;
 }
 
-export function playLevel(level, { seed = 7, verbose = false, maxPlants = Infinity, onEvents = null } = {}) {
-  const g = createGame(level, seed), L = LEVELS[level], items = plan(level), dead = new Set();
+// What a garden is worth: for every shooter, its damage per second times the trail cells it reaches.
+const power = (type, lvl) => {
+  const P = PLANTS[type], v = (a) => a[lvl - 1];
+  if (P.slow) return 14 * v(P.slow);
+  if (!P.dmg) return 0;
+  return v(P.dmg) * v(P.rate) * (P.splash ? 1.6 : 1) + (P.burn ? v(P.burn) * 2 + v(P.dmg) * v(P.rate) : 0);
+};
+function worth(g, tr, flyers) {
+  let sum = 0;
+  for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) {
+    const p = g.grid[j][i]; if (!p || !p.type) continue;
+    const pw = power(p.type, p.lvl); if (!pw) continue;
+    const r = PLANTS[p.type].range[p.lvl - 1]; let n = 0;
+    for (const [a, b] of tr) if (Math.hypot(a - i, b - j) <= r) n++;
+    if (flyers && PLANTS[p.type].air && Math.hypot(g.fruit[0] - i, g.fruit[1] - j) <= r) n += 3;
+    sum += pw * n;
+  }
+  return sum;
+}
+
+// The bot plants where the search above put the walls, then everywhere else by the trail. Each time it takes the
+// step that adds the most worth per dew: a shooter, a pumpkin that closes a wall and makes the trail longer, an
+// upgrade, a shooter in place of a pumpkin. It waits for the dew when the best step is not affordable yet.
+export function playLevel(level, { seed = 7, verbose = false, maxPlants = Infinity, onEvents = null, maze = true } = {}) {
+  const g = createGame(level, seed), L = LEVELS[level], walls = maze ? layout(level) : [];
+  const flyers = L.waves.some((w) => w.some(([kind]) => BUGS[kind].fly));
+  const kinds = L.plants.filter((k) => k !== 'aloe'), shooters = kinds.filter((k) => k !== 'pumpkin');
+  const planned = []; for (const [col, gap] of walls) for (let j = 0; j < ROWS; j++) if (j !== gap) planned.push([col, j]);
   const room = () => g.plants.length + g.stubs.length < maxPlants;
+  const firstDigger = L.waves.findIndex((w) => w.some(([kind]) => BUGS[kind].dig)) + 1;
+  // where the trail will run when the walls stand: nothing but the walls is planted on it
+  const keep = new Set();
+  if (walls.length) { const f = createGame(level); for (const [i, j] of planned) if (!f.grid[j][i]) f.grid[j][i] = { type: 'pumpkin' }; for (const [i, j] of trail(f, computeDist(f))) keep.add(i + ',' + j); }
+  const best = () => {
+    const tr = trail(g), now = worth(g, tr, flyers), on = new Set(tr.map(([i, j]) => i + ',' + j));
+    let top = null;
+    const offer = (gain, cost, run) => { if (gain > 1e-6 && (!top || gain / cost > top.gain / top.cost)) top = { gain, cost, run }; };
+    const tryCell = (i, j, types) => {
+      if (g.grid[j][i] || stubAt(g, i, j) || placeProblem(g, i, j)) return;
+      for (const type of types) {
+        g.grid[j][i] = { type, lvl: 1, i, j };
+        const tr2 = on.has(i + ',' + j) ? trail(g, computeDist(g)) : tr, gain = worth(g, tr2, flyers) - now + (tr2.length - tr.length) * .5;
+        g.grid[j][i] = null;
+        offer(gain, PLANTS[type].cost, () => place(g, type, i, j));
+      }
+    };
+    if (room()) {
+      for (const [i, j] of planned) tryCell(i, j, kinds);
+      for (const [i, j] of spare(g)) if (!keep.has(i + ',' + j)) tryCell(i, j, shooters);
+    }
+    for (const p of g.plants) {
+      const c = upgradeCost(p);
+      if (c != null) { p.lvl++; const gain = worth(g, tr, flyers) - now; p.lvl--; offer(gain || (p.type === 'pumpkin' ? .2 : 0), c, () => upgrade(g, p)); }
+      if (p.type === 'pumpkin' && g.phase === 'build') for (const type of shooters) {
+        p.type = type; const gain = worth(g, tr, flyers) - now; p.type = 'pumpkin';
+        offer(gain, PLANTS[type].cost - refund(p), () => { removePlant(g, p); place(g, type, p.i, p.j); });
+      }
+    }
+    return top;
+  };
+  let seen = '', need = 0;
   const tryBuild = () => {
-    // repairs first: grow the eaten plants back, heal the badly bitten ones
-    for (const s of g.stubs.slice()) if (g.dew >= regrowCost(s)) regrow(g, s);
-    for (const p of g.plants) if (p.hp < p.maxHp * .5 && g.dew >= healCost(p)) heal(g, p);
-    for (const [type, i, j] of items) {
-      const k = `${i},${j}`; if (dead.has(k)) continue;
-      const cell = g.grid[j][i];
-      if (cell) { if (!cell.type) dead.add(k); continue; }
-      if (g.stubs.some((s) => s.i === i && s.j === j)) continue;
-      const pr = placeProblem(g, i, j);
-      if (pr === 'blocks' || pr === 'busy') { if (g.phase === 'build') dead.add(k); continue; }
-      if (pr) continue;
-      if (!room() || !place(g, type, i, j)) return; // not enough dew: keep the order
+    // repairs first: a hole the bugs run through is closed at once for dew; other roots grow back by themselves
+    const tr = new Set(trail(g).map(([i, j]) => i + ',' + j)), on = (s) => tr.has(s.i + ',' + s.j);
+    for (const s of g.stubs.slice()) if (g.phase === 'wave' && on(s) && g.dew >= regrowCost(s)) regrow(g, s);
+    // the maze grows with the level: a new wall is closed every third wave, with pumpkins where nothing stands yet
+    const due = Math.min(walls.length, Math.floor(g.wave / 3));
+    for (const [col, gap] of walls.slice(0, due)) for (let j = 0; j < ROWS; j++) {
+      if (j === gap || g.grid[j][col] || stubAt(g, col, j) || !room() || placeProblem(g, col, j)) continue;
+      if (!place(g, 'pumpkin', col, j)) return;
     }
-    // the maze stands: plant every free cell from which a shooter reaches the trail
-    for (const [i, j] of spare(g)) {
-      if (!room()) break;
-      if (placeProblem(g, i, j) === 'blocks') continue;
-      const kind = L.plants.includes('dandelion') && (i + j) % 3 === 0 ? 'dandelion' : (i + j) % 2 ? 'corn' : 'rose';
-      if (!place(g, kind, i, j)) return; // no dew yet (or a bug on the cell): upgrades wait until the field is full
+    // from the first diggers on, some dew is always kept to close a hole at once
+    const keepDew = walls.length && g.wave >= firstDigger - 1 ? 60 : 0;
+    // the best step is looked for again only when the field changed or the dew for the last one found is there
+    for (let n = 0; n < 40; n++) {
+      const sig = `${g.wave},${g.phase},${g.stubs.length},${g.plants.reduce((t, p) => t + p.id * 7 + p.lvl, 0)}`;
+      if (sig === seen && g.dew < need) return;
+      const a = best(); seen = sig; need = a ? a.cost + keepDew : Infinity;
+      if (!a || g.dew < need) return;
+      a.run();
     }
-    // the field is full: upgrades, the cheapest first
-    const ups = g.plants.filter((p) => upgradeCost(p) != null).sort((a, b) => upgradeCost(a) - upgradeCost(b));
-    for (const p of ups) if (g.dew >= upgradeCost(p) + 30) upgrade(g, p);
   };
   let t = 0, income = 0, eaten = 0; const log = [];
-  while (g.phase !== 'won' && g.phase !== 'lost' && t < 4 * 3600) {
+  while (g.phase !== 'won' && g.phase !== 'lost' && t < 3600) {
     // the bot only calls the first wave; the others come by themselves (no early-start dew)
     if (g.phase === 'build' && g.wave === 0) { tryBuild(); startWave(g); }
     for (let n = 0; n < 15; n++) step(g, 1 / 30);
