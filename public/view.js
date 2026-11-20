@@ -282,8 +282,11 @@ function frame(ts) {
     handleEvents();
   }
   if (innerWidth !== seen[0] || innerHeight !== seen[1] || devicePixelRatio !== seen[2] || (visualViewport?.scale || 1) !== seen[3]) resize();
+  // ?freeze stops drawing after 3 s: a still frame tells whether the blur comes from redrawing every frame
+  if ('freeze' in Q && ts > 3000 && DIAG.frozen) { requestAnimationFrame(frame); return; }
   if (game) draw(paused ? 0 : dt);
   drawDiag(ts);
+  if ('freeze' in Q && ts > 3000 && game && !paused) { DIAG.frozen = true; c.setTransform(1, 0, 0, 1, 0, 0); c.fillStyle = '#c0392b'; c.font = `700 ${Math.round(13 * dpr)}px system-ui`; c.fillText('кадр заморожен', Math.round(12 * dpr), Math.round(((PORT ? PTOP + 30 : 50) * uk + 74) * dpr)); }
   requestAnimationFrame(frame);
 }
 

@@ -28,6 +28,7 @@ button{font:800 16px system-ui;padding:10px 14px;border-radius:12px;border:0;bac
   <div class="row"><b>6</b><canvas class="t" id="c6"></canvas></div>
   <div class="row"><b>7</b><canvas class="t" id="c7"></canvas></div>
   <div class="row"><b>8</b><canvas class="t" id="c8"></canvas></div>
+  <button id="full">Весь экран в движении</button>
   <button id="mem">Нагрузить память, как игра</button>
   <div id="info"></div>
 </main>
@@ -80,6 +81,18 @@ function anim(t) {
     x.setTransform(dpr, 0, 0, dpr, 0, 0); x.fillStyle = '#c0392b'; x.fillRect(290 - (t / 20 % 60), 4, 4, 4);
   });
   requestAnimationFrame(anim);
+}
+// 9 — the whole-screen canvas redrawn every frame, like the game
+let full = false;
+document.getElementById('full').onclick = () => { full = !full; document.getElementById('full').textContent = full ? 'Остановить фон' : 'Весь экран в движении'; if (full) requestAnimationFrame(spin); else draw(); };
+function spin(t) {
+  if (!full) return;
+  const bg = document.getElementById('bg'), b = bg.getContext('2d');
+  b.setTransform(dpr, 0, 0, dpr, 0, 0); b.fillStyle = '#4f8a32'; b.fillRect(0, 0, innerWidth, innerHeight);
+  b.fillStyle = '#fff'; b.font = '900 30px system-ui'; b.fillText('ФОН В ДВИЖЕНИИ', 14, innerHeight - 40);
+  for (let i = 0; i < 40; i++) { b.fillStyle = i % 2 ? '#000' : '#fff'; b.fillRect(14 + i / dpr, innerHeight - 24, 1 / dpr, 14); }
+  b.fillStyle = '#c0392b'; b.fillRect(200 + (t / 10 % 120), innerHeight - 24, 8, 8);
+  requestAnimationFrame(spin);
 }
 addEventListener('resize', draw); draw(); requestAnimationFrame(anim);
 </script>
