@@ -146,7 +146,7 @@ function buildTerrain() {
   const [fx0, fy0] = cellCenter(...game.fruit); A.hdStump(x, fx0, fy0 + 12, 23);
   const [ex, ey] = cellCenter(...game.entry); if (PORT) A.hdAnthill(x, ex, ey - 14, 1); else A.hdAnthill(x, ex + 16, ey + 4, 1);
   x.setTransform(k, 0, 0, k, 0, 0);
-  A.hdDapple(x); A.hdSun2(x); A.hdGrade(x);
+  A.hdDapple(x); A.hdSun2(x); A.hdGrade(x); A.hdVignette(x);
   // a little more colour; done here, not as a CSS filter on the canvas: Safari renders filtered canvases blurry
   free(terrain);
   if ('filter' in x) { const [pop, y] = layer(VB[2], VB[3], k); y.filter = 'saturate(1.12) contrast(1.04)'; y.drawImage(cnv, 0, 0, VB[2], VB[3]); free(cnv); terrain = pop; } else terrain = cnv;
@@ -297,7 +297,6 @@ function draw(dt) {
   drawFx(dt, fx);
   if (pop) drawPop();
   setUI();
-  vignette();
   drawFx(dt, ufx);
   drawHud(t);
   if (sel && !ghost) drawInfo(sel);

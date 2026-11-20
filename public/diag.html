@@ -24,13 +24,19 @@ button{font:800 16px system-ui;padding:10px 14px;border-radius:12px;border:0;bac
   <div class="row"><b>2</b><canvas class="t" id="c2"></canvas></div>
   <div class="row"><b>3</b><canvas class="t" id="c3"></canvas></div>
   <div class="row"><b>4</b><canvas class="t" id="c4"></canvas></div>
+  <div class="row"><b>5</b><canvas class="t" id="c5"></canvas></div>
+  <div class="row"><b>6</b><canvas class="t" id="c6"></canvas></div>
+  <div class="row"><b>7</b><canvas class="t" id="c7"></canvas></div>
+  <div class="row"><b>8</b><canvas class="t" id="c8"></canvas></div>
   <button id="mem">Нагрузить память, как игра</button>
   <div id="info"></div>
 </main>
 <script>
 // H — HTML text for reference. 1 — text drawn straight into a small canvas. 2 — drawn into another canvas, then copied 1:1.
 // 3 — drawn through a scale transform, like the game HUD. 4 — copied at a fractional pixel offset.
-// The background canvas covers the whole screen, like the game's.
+// The background canvas covers the whole screen, like the game's. 5..8 redraw every frame like the game:
+// 5 — plain; 6 — plus a radial gradient over everything; 7 — plus a big layer drawn scaled and far past the edges;
+// 8 — through a fractional transform (3.3) with a small font, like the game HUD.
 const dpr = devicePixelRatio || 1, hold = [];
 function text(x, s = 1) {
   x.fillStyle = '#5a3a1c'; x.font = `900 ${22 * s}px system-ui`; x.textBaseline = 'middle'; x.fillText('Мыло? Жук', 8 * s, 28 * s);
@@ -62,7 +68,21 @@ document.getElementById('mem').onclick = () => {
   for (let i = 0; i < 60; i++) { const c = off(280, 330); c.getContext('2d').fillRect(0, 0, 10, 10); hold.push(c); }
   draw();
 };
-addEventListener('resize', draw); draw();
+const big = off(1200, 2600); { const b = big.getContext('2d'); b.fillStyle = '#9edc72'; b.fillRect(0, 0, 1200, 2600); }
+const cs = [c5, c6, c7, c8].map((cv) => [cv, size(cv)]);
+function anim(t) {
+  cs.forEach(([cv, x], k) => {
+    x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, cv.width, cv.height);
+    if (k === 2) { x.setTransform(dpr * .905, 0, 0, dpr * .905, -dpr * 40.3, -dpr * 211.7); x.drawImage(big, -10, -20, 1200 / 2.7, 2600 / 2.7); }
+    x.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (k === 3) { x.setTransform(dpr * 1.1, 0, 0, dpr * 1.1, 0, 0); x.scale(1 / 1.1, 1 / 1.1); }
+    text(x);
+    if (k === 1) { const g = x.createRadialGradient(150, 28, 10, 150, 28, 200); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(20,40,10,.3)'); x.fillStyle = g; x.setTransform(dpr, 0, 0, dpr, 0, 0); x.fillRect(0, 0, 300, 56); }
+    x.setTransform(dpr, 0, 0, dpr, 0, 0); x.fillStyle = '#c0392b'; x.fillRect(290 - (t / 20 % 60), 4, 4, 4);
+  });
+  requestAnimationFrame(anim);
+}
+addEventListener('resize', draw); draw(); requestAnimationFrame(anim);
 </script>
 </body>
 </html>
