@@ -41,7 +41,9 @@ const T = {
 };
 
 const CELL = 42, TRAY = 80;
-const cv = document.getElementById('cv'), c = cv.getContext('2d');
+// ?late takes the 2D context only after the canvas got its size, ?fresh makes a new canvas element on every resize
+const QS = new URLSearchParams(location.search);
+let cv = document.getElementById('cv'), c = QS.has('late') || QS.has('fresh') ? null : cv.getContext('2d');
 // Two coordinate spaces: the world (the field, CELL = 42 per cell, origin at the field's top-left corner) and the UI
 // (HUD, shelf, panels). Each has its own scale, so the UI stays big while the field fits or scrolls.
 let dpr = 1, uk = 1, ws = 1, UW = 844, UH = 390, ox = 0, oy = 0, cam = 0, camMax = 0, PORT = null, DEW = [28, 24];
@@ -78,7 +80,8 @@ function resize() {
   uk = PORT ? clamp(Math.min(vw / 340, vh / 560), 1, 1.8) : clamp(Math.min(vw / 740, vh / 340), 1, 1.8);
   UW = vw / uk; const sz = cardSize(); PBOT = sz[1] + 16;
   UW = vw / uk; UH = vh / uk;
-  cv.width = Math.round(vw * dpr); cv.height = Math.round(vh * dpr); cv.style.width = vw + 'px'; cv.style.height = vh + 'px';
+  if (QS.has('fresh')) { const n = document.createElement('canvas'); n.id = 'cv'; n.width = Math.round(vw * dpr); n.height = Math.round(vh * dpr); n.style.width = vw + 'px'; n.style.height = vh + 'px'; c = n.getContext('2d'); cv.replaceWith(n); cv = n; bindCanvas(); }
+  else { cv.width = Math.round(vw * dpr); cv.height = Math.round(vh * dpr); cv.style.width = vw + 'px'; cv.style.height = vh + 'px'; if (!c) c = cv.getContext('2d'); }
   const fl = PORT ? 4 : TRAY * uk, ft = (PORT ? PTOP : LTOP) * uk, aw = vw - fl - (PORT ? 4 : 6), ah = vh - ft - (PORT ? PBOT * uk : 4);
   FBOX = [fl, ft, aw, ah];
   const fw = FW(), fh = FH(), cross = PORT ? aw / fw : ah / fh, long = PORT ? ah / fh : aw / fw;
@@ -571,6 +574,7 @@ function tap(px, py) {
   const [i, j] = cellAt(wx, wy);
   if (wx >= 0 && wy >= 0 && i >= 0 && j >= 0 && i < COLS && j < ROWS) tapCell(i, j); else { ghost = null; pop = null; }
 }
+function bindCanvas() {
 cv.addEventListener('pointerdown', (e) => {
   if (!game || paused) return;
   press = { id: e.pointerId, x: e.clientX, y: e.clientY, cam0: cam, moved: false, onUI: !!hit(ui.filter((q) => q.s === 'u'), e.clientX / uk, e.clientY / uk) };
@@ -584,6 +588,8 @@ cv.addEventListener('pointermove', (e) => {
 cv.addEventListener('pointerup', (e) => { if (!press || e.pointerId !== press.id) return; const p = press; press = null; if (!p.moved && game && !paused) tap(p.x, p.y); });
 cv.addEventListener('pointercancel', () => { press = null; });
 cv.addEventListener('wheel', (e) => { if (!camMax) return; cam = clamp(cam + (e.deltaY || e.deltaX), 0, camMax); applyCam(); }, { passive: true });
+}
+bindCanvas();
 addEventListener('resize', resize);
 visualViewport?.addEventListener('resize', resize);
 document.addEventListener('visibilitychange', () => { if (document.hidden && game && !paused && game.phase !== 'won' && game.phase !== 'lost') openPause(); });
@@ -635,6 +641,7 @@ function drawLogo() {
 }
 
 async function boot() {
+  if (QS.has('nocss')) { document.documentElement.style.cssText = 'overflow:visible;height:auto'; document.body.style.cssText = 'overflow:visible;height:auto;touch-action:auto;-webkit-user-select:auto;user-select:auto;-webkit-touch-callout:default'; }
   try { await document.fonts.load('900 16px Nunito'); } catch { /* font is optional */ }
   resize(); drawLogo(); showHome(true);
   $('diag').textContent = `${VERSION} · ${innerWidth}×${innerHeight} @${devicePixelRatio} → ${dpr.toFixed(2)} · экран ${screen.width}×${screen.height}`;
