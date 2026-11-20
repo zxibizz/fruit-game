@@ -68,13 +68,18 @@ const cellCenter = (i, j) => sp(i + .5, j + .5);
 const FW = () => (PORT ? ROWS : COLS) * CELL, FH = () => (PORT ? COLS : ROWS) * CELL;
 function cellAt(x, y) { const a = Math.floor(x / CELL), b = Math.floor(y / CELL); return PORT ? [COLS - 1 - b, a] : [a, b]; }
 const screenAngle = (vx, vy) => (PORT ? Math.atan2(-vx, vy) : Math.atan2(vy, vx));
-const offEntry = (first) => (PORT ? [first[0], -60] : [FW() + 40, first[1]]);
+// The anthill stands outside the grid, in a strip of width E past the entrance edge (right in landscape, top in
+// portrait); bugs come out of it at game x = COLS + .6 and the trail starts there.
+const E = CELL * 1.2, HILL_X = COLS + .6;
+const hillPos = () => sp(HILL_X, game.entry[1] + .5);
+// the world kept on screen: the grid, a margin M round it and the anthill strip
+const bounds = () => (PORT ? [-M, -M - E, FW() + M, FH() + M] : [-M, -M, FW() + M + E, FH() + M]);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 // HUD bands in UI units: portrait has a row on top and one at the bottom, landscape a column on each side
-const PTOP = 46, PBOT = 52, LLEFT = 104, LRIGHT = 52;
+const PTOP = 46, PBOT = 52, LLEFT = 104, LRIGHT = 52, LPLATE = 52; // LPLATE: landscape start plate, left of the right buttons
 // room kept free, in UI units: TOPY above the portrait top row, BOTY below the bottom buttons, CORN at the sides of the
 // portrait bottom row (rounded screen corners of the home-screen app)
-let TOPY = 0, BOTY = 0, CORN = 0;
+let TOPY = 0, BOTY = 0, CORN = 0, LX = 0, RX = 0; // LX, RX: landscape side safe areas
 // The phone's safe areas (notch, home bar) in CSS px, read from CSS env() through a probe element.
 function safeInsets() {
   const d = document.createElement('div');
@@ -87,9 +92,9 @@ const faUI = () => FA.map((v) => v / uk); // field area in UI units
 // The camera keeps the grid (with its margin) covering the field area when zoomed in, and centred when it fits.
 function applyCam() {
   ws = fit * zoom;
-  const vw = FA[2] / ws, vh = FA[3] / ws, gw = FW() + 2 * M, gh = FH() + 2 * M;
-  camX = gw <= vw ? FW() / 2 : clamp(camX, -M + vw / 2, FW() + M - vw / 2);
-  camY = gh <= vh ? FH() / 2 : clamp(camY, -M + vh / 2, FH() + M - vh / 2);
+  const vw = FA[2] / ws, vh = FA[3] / ws, [x0, y0, x1, y1] = bounds();
+  camX = x1 - x0 <= vw ? (x0 + x1) / 2 : clamp(camX, x0 + vw / 2, x1 - vw / 2);
+  camY = y1 - y0 <= vh ? (y0 + y1) / 2 : clamp(camY, y0 + vh / 2, y1 - vh / 2);
   ox = FA[0] + FA[2] / 2 - camX * ws; oy = FA[1] + FA[3] / 2 - camY * ws;
 }
 // zoom to z keeping the world point under the screen point (px, py) in place
@@ -100,8 +105,26 @@ function zoomTo(z, px, py, wx = (px - ox) / ws, wy = (py - oy) / ws) {
 }
 // world rect of the field area that is on screen now
 const visField = () => [(FA[0] - ox) / ws, (FA[1] - oy) / ws, FA[2] / ws, FA[3] / ws];
+// The game installed on an iPhone (as in the snake and the roll game): iOS makes the window shorter than the screen by the
+// status bar, and the page can't draw below the window unless it is itself as tall as the screen. So then the page,
+// the canvas and the screens take the screen's height (--app-h and the `tall` class; inside the page, absolute: iOS
+// clips fixed elements at the short window's edge). Only when the width matches the screen and the difference is a
+// strip, not a keyboard. The window height itself is not watched: iOS switches it back and forth.
+const IOS_PWA = navigator.standalone === true && /iPhone|iPod/.test(navigator.userAgent || '');
+function fullHeight() {
+  const iw = innerWidth, ih = innerHeight;
+  if (!IOS_PWA || !screen.width || !screen.height) return ih;
+  const portrait = ih >= iw, sh = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
+  const sw = portrait ? Math.min(screen.width, screen.height) : Math.max(screen.width, screen.height);
+  return Math.abs(sw - iw) < 2 && sh > ih && sh - ih < 120 ? sh : ih;
+}
 function resize() {
-  const vw = innerWidth, vh = innerHeight, was = PORT;
+  // installed on an iPhone: laid out to the screen's height even when the window is that tall itself right now (iOS
+  // stretches and shortens it by turns; the layout must not follow)
+  const vw = innerWidth, vh = fullHeight(), was = PORT, sh = vh > vw ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
+  const tall = IOS_PWA && (vh !== innerHeight || vh === sh);
+  document.documentElement.style.setProperty('--app-h', tall ? `${vh}px` : '');
+  document.documentElement.classList.toggle('tall', tall); if (tall) scrollTo(0, 0);
   PORT = vh > vw;
   dpr = Math.min(pixelRatio(vw), 5); seen = [vw, vh, devicePixelRatio, visualViewport?.scale || 1];
   uk = PORT ? clamp(Math.min(vw / 340, vh / 560), 1, 1.8) : clamp(Math.min(vw / 740, vh / 340), 1, 1.8);
@@ -110,21 +133,20 @@ function resize() {
   n.width = Math.round(vw * dpr); n.height = Math.round(vh * dpr); n.style.width = vw + 'px'; n.style.height = vh + 'px';
   c = n.getContext('2d'); cv.replaceWith(n); free(cv); cv = n; bindCanvas();
   // the field area: everything but the HUD bands
-  const gw = FW() + 2 * M, gh = FH() + 2 * M;
-  // An iPhone home-screen app blurs the top of the page under the status bar: keep the top row below that.
-  const ins = safeInsets(), edge = PORT && navigator.standalone ? 36 : 0;
-  // the home-screen app also has its rounded screen corners and the home bar right at the page's bottom
-  const app = !!navigator.standalone;
-  TOPY = PORT ? (ins.t + edge) / uk : 0; BOTY = Math.max(app ? 14 : 0, ins.b - 8) / uk; CORN = app ? 10 : 0;
+  const [bx0, by0, bx1, by1] = bounds(), gw = bx1 - bx0, gh = by1 - by0;
+  // Safe areas: the notch, the home bar. In the home-screen app the status bar lies over the page and frosts what is
+  // under it, so the top row steps down 16 px more (the `pwa` class, set in index.html before the first paint).
+  const ins = safeInsets(), pwa = document.documentElement.classList.contains('pwa');
+  TOPY = (ins.t + (pwa && PORT ? 16 : 0)) / uk; BOTY = ins.b / uk; LX = ins.l / uk; RX = ins.r / uk; CORN = pwa && PORT ? 10 : 0;
   // landscape: equal bands on both sides, so the field sits in the middle of the screen
-  const side = Math.max(LLEFT, LRIGHT) * uk;
-  FA = PORT ? [6, (TOPY + PTOP) * uk, vw - 12, vh - (TOPY + PTOP + PBOT + BOTY) * uk] : [side, 6, vw - side * 2, vh - 12];
+  const side = Math.max(LLEFT + LX, LPLATE + LRIGHT + RX) * uk;
+  FA = PORT ? [6, (TOPY + PTOP) * uk, vw - 12, vh - (TOPY + PTOP + PBOT + BOTY) * uk] : [side, 6 + ins.t, vw - side * 2, vh - 12 - ins.t - ins.b];
   fit = Math.min(FA[2] / gw, FA[3] / gh);
   zmax = clamp(58 / (CELL * fit), 1, 3); // up to cells of about 58 CSS px
   if (was !== PORT) zoom = 1;
   zoom = clamp(zoom, 1, zmax);
   // world area to paint: the whole screen with the field fitted; zoomed views stay inside it
-  const x0 = FA[0] + FA[2] / 2 - FW() / 2 * fit, y0 = FA[1] + FA[3] / 2 - FH() / 2 * fit;
+  const x0 = FA[0] + FA[2] / 2 - (bx0 + bx1) / 2 * fit, y0 = FA[1] + FA[3] / 2 - (by0 + by1) / 2 * fit;
   VB = [-x0 / fit - 4, -y0 / fit - 4, vw / fit + 8, vh / fit + 8];
   applyCam();
   dropLayers();
@@ -171,7 +193,7 @@ function buildTerrain() {
   x.drawImage(grassLayer, 0, 0, VB[2], VB[3]);
   x.setTransform(k, 0, 0, k, -VB[0] * k, -VB[1] * k); // world coordinates from here
   const cells = trail(game), pts = cells.map(([i, j]) => cellCenter(i, j));
-  pts.unshift(offEntry(pts[0]));
+  pts.unshift(hillPos());
   A.hdPath(x, A.chaikin(pts, 3), 30, 1 + levelIdx);
   for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) {
     const o = game.grid[j][i]; if (!o) continue; const [cx, cy] = cellCenter(i, j);
@@ -183,7 +205,7 @@ function buildTerrain() {
     else if (o.type) A.hdSoil(x, cx, cy + 15);
   }
   const [fx0, fy0] = cellCenter(...game.fruit); A.hdStump(x, fx0, fy0 + 12, 23);
-  const [ex, ey] = cellCenter(...game.entry); if (PORT) A.hdAnthill(x, ex, ey - 14, 1); else A.hdAnthill(x, ex + 16, ey + 4, 1);
+  { const [hx, hy] = hillPos(); A.hdAnthill(x, hx, hy + 8, 1.05); } // the mound covers the trail's end
   x.setTransform(k, 0, 0, k, 0, 0);
   A.hdDapple(x); A.hdSun2(x); A.hdGrade(x); A.hdVignette(x);
   // a little more colour; done here, not as a CSS filter on the canvas: Safari renders filtered canvases blurry
@@ -313,10 +335,13 @@ function frame(ts) {
     let acc = dt * speed; while (acc > 1e-6) { const h = Math.min(acc, 1 / 60); step(game, h); acc -= h; }
     handleEvents();
   }
-  if (innerWidth !== seen[0] || innerHeight !== seen[1] || devicePixelRatio !== seen[2] || (visualViewport?.scale || 1) !== seen[3]) resize();
+  if (innerWidth !== seen[0] || fullHeight() !== seen[1] || devicePixelRatio !== seen[2] || (visualViewport?.scale || 1) !== seen[3]) resize();
   // after a zoom settles, redraw the field and sprites at the new scale (while zooming they are stretched)
   if (terrain && !pinch && Math.abs(terrainK() - tk) > 1e-3 && performance.now() - zoomT > 220) dropLayers();
-  if (game) draw(paused ? 0 : dt);
+  try { if (game) draw(paused ? 0 : dt); } catch (e) { // a broken frame must not stop the game, nor leave the canvas turned or faint
+    if (c.reset) c.reset(); else { c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = 1; }
+    if (now - (frame.errAt || -1e9) > 5000) { frame.errAt = now; console.error(e); }
+  }
   requestAnimationFrame(frame);
 }
 
@@ -344,12 +369,12 @@ function draw(dt) {
   for (const d of game.drops) drawDrop(d, t);
   for (const s of game.shots) drawShot(s);
   for (const b of game.bugs) if (b.fly) drawBug(b, t, dt);
-  for (const b of game.bugs) if (b.hp < b.maxHp) { const [x, y] = bugPos(b); A.hdHp(c, x, y - (b.kind === 'rhino' ? 34 : 18), b.kind === 'rhino' ? 44 : 20, b.hp / b.maxHp, b.kind === 'rhino' ? '#ff5a5a' : '#7be05a'); }
+  for (const b of game.bugs) if (b.hp < b.maxHp && emerge(b) > .3) { const [x, y] = bugPos(b); A.hdHp(c, x, y - (b.kind === 'rhino' ? 34 : 18), b.kind === 'rhino' ? 44 : 20, b.hp / b.maxHp, b.kind === 'rhino' ? '#ff5a5a' : '#7be05a'); }
   drawFx(dt, fx);
   setUI();
   drawFx(dt, ufx);
   drawHud(t);
-  if (game.phase === 'build') { GOB = goLayout(); GO = [GOB[0] + GO_DX, GOB[1] + GOB[3] / 2]; } // before the banners: they keep clear of it
+  if (game.phase === 'build') GOB = goLayout(); // before the banners: they keep clear of it
   drawBanners(dt);
   if (game.phase === 'build') goIcon(t); // over the hints: they talk about it
   if (ghost) drawPicker(t);
@@ -379,6 +404,8 @@ function drawPlant(p, t) {
   const sway = Math.sin(t * 1.7 + p.id * 1.3) * .035;
   c.save(); c.translate(x, base); c.transform(sx, 0, sway, sy, 0, 0); blit(s, -35, -66); c.restore();
 }
+// coming out of the anthill: small and faint at its hole, full size a step later
+const emerge = (b) => (b.fly ? 1 : clamp((HILL_X - b.x) / .55, 0, 1));
 function drawBug(b, t, dt) {
   const [x, y] = bugPos(b), target = screenAngle(b.vx, b.vy);
   let a = angles.get(b.id); if (a == null) a = target;
@@ -386,9 +413,10 @@ function drawBug(b, t, dt) {
   const moving = !(b.frozen > 0) && !(b.chew > 0), fr = moving ? Math.floor(t * (b.kind === 'butterfly' ? 10 : 7) + b.id) % 2 : 0;
   const s = bugSprite(b.kind, fr), sc = (BUG_SIZE[b.kind] || 1) * BUG_K / 1.12;
   const lift = b.fly ? 16 : 0;
-  c.save(); c.globalAlpha = b.fly ? .18 : .25; c.beginPath(); c.ellipse(x + 3 + lift * .6, y + 5 + lift, 15 * sc, 8 * sc, 0, 0, A.TAU); c.fillStyle = '#183008'; c.fill(); c.restore();
+  c.save(); c.globalAlpha = (b.fly ? .18 : .25) * emerge(b); c.beginPath(); c.ellipse(x + 3 + lift * .6, y + 5 + lift, 15 * sc, 8 * sc, 0, 0, A.TAU); c.fillStyle = '#183008'; c.fill(); c.restore();
   if (b.slow < 1 && !b.fly) { c.save(); c.beginPath(); c.ellipse(x, y + 4, 17 * sc, 10 * sc, 0, 0, A.TAU); c.fillStyle = 'rgba(170,235,255,.35)'; c.fill(); c.restore(); }
-  c.save(); c.translate(x, y - (b.fly ? Math.sin(t * 6 + b.id) * 3 : 0)); c.rotate(a + (b.chew > 0 ? Math.sin(t * 30) * .12 : 0));
+  const em = emerge(b); if (em <= 0) return;
+  c.save(); c.globalAlpha = em; c.translate(x, y - (b.fly ? Math.sin(t * 6 + b.id) * 3 : 0)); c.rotate(a + (b.chew > 0 ? Math.sin(t * 30) * .12 : 0)); if (em < 1) c.scale(.4 + em * .6, .4 + em * .6);
   if (b.hit > 0) c.filter = 'brightness(1.8)';
   blit(s, -s.w / 2, -s.h / 2); c.restore();
   if (b.frozen > 0) A.fxIced(c, x, y, 13 * sc);
@@ -489,7 +517,7 @@ function drawShot(s) {
 function drawGhost(t) {
   const { i, j, ok } = ghost, [x, y] = cellCenter(i, j);
   ghost.t += 1 / 60;
-  if (ok && ghost.trail) { const pts = ghost.trail.map(([a, b]) => cellCenter(a, b)); pts.unshift(offEntry(pts[0])); c.save(); c.shadowColor = 'rgba(255,200,40,.9)'; c.shadowBlur = 8; A.strokePts(c, A.chaikin(pts, 3), 4, '#ffd23a', { dash: [10, 7] }); c.restore(); }
+  if (ok && ghost.trail) { const pts = ghost.trail.map(([a, b]) => cellCenter(a, b)); pts.unshift(hillPos()); c.save(); c.shadowColor = 'rgba(255,200,40,.9)'; c.shadowBlur = 8; A.strokePts(c, A.chaikin(pts, 3), 4, '#ffd23a', { dash: [10, 7] }); c.restore(); }
   c.save(); c.beginPath(); A.rrect(c, x - 19, y - 19, 38, 38, 10); c.fillStyle = !ghost.type ? 'rgba(255,255,255,.3)' : ok ? 'rgba(140,255,120,.35)' : 'rgba(255,80,70,.4)'; c.fill(); c.lineWidth = 3; c.strokeStyle = ok || !ghost.type ? '#ffffff' : '#ff4a3a'; c.stroke(); c.restore();
   if (!ghost.type) return;
   if (PLANTS[ghost.type].range) ring(x, y, PLANTS[ghost.type].range[0] * CELL);
@@ -608,8 +636,8 @@ function drawFx(dt, list) {
   if (list === fx) fx = fx.filter((f) => f.t < f.life); else ufx = ufx.filter((f) => f.t < f.life);
 }
 function drawBanners(dt) {
-  // portrait: below the anthill and its start button
-  let topY = PORT ? Math.max(TOPY + PTOP + 40, game.phase === 'build' ? GOB[1] + GOB[3] + 26 : 0) : 26; const midX = (FA[0] + FA[2] / 2) / uk;
+  // portrait: under the anthill strip
+  let topY = PORT ? Math.max(TOPY + PTOP, toUI(...hillPos())[1] + E / 2 * ws / uk, game.phase === 'build' ? GOB[1] + GOB[3] : 0) + 22 : 26 + TOPY; const midX = (FA[0] + FA[2] / 2) / uk;
   for (const b of banners) {
     b.t += dt; const k = b.t / b.life; if (k >= 1) continue;
     const a = Math.min(1, b.t * 5, (1 - k) * 5); const text = typeof b.text === 'function' ? b.text() : b.text;
@@ -636,7 +664,7 @@ function drawHud(t) {
     powerBtns([28 + CORN, by], [74 + CORN, by]);
     speedBtn(UW - 24 - CORN, by);
   } else { // left: dew, fruit, wave, next wave; right: pause, speed, powers
-    const x = 8, w = LLEFT - 16, cx = UW - LRIGHT / 2;
+    const x = 8 + LX, w = LLEFT - 16, cx = UW - RX - LRIGHT / 2;
     dewPill(x, 8, w, 32); hpPill(x, 46, w, 32);
     waveBar(x, 86, w, 26, build && game.nextIn != null ? `${game.wave + 1}/${game.waves} · ${Math.ceil(game.nextIn)} с` : `${build ? game.wave + 1 : game.wave} / ${game.waves}`, 12);
     pauseBtn(cx, 24); speedBtn(cx, 64);
@@ -647,38 +675,47 @@ function drawHud(t) {
 let GO = [0, 0];
 // The start button sits next to the anthill (not on it) with who comes next and the dew for starting early:
 // [▶ 2/6 ant×10 beetle×2 +14]. The whole plate starts the wave; holding a bug shows what it is.
-let GOB = [0, 0, 0, 0]; const GO_R = 15, GO_DX = 6 + GO_R; // the ▶ circle: radius and centre from the plate's left
+// The start plate stands next to the anthill but off the grid, so it never covers a cell: in portrait in the anthill's
+// strip above the grid, on the side with more room; in landscape upright in the band right of the field. On it: ▶ with
+// the countdown ring, the wave number, who comes (hold a bug for info) and the dew for starting early (or «В бой!»).
+// Only ▶ and the end piece start the wave.
+let GOB = [0, 0, 0, 0, false, true, true]; const GO_R = 15; // [x, y, w, h, upright, with the wave number, with the end piece]
 function goLayout() {
-  const prev = wavePreview(game), bonus = earlyBonus(game), end = bonus ? 52 : 56, w = 40 + 30 + prev.length * 42 + end, h = 36;
-  const [ex, ey] = cellCenter(...game.entry), [ax, ay] = toUI(...(PORT ? [ex, ey - 14] : [ex + 16, ey + 4]));
-  const [fx0, fy0, fw, fh] = faUI(), hc = CELL / 2 * ws / uk;
-  let x, y;
-  if (PORT) { // beside the anthill, on the side with more room; under it if neither side fits
-    const right = ax < fx0 + fw / 2; x = right ? ax + hc * 1.3 : ax - hc * 1.3 - w; y = ay - h / 2 + 2;
-    if (x < fx0 + 2 || x + w > fx0 + fw - 2) { x = ax - w / 2; y = ay + hc * 1.4; }
-  } else { // above the anthill, or under it on the top rows
-    x = ax + hc - w; y = ay - hc * 1.4 - h; if (y < fy0 + 2) y = ay + hc * 1.3;
+  const n = wavePreview(game).length, [hx, hy] = toUI(...hillPos()), hw = 34 * ws / uk, [fx0, fy0, fw, fh] = faUI();
+  if (PORT) { // full, then without the wave number (the top bar has it), then without «В бой!» (▶ stays)
+    const right = hx < fx0 + fw / 2, room = right ? fx0 + fw - 2 - (hx + hw) : hx - hw - fx0 - 2, h = 36, bonus = earlyBonus(game);
+    let num = true, end = true, w = 0;
+    for (const [a, b] of [[true, true], [false, true], [false, !!bonus]]) { num = a; end = b; w = 40 + (num ? 30 : 0) + n * 46 + (end ? (bonus ? 48 : 58) : 0) + 6; if (w <= room) break; }
+    const x = right ? hx + hw : hx - hw - w;
+    return [clamp(x, fx0 + 2, fx0 + fw - w - 2), clamp(hy - h / 2, fy0 + 2, fy0 + fh - h - 2), w, h, false, num, end];
   }
-  return [clamp(x, fx0 + 2, fx0 + fw - w - 2), clamp(y, fy0 + 2, fy0 + fh - h - 2), w, h];
+  const x = (FA[0] + FA[2]) / uk + 3, w = UW - RX - LRIGHT - 4 - x, h = 40 + 18 + n * 30 + 30, top = 86, bot = UH - BOTY - 100;
+  return [x, clamp(hy - h / 2, top, Math.max(top, bot - h)), w, h, true, true, true];
 }
 function goIcon(t) {
-  const [x, y, w, h] = GOB, cy = y + h / 2, r = GO_R, cx = x + GO_DX, bonus = earlyBonus(game), start = () => { ghost = null; pop = null; startWave(game); };
-  c.save(); c.shadowColor = 'rgba(0,0,0,.3)'; c.shadowBlur = 8; A.uiPanel(c, x, y, w, h, h / 2, '#fff3d6', { ol: '#6a3e1c', olw: 2.5 }); c.restore();
+  const [x, y, w, h, up, num, end] = GOB, r = GO_R, bonus = earlyBonus(game), prev = wavePreview(game), start = () => { ghost = null; pop = null; startWave(game); };
+  c.save(); c.shadowColor = 'rgba(0,0,0,.3)'; c.shadowBlur = 8; A.uiPanel(c, x, y, w, h, Math.min(w, h) / 2, '#fff3d6', { ol: '#6a3e1c', olw: 2.5 }); c.restore();
+  // slots along the plate: ▶, wave number, bugs, the end piece
+  const at = (d) => (up ? [x + w / 2, y + d] : [x + d, y + h / 2]);
+  const [cx, cy] = at(21);
   const k = game.nextIn != null ? game.nextIn / BREAK : 1, p = 1 + Math.sin(t * 5) * .05;
   c.save(); c.translate(cx, cy); c.scale(p, p);
   c.shadowColor = 'rgba(80,200,40,.8)'; c.shadowBlur = 10; c.beginPath(); c.arc(0, 0, r, 0, A.TAU); c.fillStyle = '#5cc23e'; c.fill(); c.shadowBlur = 0;
   c.lineWidth = 2.2; c.strokeStyle = '#1f6a17'; c.stroke();
   if (game.nextIn != null) { c.beginPath(); c.arc(0, 0, r - 3.5, -Math.PI / 2, -Math.PI / 2 + A.TAU * k); c.lineWidth = 3; c.lineCap = 'round'; c.strokeStyle = '#eaffd8'; c.stroke(); }
   c.beginPath(); c.moveTo(-4, -7); c.lineTo(8, 0); c.lineTo(-4, 7); c.closePath(); c.fillStyle = '#fff'; c.fill(); c.lineWidth = 1.8; c.lineJoin = 'round'; c.strokeStyle = '#1f5a14'; c.stroke();
-  c.restore();
-  A.hdText(c, `${game.wave + 1}/${game.waves}`, x + 54, cy + .5, 11, '#8a5a32', { stroke: null });
-  const prev = wavePreview(game);
-  prev.forEach(([kind, n], i) => { const bx = x + 78 + i * 42; bugChip(kind, n, bx, cy, () => {}); }); // hold for info
-  const ex = x + 72 + prev.length * 42, ew = w - (ex - x) - 6;
-  if (bonus) { c.save(); c.beginPath(); A.rrect(c, ex, cy - 10, ew, 20, 10); c.fillStyle = '#d8f0ff'; c.fill(); c.restore(); A.hdDrop(c, ex + 10, cy + .5, 4.5); A.hdText(c, `+${bonus}`, ex + ew / 2 + 5, cy + .5, 12, '#2a6fa8', { stroke: null }); }
-  else { c.save(); c.beginPath(); A.rrect(c, ex, cy - 11, ew, 22, 11); c.fillStyle = '#5cc23e'; c.fill(); c.restore(); A.hdText(c, T.go, ex + ew / 2, cy + .5, 12, '#fff', { stroke: '#1f5a14', sw: 3 }); }
-  ui.push({ x: x + 2, y, w: 42, h, fn: start, s: 'u' }); // only ▶ starts the wave
-  const gx = x + 72 + prev.length * 42; ui.push({ x: gx - 2, y, w: x + w - gx + 2, h, fn: start, s: 'u' }); // and the bonus / «В бой!» end
+  c.restore(); GO = [cx, cy];
+  ui.push(up ? { x, y, w, h: 40, fn: start, s: 'u' } : { x, y, w: 40, h, fn: start, s: 'u' });
+  const n0 = up ? 58 : num ? 70 : 40;
+  if (num) { const [wx, wy] = at(up ? 47 : 55); A.hdText(c, `${game.wave + 1}/${game.waves}`, wx, wy + .5, 11, '#8a5a32', { stroke: null }); }
+  prev.forEach(([kind, cnt], i) => { const [bx, by] = at(up ? n0 + 15 + i * 30 : n0 + 12 + i * 46); bugChip(kind, cnt, up ? bx - 10 : bx, by, () => {}); });
+  if (!end) return;
+  const e0 = up ? n0 + prev.length * 30 : n0 + prev.length * 46, ew = up ? w - 8 : w - e0 - 6, eh = 22;
+  const [ex, ey] = up ? [x + 4, y + e0 + 3] : [x + e0, y + h / 2 - eh / 2];
+  c.save(); c.beginPath(); A.rrect(c, ex, ey, ew, eh, eh / 2); c.fillStyle = bonus ? '#d8f0ff' : '#5cc23e'; c.fill(); c.restore();
+  if (bonus) { A.hdDrop(c, ex + 9, ey + eh / 2 + .5, 4.5); A.hdText(c, `+${bonus}`, ex + ew / 2 + 5, ey + eh / 2 + .5, 12, '#2a6fa8', { stroke: null }); }
+  else A.hdText(c, T.go, ex + ew / 2, ey + eh / 2 + .5, up ? 10 : 12, '#fff', { stroke: '#1f5a14', sw: 3 });
+  ui.push({ x: ex - 2, y: ey - 3, w: ew + 4, h: eh + 6, fn: start, s: 'u' });
 }
 function dewPill(x, y, w, h) {
   DEW = [x + 18, y + h / 2];
@@ -694,7 +731,7 @@ function hpPill(x, y, w, h) {
   A.hdText(c, String(game.hp), bx + bw / 2, y + h / 2 + 1, 11, '#fff', { stroke: '#7a1010', sw: 3 });
 }
 function bugChip(k, n, cx, cy, fn) {
-  const s = bugSprite(k, 0), sc = (k === 'rhino' ? 46 : 38) / s.w;
+  const s = bugSprite(k, 0), sc = (k === 'rhino' ? 40 : 34) / s.w;
   ui.push({ x: cx - 14, y: cy - 16, w: 40, h: 32, fn, s: 'u', info: { bug: k } });
   c.save(); c.translate(cx, cy); c.rotate(-Math.PI / 2); c.scale(sc, sc); blit(s, -s.w / 2, -s.h / 2); c.restore();
   A.hdText(c, '×' + n, cx + 12, cy + 3, 12, '#fff', { stroke: '#4a2a12', sw: 3.5, align: 'left' });
@@ -735,7 +772,7 @@ function infoAt(px, py) {
   if (px < FA[0] || py < FA[1] || px > FA[0] + FA[2] || py > FA[1] + FA[3]) return null;
   const wx = (px - ox) / ws, wy = (py - oy) / ws;
   let best = null, bd = Math.max(CELL * .7, 22 / ws);
-  for (const b of game.bugs) { const [x, y] = bugPos(b), d = Math.hypot(x - wx, y - wy); if (d < bd) { bd = d; best = b; } }
+  for (const b of game.bugs) { if (emerge(b) < .3) continue; const [x, y] = bugPos(b), d = Math.hypot(x - wx, y - wy); if (d < bd) { bd = d; best = b; } }
   if (best) return bugInfo(best.kind, best);
   const [i, j] = cellAt(wx, wy), p = game.grid[j]?.[i];
   return p?.type ? plantInfo(p.type, p) : null;
@@ -811,6 +848,9 @@ bindCanvas();
 for (const t of ['gesturestart', 'gesturechange']) document.addEventListener(t, (e) => { if (e.target === cv) e.preventDefault(); });
 addEventListener('resize', resize);
 visualViewport?.addEventListener('resize', resize);
+addEventListener('pageshow', () => resize());
+document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(resize, 300); });
+addEventListener('scroll', () => { if (document.documentElement.classList.contains('tall') && (scrollX || scrollY)) scrollTo(0, 0); }); // a page taller than its window must not move
 document.addEventListener('visibilitychange', () => { if (document.hidden && game && !paused && game.phase !== 'won' && game.phase !== 'lost') openPause(); });
 
 // ---------- screens (HTML) ----------
@@ -865,6 +905,13 @@ async function boot() {
   game = createGame(0); paused = true; // a field behind the menu
   requestAnimationFrame(frame);
   if (new URLSearchParams(location.search).has('dev')) window.__fd = { get game() { return game; }, startLevel, set speed(v) { speed = v; }, cell: (i, j) => { const [x, y] = cellCenter(i, j); return [ox + x * ws, oy + y * ws]; }, scroll: () => {}, apple: (m, life = 99) => appleMood(m, life), get pause() { return paused; }, set pause(v) { paused = v; }, zoom: (z, x = innerWidth / 2, y = innerHeight / 2) => zoomTo(z, x, y), get view() { return { zoom, zmax, cell: CELL * ws, FA }; }, layout: () => ({ card: ui.filter((u) => u.card).map((u) => [(u.x + u.w / 2) * uk, (u.y + u.h / 2) * uk]), chips: ui.filter((u) => u.info).map((u) => [(u.x + 14) * uk, (u.y + u.h / 2) * uk]), go: [GO[0] * uk, GO[1] * uk] }) };
-  if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+  // A new version installs in the background and takes over at once (sw.js); the running page is still the old one, so
+  // the home screen offers to reload. The game also asks for an update itself when it comes back to the screen.
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    let had = !!navigator.serviceWorker.controller; // the first take-over after a first visit is not an update
+    navigator.serviceWorker.register('sw.js').then((reg) => document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); })).catch(() => {});
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (had) $('upd').hidden = false; had = true; });
+    $('upd').onclick = () => location.reload();
+  }
 }
 boot();

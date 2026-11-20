@@ -7,6 +7,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Fruit Defense">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<script>if (navigator.standalone === true) document.documentElement.classList.add('pwa'); // iPhone home-screen app: the status bar lies over the page (Android puts it above); see resize() in view.js</script>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <title>Fruit Defense</title>
@@ -14,9 +16,15 @@
 @font-face{font-family:Nunito;font-weight:900;font-display:block;src:url(vendor/nunito-cyrillic-900-normal.woff2) format('woff2');unicode-range:U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116}
 @font-face{font-family:Nunito;font-weight:900;font-display:block;src:url(vendor/nunito-latin-900-normal.woff2) format('woff2')}
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;overflow:hidden;background:#2d4a1f;color:#fff;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;font-family:Nunito,system-ui,sans-serif;font-weight:900}
+html,body{margin:0;height:100%;overflow:hidden;background:#79bd4f;color:#fff;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;font-family:Nunito,system-ui,sans-serif;font-weight:900}
 button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer;touch-action:manipulation}
 #cv{position:fixed;left:0;top:0;display:block}
+/* installed on an iPhone (view.js sets `tall` and --app-h): the page is as tall as the screen and everything lives inside
+   it, absolute — iOS clips fixed elements at the edge of its shorter window */
+:root.tall,:root.tall body{height:var(--app-h)}
+:root.tall body{position:relative}
+:root.tall #cv,:root.tall .screen,:root.tall #home{position:absolute;inset:auto;left:0;top:0;width:100%;height:var(--app-h)}
+#upd{margin-top:6px}
 .screen{position:fixed;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;background:rgba(15,25,10,.55);padding:16px}
 .screen[hidden],#home[hidden]{display:none}
 .card{background:linear-gradient(#fffaf0,#fbe9c6);color:#5a3a1c;border-radius:26px;border:3px solid #6a3e1c;box-shadow:0 5px 0 #6a3e1c,0 14px 40px rgba(0,0,0,.4);padding:18px 22px 16px;min-width:300px;max-width:520px;text-align:center}
@@ -31,7 +39,7 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .btn{border-radius:18px;padding:10px 20px;background:linear-gradient(#7ee05a,#3ea52a);color:#fff;font-size:18px;border:2.5px solid #1f6a17;box-shadow:0 4px 0 #1f6a17;text-shadow:0 2px 0 #1f5a14}
 .btn.alt{background:linear-gradient(#fff3d6,#f2d9a8);color:#6a3e1c;border-color:#6a3e1c;box-shadow:0 4px 0 #6a3e1c;text-shadow:none}
 .btn:active{transform:translateY(3px);box-shadow:0 1px 0 #1f6a17}
-#home{position:fixed;inset:0;z-index:8;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:16px;background:radial-gradient(ellipse at 50% 35%,rgba(140,215,90,.55),rgba(30,70,20,.85) 75%)}
+#home{position:fixed;inset:0;z-index:8;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:calc(16px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));background:radial-gradient(ellipse at 50% 35%,rgba(140,215,90,.55),rgba(30,70,20,.85) 75%)}
 #home .logo{display:flex;align-items:center;gap:14px}
 #home .logo img{width:84px;height:84px;filter:drop-shadow(0 6px 8px rgba(0,0,0,.35))}
 #home h1{margin:0;font-size:46px;line-height:1;text-shadow:0 4px 0 #2a5a1a,0 8px 18px rgba(0,0,0,.35)}
@@ -51,6 +59,7 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
   <div class="logo"><img id="logo" alt=""><h1>Fruit Defense</h1></div>
   <div class="sub">Посади растения — не пусти жуков к яблоку</div>
   <div id="levels"></div>
+  <button class="btn" id="upd" hidden>Обновить игру</button>
 </div>
 <div id="modal" class="screen" hidden><div class="card" id="card"></div></div>
 <script type="module" src="view.js"></script>
