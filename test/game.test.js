@@ -247,9 +247,11 @@ test('new plants: a flytrap swallows a bug whole, a bell makes its neighbours sh
 test('a level in progress is saved between waves and comes back as it was', () => {
   const g = createGame(6, 5); g.dew = 900; place(g, 'rose', 8, 4); place(g, 'pumpkin', 8, 5); upgrade(g, g.plants[0]);
   const [wi, wj] = LEVELS[6].obstacles.find(([, , t]) => t === 'weed'); clearWeed(g, wi, wj);
+  const [vi, vj] = LEVELS[6].obstacles.filter(([, , t]) => t === 'weed')[1]; clearWeed(g, vi, vj); place(g, 'corn', vi, vj); // a plant where a weed was
   removePlant(g, g.plants[1], false); g.wave = 7; g.hp = 13;
   const r = restore(JSON.parse(JSON.stringify(snapshot(g))));
   assert.equal(r.wave, 7); assert.equal(r.hp, 13); assert.equal(r.dew, g.dew); assert.equal(r.phase, 'build'); assert.equal(r.nextIn, null);
   assert.equal(r.grid[4][8].type, 'rose'); assert.equal(r.grid[4][8].lvl, 2); assert.ok(stubAt(r, 8, 5)); assert.equal(r.grid[wj][wi], null);
-  assert.equal(restore({ v: 0 }), null);
+  assert.equal(r.grid[vj][vi].type, 'corn');
+  assert.equal(restore({ v: 0 }), null); assert.equal(restore({ v: 1, level: 0, plants: 'x' }), null);
 });

@@ -114,7 +114,7 @@ let ufx = []; // effects in UI space
 
 // What the player keeps: stars per level, bought perks, bugs met; the sound settings; a level in progress.
 const load = (k, d) => { try { return Object.assign(d, JSON.parse(localStorage.getItem(k) || '{}')); } catch { return d; } };
-const progress = load('fruit.progress', { stars: [], perks: {}, bugs: {} });
+const progress = load('fruit.progress', { stars: [], perks: {}, bugs: {}, cards: {} });
 const saveProgress = () => localStorage.setItem('fruit.progress', JSON.stringify(progress));
 const audio = load('fruit.audio', { vol: .6, music: .35 });
 const starsAll = () => progress.stars.reduce((a, b) => a + (b || 0), 0);
@@ -352,7 +352,9 @@ function startLevel(n) {
   const cards = [], L = LEVELS[n], had = new Set(LEVELS.slice(0, n).flatMap((q) => q.plants)), hadF = new Set(LEVELS.slice(0, n).map((q) => q.feature));
   for (const p of L.plants) if (!had.has(p) && n > 0) cards.push({ tag: T.newPlant, title: T.plant[p], img: pic(`hero:${p}`, 110, 110, (x) => { A.setTheme('meadow'); A.hdPlant(x, p, 55, 98, 1.45, { lvl: 1 }); }), text: T.about[p], extra: `${T.lvl3}: ${T.perk[p].toLowerCase()}` });
   if (L.feature && !hadF.has(L.feature)) cards.push({ tag: T.levelFeature, title: T.feature[L.feature][0], img: featurePic(L.feature), text: T.feature[L.feature][1] });
-  if (cards.length) introCards(cards);
+  // each card is shown once, not on every retry
+  const unseen = cards.filter((q) => !progress.cards[q.title]);
+  if (unseen.length) { for (const q of unseen) progress.cards[q.title] = 1; saveProgress(); introCards(unseen); }
   if (zmax > 1.4 && matchMedia('(pointer: coarse)').matches && !localStorage.getItem('fruit.zoomHint')) { banner(T.zoomHint, 5, true); localStorage.setItem('fruit.zoomHint', '1'); }
   if (n === 0) banner(T.hint1, 10, true);
   if (!localStorage.getItem('fruit.holdHint')) { banner(T.holdHint, 7, true); localStorage.setItem('fruit.holdHint', '1'); }
@@ -374,8 +376,10 @@ const bugsOf = (L) => [...new Set(L.waves.flat().map((w) => w[0]))];
 // Bugs of wave n (1-based) that the player has not met yet.
 function newBugs(n) {
   const out = [...new Set(game.L.waves[n - 1].map((w) => w[0]))].filter((k) => !progress.bugs[k]);
-  for (const k of game.L.waves[n - 1].map((w) => w[0])) progress.bugs[k] = 1;
-  if (out.length) saveProgress();
+  // the bugs a boss lets out are met with it
+  let fresh = out.length > 0;
+  for (const k of game.L.waves[n - 1].map((w) => w[0])) for (const q of [k, BUGS[k].brood?.[0], BUGS[k].split?.[0]]) if (q && !progress.bugs[q]) { progress.bugs[q] = 1; fresh = true; }
+  if (fresh) saveProgress();
   return out;
 }
 function bugStats(kind, b) {
@@ -480,14 +484,18 @@ function handleEvents() {
       case 'sell': case 'plantDead': dust(e.p); terrainDirty = true; if (pop === e.p) pop = null; if (e.t === 'sell') sfx.sell(); else { sfx.eaten(); banner(`${T.plant[e.p.type]} ${T.eaten[e.p.type]}!`, 1.4); if (!localStorage.getItem('fruit.rootsHint')) { banner(T.rootsHint, 8, true); localStorage.setItem('fruit.rootsHint', '1'); } } break;
       case 'chew': { const [x, y] = cellCenter(e.p.i, e.p.j); for (let n = 0; n < 6; n++) fx.push({ k: 'crumb', x, y: y - 6, vx: (Math.random() - .5) * 50, vy: -20 - Math.random() * 30, t: 0, life: .5, col: e.p.type === 'pumpkin' ? '#f7a23a' : '#6cc04a' }); bump(e.p, .2); sfx.chew(); break; }
       case 'wave': banner(T.wave(e.n, game.waves), 1.4); sfx.waveStart(); { const nb = newBugs(e.n).filter((k) => !isBoss(k)); if (nb.length && !(levelIdx === 0 && e.n === 1)) banner(T.freshBug(nb.map((k) => T.bug[k].toLowerCase())), 7, true); } if (AP.mood === 'happy') appleMood('idle', 0); break;
-      case 'waveDone': appleMood('happy', 2.6); appleCheer(); banner(T.waveDone(e.bonus), 1.8); sfx.waveDone(); if (e.powers) banner(T.powersBack, 4, true); if (levelIdx === 0 && e.n === 1) banner(T.hint2, 6, true); localStorage.setItem(SAVE, JSON.stringify(snapshot(game))); break;
+      case 'waveDone': appleMood('happy', 2.6); appleCheer(); banner(T.waveDone(e.bonus), 1.8); sfx.waveDone(); if (e.powers) banner(T.powersBack, 4, true); if (levelIdx === 0 && e.n === 1) banner(T.hint2, 6, true); break;
       case 'early': ufx.push({ k: 'gain', x: GO[0] + 30, y: GO[1] + 26, t: 0, life: 1.2, txt: T.early(e.bonus) }); sfx.early(e.bonus); break;
       case 'power': if (e.kind === 'frost') { ufx.push({ k: 'flash', t: 0, life: .6, col: 'rgba(190,240,255,' }); sfx.frost(); } else { for (let n = 0; n < 70; n++) ufx.push({ k: 'rain', x: Math.random() * UW, y: -Math.random() * UH, t: 0, life: 1.2 }); sfx.rain(); terrainDirty = true; } break;
       case 'won': case 'lost': { dropSave(); if (e.t === 'won') appleCheer(); const g = game; setTimeout(() => { if (game === g) endScreen(e.t === 'won'); }, 900); break; }
     }
   }
+  // what is built between waves is kept too
+  if (game.phase === 'build' && game.wave > 0 && game.events.some((e) => SAVED.has(e.t))) saveLevel();
   game.events.length = 0;
 }
+const SAVED = new Set(['place', 'upgrade', 'sell', 'weed', 'regrow', 'heal', 'waveDone']);
+function saveLevel() { if (game && game.phase === 'build' && game.wave > 0 && game.wave < game.waves) localStorage.setItem(SAVE, JSON.stringify(snapshot(game))); }
 let hpShake = 0;
 function heart(x, y, r) {
   c.beginPath(); c.moveTo(x, y + r * .9); c.bezierCurveTo(x - r * 1.6, y - r * .1, x - r * .7, y - r * 1.3, x, y - r * .45); c.bezierCurveTo(x + r * .7, y - r * 1.3, x + r * 1.6, y - r * .1, x, y + r * .9);
@@ -557,7 +565,7 @@ function draw(dt) {
 function ring(x, y, r, next = false) { c.save(); c.beginPath(); c.arc(x, y, r, 0, A.TAU); if (!next) { c.fillStyle = 'rgba(255,255,255,.13)'; c.fill(); } c.setLineDash(next ? [3, 7] : [8, 6]); c.lineWidth = 2.2; c.strokeStyle = next ? 'rgba(150,255,120,.9)' : 'rgba(255,255,255,.85)'; c.stroke(); c.restore(); }
 function drawGrid() {
   if (game.phase === 'wave' && Math.floor(now / 500) !== blockCache?.tick) blockCache = null;
-  if (!blockCache) { blockCache = new Set(blockingCells(game).map(([i, j]) => i + ',' + j)); blockCache.tick = Math.floor(now / 500); if (drag) drag.cell = null; } // the field changed: refresh the preview too
+  if (!blockCache) { blockCache = new Set(blockingCells(game).map(([i, j]) => i + ',' + j)); blockCache.tick = Math.floor(now / 500); if (drag) drag.key = null; } // the field changed: refresh the preview too
   c.save();
   for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) {
     if (game.grid[j][i] || (i === game.fruit[0] && j === game.fruit[1]) || game.entries.some((e) => e[0] === i && e[1] === j)) continue;
@@ -881,7 +889,7 @@ function drawHud(t) {
 let GO = [0, 0];
 function nextWave(x, y, w, h, t) {
   const build = game.phase === 'build', last = game.wave >= game.waves, prev = wavePreview(game), bonus = earlyBonus(game), r = 13;
-  const start = () => { pop = null; if (startWave(game)) sel = sel; };
+  const start = () => { pop = null; startWave(game); };
   A.uiPanel(c, x, y, w, h, h / 2, '#fff3d6', { ol: '#6a3e1c', olw: 2 });
   const cx = x + h / 2 + 1, cy = y + h / 2, p = build ? 1 + Math.sin(t * 5) * .06 : 1; GO = [cx, cy];
   c.save(); c.translate(cx, cy); c.scale(p, p);
@@ -1117,6 +1125,7 @@ visualViewport?.addEventListener('resize', resize);
 addEventListener('pageshow', () => resize());
 document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(resize, 300); });
 addEventListener('scroll', () => { if (document.documentElement.classList.contains('tall') && (scrollX || scrollY)) scrollTo(0, 0); }); // a page taller than its window must not move
+document.addEventListener('visibilitychange', () => { if (document.hidden && game && $('home').hidden) saveLevel(); });
 document.addEventListener('visibilitychange', () => { if (document.hidden && game && !paused && game.phase !== 'won' && game.phase !== 'lost') openPause(); });
 
 // ---------- screens (HTML) ----------

@@ -43,7 +43,7 @@ self.addEventListener('fetch', (e) => {
       const hit = await c.match(req, { ignoreSearch: true });
       if (hit) return hit;
       const res = await fetch(req);
-      if (res.ok && res.status === 200) c.put(req, res.clone());
+      if (res.ok && res.status === 200) c.put(req, res.clone()).catch(() => {}); // no room: it is fetched again next time
       return res;
     }));
     return;

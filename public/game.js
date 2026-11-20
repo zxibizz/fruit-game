@@ -85,6 +85,7 @@ function refresh(g) { g.dist = computeDist(g); g.dig = computeDig(g); auras(g); 
 function auras(g) {
   for (const p of g.plants) { p.buff = 0; p.guard = 0; }
   for (const p of g.plants) {
+    if (p.web > 0) continue; // a webbed plant gives nothing
     const buff = pstat(g, p, 'buff'), guard = pstat(g, p, 'guard'); if (!buff && !guard) continue;
     const r = pstat(g, p, 'range');
     for (const q of g.plants) if (q !== p && Math.hypot(q.i - p.i, q.j - p.j) <= r) { q.buff = Math.max(q.buff, buff); q.guard = Math.max(q.guard, guard); }
@@ -255,7 +256,7 @@ export function usePower(g, kind) {
   if (!g.powers[kind] || over(g)) return false;
   g.powers[kind]--;
   if (kind === 'frost') for (const b of g.bugs) b.frozen = Math.max(b.frozen, BUGS[b.kind].boss ? 2 : 4);
-  if (kind === 'rain') { for (const p of g.plants) { p.hp = p.maxHp; p.web = 0; } for (const s of g.stubs.slice()) regrow(g, s, true); g.hp = Math.min(g.maxHp, g.hp + 3); }
+  if (kind === 'rain') { for (const p of g.plants) { p.hp = p.maxHp; p.web = 0; } auras(g); for (const s of g.stubs.slice()) regrow(g, s, true); g.hp = Math.min(g.maxHp, g.hp + 3); }
   g.events.push({ t: 'power', kind });
   return true;
 }
@@ -304,6 +305,7 @@ function bossSkill(g, b, B, dt) {
       .sort((p, q) => Math.hypot(p.i + .5 - b.x, p.j + .5 - b.y) - Math.hypot(q.i + .5 - b.x, q.j + .5 - b.y)).slice(0, n);
     if (!near.length) { b.skill = 1; return; }
     for (const p of near) p.web = life;
+    auras(g);
     g.events.push({ t: 'web', b, plants: near });
   }
 }
@@ -371,7 +373,7 @@ function updatePlant(g, p, dt) {
   const P = PLANTS[p.type], px = p.i + .5, py = p.j + .5;
   if (p.hit > 0) p.hit -= dt;
   if (p.busy > 0) p.busy -= dt;
-  if (p.web > 0) { p.web -= dt; return; } // caught in a spider's web: does nothing
+  if (p.web > 0) { p.web -= dt; if (p.web <= 0) auras(g); return; } // caught in a spider's web: does nothing
   if (!P.range || P.buff) return;
   const range = pstat(g, p, 'range');
   if (P.heal) {
@@ -429,7 +431,7 @@ function updateShot(g, s, dt) {
   const dx = s.tx - s.x, dy = s.ty - s.y, d = Math.hypot(dx, dy), v = s.speed * dt;
   if (d <= v) {
     s.done = true;
-    if (s.splash) { for (const b of g.bugs) if (!b.fly && b.hp > 0 && Math.hypot(b.x - s.tx, b.y - s.ty) <= s.splash) damage(g, b, s.dmg, s.from); g.events.push({ t: 'splash', x: s.tx, y: s.ty, kind: s.kind, r: s.splash }); }
+    if (s.splash) { for (const b of g.bugs.slice()) if (!b.fly && b.hp > 0 && Math.hypot(b.x - s.tx, b.y - s.ty) <= s.splash) damage(g, b, s.dmg, s.from); g.events.push({ t: 'splash', x: s.tx, y: s.ty, kind: s.kind, r: s.splash }); }
     else if (s.target && s.target.hp > 0 && !s.target.gone) {
       damage(g, s.target, s.dmg, s.from);
       if (s.stun && s.target.hp > 0) s.target.frozen = Math.max(s.target.frozen, s.stun * (BUGS[s.target.kind].boss ? .3 : 1));
@@ -472,7 +474,7 @@ export const stars = (g) => (g.hp >= g.maxHp * .8 ? 3 : g.hp >= g.maxHp * .4 ? 2
 // A level in progress is kept between waves: what stands on the field and what the player has. It comes back in the
 // build phase, and the next wave waits for the player.
 export function snapshot(g) {
-  const cleared = g.L.obstacles.filter(([i, j, t]) => t === 'weed' && !g.grid[j][i]).map(([i, j]) => [i, j]);
+  const cleared = g.L.obstacles.filter(([i, j, t]) => t === 'weed' && g.grid[j][i]?.obstacle !== 'weed').map(([i, j]) => [i, j]);
   return {
     v: 1, level: g.level, seed: g.seed, wave: g.wave, dew: g.dew, hp: g.hp, powers: { ...g.powers }, stats: { ...g.stats }, time: g.time, cleared,
     plants: g.plants.map((p) => ({ type: p.type, lvl: p.lvl, i: p.i, j: p.j, hp: p.hp, spent: p.spent })),
@@ -480,15 +482,15 @@ export function snapshot(g) {
   };
 }
 export function restore(snap, meta = {}) {
-  if (!snap || snap.v !== 1 || !LEVELS[snap.level]) return null;
+  if (!snap || snap.v !== 1 || !LEVELS[snap.level] || !Array.isArray(snap.plants)) return null;
   const g = createGame(snap.level, snap.seed, meta);
   if (snap.wave >= g.waves) return null;
   for (const [i, j] of snap.cleared || []) if (g.grid[j]?.[i]?.obstacle === 'weed') g.grid[j][i] = null;
   for (const q of snap.plants) {
-    if (!PLANTS[q.type] || !inside(q.i, q.j) || g.grid[q.j][q.i]) continue;
+    if (!PLANTS[q.type] || ![1, 2, 3].includes(q.lvl) || !Number.isFinite(q.hp) || !inside(q.i, q.j) || g.grid[q.j][q.i]) continue;
     const p = grow(g, q.type, q.i, q.j, q.lvl, q.spent); p.hp = Math.min(p.maxHp, q.hp);
   }
-  for (const s of snap.stubs || []) if (PLANTS[s.type] && inside(s.i, s.j) && !g.grid[s.j][s.i]) g.stubs.push({ id: g.nextId++, ...s });
+  for (const s of snap.stubs || []) if (PLANTS[s.type] && [1, 2, 3].includes(s.lvl) && inside(s.i, s.j) && !g.grid[s.j][s.i]) g.stubs.push({ id: g.nextId++, ...s });
   Object.assign(g, { wave: snap.wave, dew: snap.dew, hp: Math.min(g.maxHp, snap.hp), time: snap.time || 0 });
   Object.assign(g.powers, snap.powers); Object.assign(g.stats, snap.stats);
   refresh(g);
