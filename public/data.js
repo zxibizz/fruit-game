@@ -1,6 +1,6 @@
 // Game data: plants (towers), bugs (enemies) and levels. Distances are in grid cells, times in seconds.
 
-export const COLS = 18;
+export const COLS = 14;
 export const ROWS = 8;
 export const FRUIT_HP = 20;
 
@@ -32,7 +32,7 @@ export const LEVELS = [
     name: 'Лужайка',
     entry: 3, fruit: [1, 4], dew: 150, hpGrowth: .12, waveBonus: 20,
     plants: ['pumpkin', 'rose', 'clover', 'corn'],
-    obstacles: [[7, 0, 'rock'], [2, 1, 'rock'], [10, 2, 'rock'], [5, 6, 'rock'], [13, 5, 'rock'], [14, 1, 'stump'], [3, 7, 'log'], [4, 7, 'log']],
+    obstacles: [[5, 0, 'rock'], [2, 1, 'rock'], [8, 2, 'rock'], [4, 6, 'rock'], [10, 5, 'rock'], [11, 1, 'stump'], [2, 7, 'log'], [3, 7, 'log']],
     waves: [
       [['ant', 6, 1.4, 0]],
       [['ant', 10, 1.1, 0]],
@@ -46,7 +46,7 @@ export const LEVELS = [
     name: 'Опушка',
     entry: 2, fruit: [1, 5], dew: 160, hpGrowth: .11, waveBonus: 25,
     plants: ['pumpkin', 'rose', 'clover', 'corn', 'mint'],
-    obstacles: [[8, 1, 'rock'], [8, 2, 'rock'], [12, 5, 'rock'], [12, 6, 'rock'], [4, 3, 'rock'], [15, 6, 'rock'], [5, 0, 'stump'], [10, 7, 'stump'], [14, 3, 'log'], [15, 3, 'log']],
+    obstacles: [[6, 1, 'rock'], [6, 2, 'rock'], [9, 5, 'rock'], [9, 6, 'rock'], [3, 3, 'rock'], [11, 6, 'rock'], [4, 0, 'stump'], [8, 7, 'stump'], [10, 3, 'log'], [11, 3, 'log']],
     waves: [
       [['ant', 10, 1, 0]],
       [['ant', 8, .9, 0], ['grasshopper', 4, 1.2, 4]],
@@ -62,7 +62,7 @@ export const LEVELS = [
     name: 'Старый сад',
     entry: 5, fruit: [1, 2], dew: 200, hpGrowth: .1, waveBonus: 35,
     plants: ['pumpkin', 'rose', 'clover', 'corn', 'mint', 'pepper', 'dandelion'],
-    obstacles: [[9, 0, 'rock'], [9, 1, 'rock'], [9, 2, 'rock'], [13, 6, 'stump'], [4, 6, 'stump'], [6, 1, 'log'], [7, 1, 'log'], [15, 3, 'log'], [16, 3, 'log'], [12, 0, 'rock']],
+    obstacles: [[6, 0, 'rock'], [6, 2, 'rock'], [6, 3, 'rock'], [10, 6, 'stump'], [3, 6, 'stump'], [4, 1, 'log'], [5, 1, 'log'], [11, 3, 'log'], [12, 3, 'log'], [9, 0, 'rock']],
     waves: [
       [['ant', 12, .9, 0]],
       [['snail', 2, 3, 0], ['ant', 10, .8, 2]],

@@ -5,9 +5,10 @@ import { LEVELS } from '../public/data.js';
 
 function plan(level) {
   const L = LEVELS[level], has = (p) => L.plants.includes(p), items = [];
-  const walls = [14, 11, 8, 5];
+  const walls = [];
+  for (let col = COLS - 4; col >= 4; col -= 3) walls.push(col);
   // first a shooter by the entrance and the dew plants
-  items.push(['rose', 15, L.entry === 0 ? 1 : L.entry - 1], ['rose', 15, L.entry === ROWS - 1 ? ROWS - 2 : L.entry + 1]);
+  items.push(['rose', COLS - 3, L.entry === 0 ? 1 : L.entry - 1], ['rose', COLS - 3, L.entry === ROWS - 1 ? ROWS - 2 : L.entry + 1]);
   for (const [i, j] of [[0, 0], [0, ROWS - 1], [1, 0]]) items.push(['clover', i, j]);
   walls.forEach((col, k) => {
     const gap = k % 2 ? 0 : ROWS - 1, cells = [];

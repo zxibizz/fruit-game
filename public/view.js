@@ -7,7 +7,7 @@ import {
 import { PLANTS, BUGS, LEVELS } from './data.js';
 
 const T = {
-  wave: (n, m) => `Волна ${n} / ${m}`, build: 'Стройка', go: 'В бой!', next: 'Волна',
+  wave: (n, m) => `Волна ${n} / ${m}`, go: 'В бой!',
   plant: { pumpkin: 'Тыква', rose: 'Шиповник', clover: 'Клевер', corn: 'Кукуруза', mint: 'Мята', pepper: 'Перец', dandelion: 'Одуванчик' },
   eaten: { pumpkin: 'съедена', rose: 'съеден', clover: 'съеден', corn: 'съедена', mint: 'съедена', pepper: 'съеден', dandelion: 'съеден' },
   about: {
@@ -33,21 +33,22 @@ const T = {
   role: { pumpkin: 'стена, держит путь', rose: 'шипы, бьёт и летающих', clover: 'даёт росу', corn: 'зёрна навесом, по площади', mint: 'холод: замедляет', pepper: 'огонь вокруг себя', dandelion: 'снайпер, вдвое по летающим' },
   problem: { busy: 'Здесь занято', bug: 'Здесь жук', blocks: 'Нельзя закрыть жукам путь', poor: 'Не хватает росы' },
   gain: (n) => (n > 0 ? `путь +${n}` : n < 0 ? `путь ${n}` : 'путь тот же'),
-  hint1: () => `Выбери растение ${PORT ? 'внизу' : 'слева'} и посади на траву — жуки пойдут в обход`,
+  hint1: 'Тапни по траве и выбери растение — жуки пойдут в обход',
+  pick: 'Что посадить?',
   hint2: 'Посадки удлиняют путь. Когда готов — «В\u00a0бой!»',
   zoomHint: 'Поле можно приблизить двумя пальцами',
-  won: 'Яблоко спасено!', lost: 'Жуки съели яблоко', again: 'Ещё раз', levels: 'Уровни', nextLevel: 'Дальше', resume: 'Продолжить',
+  won: 'Яблоко спасено!', lost: 'Жуки съели яблоко', retry: 'Ещё раз', levels: 'Уровни', nextLevel: 'Дальше', resume: 'Продолжить',
   pause: 'Пауза', restart: 'Заново', waveDone: (b) => `Волна пройдена  +${b}`, newPlant: 'Новое растение',
 };
 
-const CELL = 42, M = 10, COLW = 50, MAXPX = 8e6; // M: world margin kept around the grid; COLW: button column; MAXPX: field layer cap
+const CELL = 42, M = 10, MAXPX = 8e6; // M: world margin kept around the grid; MAXPX: field layer cap
 // The canvas is made anew from code on every resize. With the <canvas> from the page itself, Chrome on iPhone showed
 // the picture soft (as if at a third of the resolution), however the canvas was sized; a canvas made by script is sharp.
 let cv = document.getElementById('cv'), c = null;
 // Two coordinate spaces: the world (the field, CELL = 42 per cell, origin at the field's top-left corner) and the UI
 // (HUD, shelf, panels). Each has its own scale: the field always fits whole (fit) and can be zoomed in up to zmax.
 let dpr = 1, uk = 1, ws = 1, fit = 1, zoom = 1, zmax = 1, UW = 844, UH = 390, ox = 0, oy = 0, camX = 0, camY = 0, PORT = null, DEW = [28, 24];
-let FA = [0, 0, 1, 1], VB = [0, 0, 1, 1], SPACE = 'u', COLX = 0, TRAY = 80, tk = 0, zoomT = 0;
+let FA = [0, 0, 1, 1], VB = [0, 0, 1, 1], SPACE = 'u', tk = 0, zoomT = 0;
 let game = null, levelIdx = 0, speed = 1, paused = true, now = 0;
 let sel = null, ghost = null, pop = null, blockCache = null;
 let fx = [], banners = [], terrain = null, grassLayer = null, terrainDirty = true;
@@ -68,7 +69,8 @@ function cellAt(x, y) { const a = Math.floor(x / CELL), b = Math.floor(y / CELL)
 const screenAngle = (vx, vy) => (PORT ? Math.atan2(-vx, vy) : Math.atan2(vy, vx));
 const offEntry = (first) => (PORT ? [first[0], -60] : [FW() + 40, first[1]]);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const PTOP = 74, LTOP = 46; let PBOT = 80; // portrait: HUD rows on top, card shelf below
+// HUD bands in UI units: portrait has a row on top and one at the bottom, landscape a column on each side
+const PTOP = 46, PBOT = 52, LLEFT = 104, LRIGHT = 52;
 const toUI = (wx, wy) => [(ox + wx * ws) / uk, (oy + wy * ws) / uk];
 const faUI = () => FA.map((v) => v / uk); // field area in UI units
 // The camera keeps the grid (with its margin) covering the field area when zoomed in, and centred when it fits.
@@ -96,23 +98,13 @@ function resize() {
   const n = document.createElement('canvas'); n.id = 'cv';
   n.width = Math.round(vw * dpr); n.height = Math.round(vh * dpr); n.style.width = vw + 'px'; n.style.height = vh + 'px';
   c = n.getContext('2d'); cv.replaceWith(n); free(cv); cv = n; bindCanvas();
-  // the field area: between the HUD and the card shelf, with a column for round buttons on the right
+  // the field area: everything but the HUD bands
   const gw = FW() + 2 * M, gh = FH() + 2 * M;
-  if (PORT) {
-    PBOT = cardSize()[1] + 16;
-    const top = PTOP * uk, a = [6, top, vw - 12, vh - top - PBOT * uk - 6];
-    const f = Math.min(a[2] / gw, a[3] / gh), gut = (a[2] - gw * f) / 2;
-    if (gut < COLW * uk) a[2] -= COLW * uk - gut; // no room beside the field: give the buttons a strip of their own
-    FA = a;
-  } else {
-    TRAY = trayLayout().w;
-    FA = [TRAY * uk + 4, LTOP * uk, vw - (TRAY + COLW) * uk - 8, vh - LTOP * uk - 6];
-  }
+  FA = PORT ? [6, PTOP * uk, vw - 12, vh - (PTOP + PBOT) * uk] : [LLEFT * uk, 6, vw - (LLEFT + LRIGHT) * uk, vh - 12];
   fit = Math.min(FA[2] / gw, FA[3] / gh);
   zmax = clamp(58 / (CELL * fit), 1, 3); // up to cells of about 58 CSS px
   if (was !== PORT) zoom = 1;
   zoom = clamp(zoom, 1, zmax);
-  COLX = ((FA[0] + (FA[2] + gw * fit) / 2) / uk + UW) / 2; // middle of the space right of the field
   // world area to paint: the whole screen with the field fitted; zoomed views stay inside it
   const x0 = FA[0] + FA[2] / 2 - FW() / 2 * fit, y0 = FA[1] + FA[3] / 2 - FH() / 2 * fit;
   VB = [-x0 / fit - 4, -y0 / fit - 4, vw / fit + 8, vh / fit + 8];
@@ -131,15 +123,6 @@ function pixelRatio(vw) {
     if (z > 1.02 && z < 3) r *= z;
   }
   return r;
-}
-function cardSize() { const n = game ? game.L.plants.length : 4, cw = Math.min(64, (UW - 16 - 6 * (n - 1)) / n); return [cw, Math.min(66, cw + 6)]; }
-// landscape card tray: one column, or two when the cards would get too short
-function trayLayout() {
-  const n = game ? game.L.plants.length : 4, gap = 6, avail = UH - LTOP - 8;
-  let cols = 1, ch = (avail - gap * (n - 1)) / n;
-  if (ch < 50) { cols = 2; const rows = Math.ceil(n / 2); ch = (avail - gap * (rows - 1)) / rows; }
-  ch = Math.min(60, ch); const cw = cols === 1 ? 64 : 54, rows = Math.ceil(n / cols);
-  return { cols, cw, ch, gap, top: LTOP + (avail - rows * ch - (rows - 1) * gap) / 2, w: cols * cw + (cols + 1) * gap + 4 };
 }
 function free(cnv) { if (cnv && cnv.width) { cnv.width = 0; cnv.height = 0; } }
 let seen = [0, 0, 0, 1];
@@ -217,7 +200,6 @@ function bugSprite(kind, frame) {
 function appleSprite(mood) {
   return sprite(`apple:${mood}`, 70, 70, (x) => A.hdApple(x, 35, 38, 24, { bite: mood > 0, worried: mood > 1, sweat: mood > 2, look: [1, 0] }));
 }
-const cardSprite = (type) => sprite(`card:${type}`, 50, 52, (x) => A.hdPlant(x, type, 22, 44, .74, { noShadow: true }));
 
 // ---------- game flow ----------
 function startLevel(n) {
@@ -256,30 +238,38 @@ function guideRows(plants, bugs, pt, bt) {
   if (bugs.length) h += `<h3>${bt}</h3>` + bugs.map((b) => `<div class="gi"><img src="${bugURL(b)}" alt=""><div><b>${T.bug[b]}</b><p>${T.bugAbout[b]}</p></div></div>`).join('');
   return h;
 }
-function openGuide(plants, bugs, pt, bt) {
+function openGuide(plants, bugs, pt, bt, back = null) {
   paused = true;
   showModal(`<div class="guide">${guideRows(plants, bugs, pt, bt)}</div><div class="row"><button class="btn" id="mOk">${T.ok}</button></div>`);
-  $('mOk').onclick = () => { showModal(null); paused = false; };
+  $('mOk').onclick = () => { if (back) back(); else { showModal(null); paused = false; } };
 }
 function banner(text, life = 2, top = false) { banners.push({ text, t: 0, life, top }); }
-function selectCard(type) {
-  pop = null; ghost = null; blockCache = null; banners = banners.filter((b) => !b.top);
-  sel = sel === type ? null : type;
+// Planting: tap a free cell, a menu of plants pops up next to it. Picking a plant shows it on the cell with the new
+// trail; tapping the same plant (or the cell) again plants it. The last plant stays picked for the next cell.
+function openPick(i, j) {
+  pop = null; banners = banners.filter((b) => !b.top); blockCache = null;
+  ghost = { i, j, t: 0 }; if (sel && game.dew >= PLANTS[sel].cost) choose(sel, false);
+}
+function choose(type, confirm = true) {
+  if (!ghost) return;
+  if (confirm && ghost.type === type && ghost.ok) { confirmGhost(); return; }
+  sel = type; const { i, j } = ghost;
+  const problem = placeProblem(game, i, j) || (game.dew < PLANTS[type].cost ? 'poor' : null);
+  const tr = problem ? null : previewTrail(game, i, j);
+  Object.assign(ghost, { type, ok: !problem, problem, trail: tr, gain: tr ? tr.length - trail(game).length : 0 });
 }
 function tapCell(i, j) {
   const p = game.grid[j]?.[i];
-  if (p && p.type) { sel = null; ghost = null; pop = pop === p ? null : p; return; }
+  if (p && p.type) { ghost = null; pop = pop === p ? null : p; return; }
   pop = null;
-  if (!sel) return;
-  if (ghost && ghost.i === i && ghost.j === j && ghost.ok) { confirmGhost(); return; }
-  const problem = placeProblem(game, i, j) || (game.dew < PLANTS[sel].cost ? 'poor' : null);
-  const tr = problem ? null : previewTrail(game, i, j);
-  ghost = { i, j, ok: !problem, problem, trail: tr, gain: tr ? tr.length - trail(game).length : 0, t: 0 };
+  if (p || (i === game.fruit[0] && j === game.fruit[1]) || (i === game.entry[0] && j === game.entry[1])) { ghost = null; return; }
+  if (ghost && ghost.i === i && ghost.j === j) { if (ghost.type && ghost.ok) confirmGhost(); else ghost = null; return; }
+  openPick(i, j);
 }
 function confirmGhost() {
-  if (!ghost || !sel) return;
-  if (place(game, sel, ghost.i, ghost.j)) { terrainDirty = true; ghost = null; if (game.dew < PLANTS[sel].cost) sel = null; }
-  else { const pr = placeProblem(game, ghost.i, ghost.j) || 'poor'; ghost.ok = false; ghost.problem = pr; }
+  if (!ghost || !ghost.type) return;
+  if (place(game, ghost.type, ghost.i, ghost.j)) { terrainDirty = true; ghost = null; }
+  else { ghost.ok = false; ghost.problem = placeProblem(game, ghost.i, ghost.j) || 'poor'; }
 }
 
 // ---------- events -> effects ----------
@@ -332,7 +322,7 @@ function draw(dt) {
   else c.drawImage(terrain, tx, ty, terrain.width * k / tk, terrain.height * k / tk);
   setWorld();
   const t = now / 1000;
-  if (sel) drawGrid();
+  if (ghost) drawGrid();
   if (pop && PLANTS[pop.type].range) ring(...cellCenter(pop.i, pop.j), PLANTS[pop.type].range[pop.lvl - 1] * CELL);
 
   // depth-sorted things on the ground
@@ -349,18 +339,17 @@ function draw(dt) {
   for (const b of game.bugs) if (b.hp < b.maxHp) A.hdHp(c, sp(b.x, b.y)[0], sp(b.x, b.y)[1] - (b.kind === 'rhino' ? 44 : 24), b.kind === 'rhino' ? 56 : 26, b.hp / b.maxHp, b.kind === 'rhino' ? '#ff5a5a' : '#7be05a');
   drawFx(dt, fx);
   setUI();
-  if (ghost) ghostControls();
-  if (pop) drawPop();
   drawFx(dt, ufx);
   drawHud(t);
-  if (sel && !ghost) drawInfo(sel);
   drawBanners(dt);
+  if (ghost) drawPicker(t);
+  if (pop) drawPop();
 }
 function vignette() { const g = c.createRadialGradient(UW / 2, UH / 2, Math.min(UW, UH) * .45, UW / 2, UH / 2, Math.max(UW, UH) * .62); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(20,40,10,.3)'); c.fillStyle = g; c.fillRect(0, 0, UW, UH); }
 function ring(x, y, r) { c.save(); c.beginPath(); c.arc(x, y, r, 0, A.TAU); c.fillStyle = 'rgba(255,255,255,.13)'; c.fill(); c.setLineDash([8, 6]); c.lineWidth = 2.2; c.strokeStyle = 'rgba(255,255,255,.85)'; c.stroke(); c.restore(); }
 function drawGrid() {
   if (game.phase === 'wave' && Math.floor(now / 500) !== blockCache?.tick) blockCache = null;
-  if (!blockCache) { blockCache = new Set(blockingCells(game).map(([i, j]) => i + ',' + j)); blockCache.tick = Math.floor(now / 500); }
+  if (!blockCache) { blockCache = new Set(blockingCells(game).map(([i, j]) => i + ',' + j)); blockCache.tick = Math.floor(now / 500); if (ghost?.type) choose(ghost.type, false); } // the field changed: refresh the preview too
   if (!blockCache) blockCache = new Set(blockingCells(game).map(([i, j]) => i + ',' + j));
   c.save();
   for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) {
@@ -416,9 +405,10 @@ function drawGhost(t) {
   const { i, j, ok } = ghost, [x, y] = cellCenter(i, j);
   ghost.t += 1 / 60;
   if (ok && ghost.trail) { const pts = ghost.trail.map(([a, b]) => cellCenter(a, b)); pts.unshift(offEntry(pts[0])); c.save(); c.shadowColor = 'rgba(255,200,40,.9)'; c.shadowBlur = 8; A.strokePts(c, A.chaikin(pts, 3), 4, '#ffd23a', { dash: [10, 7] }); c.restore(); }
-  c.save(); c.beginPath(); A.rrect(c, x - 19, y - 19, 38, 38, 10); c.fillStyle = ok ? 'rgba(140,255,120,.35)' : 'rgba(255,80,70,.4)'; c.fill(); c.lineWidth = 3; c.strokeStyle = ok ? '#ffffff' : '#ff4a3a'; c.stroke(); c.restore();
-  if (PLANTS[sel].range) ring(x, y, PLANTS[sel].range[0] * CELL);
-  c.save(); c.globalAlpha = ok ? .85 : .45; blit(plantSprite(sel, 1), x - 35, y + 14 - 66); c.restore();
+  c.save(); c.beginPath(); A.rrect(c, x - 19, y - 19, 38, 38, 10); c.fillStyle = !ghost.type ? 'rgba(255,255,255,.3)' : ok ? 'rgba(140,255,120,.35)' : 'rgba(255,80,70,.4)'; c.fill(); c.lineWidth = 3; c.strokeStyle = ok || !ghost.type ? '#ffffff' : '#ff4a3a'; c.stroke(); c.restore();
+  if (!ghost.type) return;
+  if (PLANTS[ghost.type].range) ring(x, y, PLANTS[ghost.type].range[0] * CELL);
+  c.save(); c.globalAlpha = ok ? .85 : .45; blit(plantSprite(ghost.type, 1), x - 35, y + 14 - 66); c.restore();
 }
 // Where to put buttons and a label next to a cell, in UI units: below the cell if there is room, else above.
 function nearCell(i, j) {
@@ -428,30 +418,61 @@ function nearCell(i, j) {
   let ly = below ? top - 14 : uy + h + 16;
   if (ly < fy0 + 12) ly = by + 34; // no room above: the label goes under the buttons
   else if (ly > fy0 + fh - 12) ly = by - 36; // no room below: over the buttons
-  return { x: clamp(ux, fx0 + 46, Math.min(fx0 + fw, COLX - COLW / 2) - 46), by, ly };
+  return { x: clamp(ux, fx0 + 66, fx0 + fw - 66), by, ly };
 }
-function ghostControls() {
-  const { x, by, ly } = nearCell(ghost.i, ghost.j);
-  if (ghost.ok) {
-    labelPill(T.gain(ghost.gain), x, ly, ghost.gain > 0 ? '#5cc23e' : '#8a9a7a', ghost.gain > 0 ? '#1f6a17' : '#4a5a3a');
-    button(x - 24, by, 18, '#5cc23e', () => A.hdText(c, '✓', x - 24, by + 1, 20, '#fff', { stroke: '#1f5a14', sw: 3 }), confirmGhost);
-    button(x + 24, by, 18, '#ff5a4a', () => A.hdText(c, '✕', x + 24, by + 1, 16, '#fff', { stroke: '#7a1010', sw: 3 }), () => { ghost = null; });
-  } else labelPill(T.problem[ghost.problem] || '', x, ly, '#e2483a', '#7a1010');
+// The plant menu by the picked cell: a title line (what the plant does, how the trail changes) and the plant buttons.
+function drawPicker(t) {
+  const list = game.L.plants, n = list.length, bw = 50, bh = 58, gap = 6, pad = 8;
+  const cols = n * (bw + gap) - gap + pad * 2 <= UW - 12 ? n : Math.ceil(n / 2), rows = Math.ceil(n / cols);
+  const w = Math.max(cols * (bw + gap) - gap + pad * 2, 190), h = 30 + rows * (bh + gap) - gap + pad;
+  const hc = CELL / 2 * ws / uk, [fx0, fy0, fw, fh] = faUI(), [ux, y0] = toUI(...cellCenter(ghost.i, ghost.j)), uy = clamp(y0, fy0 + hc, fy0 + fh - hc);
+  // above the plant on the cell if it fits, else below; on a screen too small for both, the side that overflows less
+  const yUp = uy - hc * 2.3 - h - 8, yDown = uy + hc + 10, over = yDown + h - (UH - 4);
+  const above = yUp >= 4 || (over > 0 && 4 - yUp < over), x = clamp(ux - w / 2, 6, UW - w - 6), y = above ? Math.max(4, yUp) : Math.min(yDown, UH - h - 4);
+  ui.push({ x, y, w, h, fn: () => {}, s: 'u' }); // taps on the panel itself do nothing
+  c.save(); c.shadowColor = 'rgba(0,0,0,.35)'; c.shadowBlur = 12; A.uiPanel(c, x, y, w, h, 16, '#fff3d6', { ol: '#6a3e1c', olw: 2.5 }); c.restore();
+  // pointer towards the cell
+  const tx = clamp(ux, x + 18, x + w - 18); c.save(); c.beginPath();
+  if (above) { c.moveTo(tx - 9, y + h - 1.5); c.lineTo(tx, y + h + 8); c.lineTo(tx + 9, y + h - 1.5); } else { c.moveTo(tx - 9, y + 1.5); c.lineTo(tx, y - 8); c.lineTo(tx + 9, y + 1.5); }
+  c.fillStyle = '#fff3d6'; c.fill(); c.lineWidth = 2.5; c.strokeStyle = '#6a3e1c'; c.stroke(); c.restore();
+  // title
+  const g = ghost;
+  if (!g.type) A.hdText(c, T.pick, x + w / 2, y + 16, 14, '#6a3e1c', { stroke: null });
+  else {
+    const tag = g.ok ? T.gain(g.gain) : T.problem[g.problem] || '', col = !g.ok ? '#e2483a' : g.gain > 0 ? '#3f9a2a' : '#8a7a5a';
+    c.save(); c.font = '900 12px Nunito'; const tw = c.measureText(tag).width + 16; c.restore();
+    A.hdText(c, T.plant[g.type], x + pad + 2, y + 16, 14, '#6a3e1c', { stroke: null, align: 'left' });
+    c.save(); c.beginPath(); A.rrect(c, x + w - pad - tw, y + 7, tw, 18, 9); c.fillStyle = col; c.fill(); c.restore();
+    A.hdText(c, tag, x + w - pad - tw / 2, y + 16.5, 12, '#fff', { stroke: null });
+  }
+  list.forEach((type, k) => {
+    const r = Math.floor(k / cols), inRow = Math.min(cols, n - r * cols), rx = x + (w - (inRow * (bw + gap) - gap)) / 2;
+    const bx = rx + (k - r * cols) * (bw + gap), by = y + 30 + r * (bh + gap), on = g.type === type, poor = game.dew < PLANTS[type].cost;
+    plantButton(type, bx, by, bw, bh, on, poor, on && g.ok, t);
+    ui.push({ x: bx - gap / 2, y: by - gap / 2, w: bw + gap, h: bh + gap, fn: () => choose(type), s: 'u', card: type });
+  });
+}
+function plantButton(type, x, y, w, h, on, poor, ready, t) {
+  c.save(); if (on) { c.shadowColor = ready ? 'rgba(90,220,60,.9)' : 'rgba(255,220,60,.9)'; c.shadowBlur = 12; }
+  A.uiPanel(c, x, y, w, h, 12, ready ? '#e4ffd0' : on ? '#fff0b8' : '#fbe7c2', { ol: ready ? '#2f8a1f' : on ? '#c88a10' : '#7a4a22', olw: on ? 3 : 2 }); c.restore();
+  const s = plantSprite(type, 1), k = Math.min((w - 6) / 44, (h - 14) / 46);
+  c.save(); c.beginPath(); A.rrect(c, x + 2, y + 2, w - 4, h - 4, 10); c.clip(); c.translate(x + w / 2, y + h - 13); c.scale(k, k); blit(s, -35, -64); c.restore();
+  const label = String(PLANTS[type].cost); c.save(); c.font = '900 12px Nunito'; const lw = c.measureText(label).width + 22; c.restore();
+  const lx = x + w / 2 - lw / 2, ly = y + h - 15;
+  c.save(); c.beginPath(); A.rrect(c, lx, ly, lw, 16, 8); c.fillStyle = ready ? '#3fa52a' : 'rgba(40,25,10,.82)'; c.fill(); c.restore();
+  if (ready) A.hdText(c, '✓', lx + 8, ly + 8.5, 12, '#fff', { stroke: null }); else A.hdDrop(c, lx + 8, ly + 8.5, 4.2);
+  A.hdText(c, label, lx + lw / 2 + 5, ly + 8.5, 12, poor ? '#ff9a8a' : '#fff', { stroke: null });
+  if (ready) { // tap again to plant: a pulsing check in the corner
+    const p = 1 + Math.sin(t * 6) * .08, bx = x + w - 6, by = y + 6; c.save(); c.translate(bx, by); c.scale(p, p);
+    c.beginPath(); c.arc(0, 0, 10, 0, A.TAU); c.fillStyle = '#5cc23e'; c.fill(); c.lineWidth = 2; c.strokeStyle = '#fff'; c.stroke(); c.restore();
+    A.hdText(c, '✓', bx, by + 1, 12, '#fff', { stroke: '#1f5a14', sw: 2.5 });
+  }
+  if (poor) { c.save(); c.beginPath(); A.rrect(c, x, y, w, h, 12); c.fillStyle = 'rgba(60,40,30,.35)'; c.fill(); c.restore(); }
 }
 function wrap(text, maxW) {
   const out = []; let line = '';
   for (const w of text.split(' ')) { const tr = line ? line + ' ' + w : w; if (c.measureText(tr).width > maxW && line) { out.push(line); line = w; } else line = tr; }
   if (line) out.push(line); return out;
-}
-function drawInfo(type) {
-  const w = PORT ? UW - 16 : 400, x = PORT ? 8 : TRAY + 8, y = PORT ? PTOP + 4 : LTOP + 4;
-  c.save(); c.font = '800 12px Nunito'; const lines = wrap(T.about[type], w - 84); c.font = '900 11px Nunito'; const stats = wrap(statLine(type).join(' · '), w - 84); c.restore();
-  const h = 30 + lines.length * 15 + stats.length * 14 + 8;
-  c.save(); c.shadowColor = 'rgba(0,0,0,.3)'; c.shadowBlur = 10; A.uiPanel(c, x, y, w, h, 16, '#fff3d6', { ol: '#6a3e1c', olw: 2.5 }); c.restore();
-  const s = plantSprite(type, 1); c.save(); c.translate(x + 36, y + h / 2 + 22); c.scale(.85, .85); blit(s, -35, -66); c.restore();
-  A.hdText(c, T.plant[type], x + 74, y + 16, 15, '#6a3e1c', { stroke: null, align: 'left' });
-  lines.forEach((l, k) => A.hdText(c, l, x + 74, y + 33 + k * 15, 12, '#8a5a32', { stroke: null, align: 'left', weight: 800 }));
-  stats.forEach((l, k) => A.hdText(c, l, x + 74, y + 36 + lines.length * 15 + k * 14, 11, '#3f8a2a', { stroke: null, align: 'left' }));
 }
 function labelPill(txt, x, y, col, ol) {
   c.save(); c.font = '900 13px Nunito'; const w = Math.max(70, c.measureText(txt).width + 26); c.restore();
@@ -489,14 +510,13 @@ function drawFx(dt, list) {
   if (list === fx) fx = fx.filter((f) => f.t < f.life); else ufx = ufx.filter((f) => f.t < f.life);
 }
 function drawBanners(dt) {
-  let topY = PORT ? PTOP + 22 : 64; const midX = PORT ? UW / 2 : (FA[0] + FA[2] / 2) / uk;
+  let topY = PORT ? PTOP + 20 : 26; const midX = (FA[0] + FA[2] / 2) / uk;
   for (const b of banners) {
     b.t += dt; const k = b.t / b.life; if (k >= 1) continue;
-    if (b.top && sel && !ghost) continue; // the plant info panel is in that spot
     const a = Math.min(1, b.t * 5, (1 - k) * 5); const text = typeof b.text === 'function' ? b.text() : b.text;
     c.save(); c.globalAlpha = a;
     if (b.top) {
-      const fs = PORT ? 13 : 14; c.font = `900 ${fs}px Nunito`; const lines = wrap(text, UW - 44), w = Math.min(UW - 12, Math.max(...lines.map((l) => c.measureText(l).width)) + 30), h = 12 + lines.length * 18, x = midX;
+      const fs = PORT ? 13 : 14, room = FA[2] / uk; c.font = `900 ${fs}px Nunito`; const lines = wrap(text, room - 32), w = Math.min(room, Math.max(...lines.map((l) => c.measureText(l).width)) + 30), h = 12 + lines.length * 18, x = midX;
       A.uiPanel(c, x - w / 2, topY - 15, w, h, 15, '#fff3d6', { ol: '#6a3e1c' });
       lines.forEach((l, k) => A.hdText(c, l, x, topY + k * 18 - 1 + (lines.length > 1 ? 2 : 0), fs, '#6a3e1c', { stroke: null })); topY += h + 8;
     }
@@ -508,39 +528,70 @@ function drawBanners(dt) {
 
 // ---------- HUD ----------
 function drawHud(t) {
-  // top: [dew] [fruit hp] and the wave row; the round buttons sit in a column right of the field
-  let L;
-  if (PORT) L = { dew: [6, 6, 86, 30], hp: [98, 6, 96, 30], wave: [6, 40, UW - 12, 28], ts: 12, btn: [[UW - 21, 21], [UW - 55, 21], [UW - 89, 21]] };
-  else {
-    const right = COLX - COLW / 2 - 2;
-    L = { dew: [8, 7, 108, 32], hp: [right - 120, 7, 120, 32], wave: [124, 8, right - 252, 30], ts: 14, btn: [[COLX, 24], [COLX, 64], [COLX, 104]] };
+  const build = game.phase === 'build', zb = zmax > 1.15;
+  if (PORT) { // top: dew, fruit, wave or start, pause; bottom: powers, next wave, zoom, speed
+    const by = UH - PBOT / 2;
+    dewPill(6, 7, 86, 32); hpPill(98, 7, 70, 32);
+    if (build) goButton(174, 7, UW - 174 - 46, 32, t); else waveBar(174, 9, UW - 174 - 46, 28, T.wave(game.wave, game.waves), 12);
+    pauseBtn(UW - 22, 23);
+    powerBtns([28, by], [74, by]);
+    speedBtn(UW - 24, by); if (zb) zoomBtn(UW - 62, by);
+    if (build) previewRow(102, by, UW - (zb ? 82 : 44) - 102);
+  } else { // left: dew, fruit, wave, next wave, start; right: pause, speed, zoom, powers
+    const x = 8, w = LLEFT - 16, cx = UW - LRIGHT / 2;
+    dewPill(x, 8, w, 32); hpPill(x, 46, w, 32);
+    waveBar(x, 86, w, 26, build ? `${game.wave + 1} / ${game.waves}` : T.wave(game.wave, game.waves), 12);
+    if (build) { previewColumn(x, 120, w, UH - 120 - 58); goButton(x, UH - 50, w, 42, t); }
+    pauseBtn(cx, 24); speedBtn(cx, 64); if (zb) zoomBtn(cx, 104);
+    powerBtns([cx, UH - 74], [cx, UH - 28]);
   }
-  const [dx, dy, dw, dh] = L.dew; DEW = [dx + 20, dy + dh / 2];
-  A.uiPanel(c, dx, dy, dw, dh, dh / 2, '#fff3d6', { ol: '#6a3e1c' });
-  A.hdDrop(c, dx + 20, dy + dh / 2 + 1, 8.5); A.hdText(c, String(game.dew), dx + dw / 2 + 12, dy + dh / 2, 20, '#ffffff', { stroke: '#2a6fa8', sw: 5 });
-  drawWaveRow(...L.wave, L.ts, t);
-  // fruit hp
-  const [hx, hy, hw, hh] = L.hp, bw = hw - 44;
-  A.uiPanel(c, hx, hy, hw, hh, hh / 2, '#fff3d6', { ol: '#6a3e1c' });
-  A.hdApple(c, hx + 18, hy + hh / 2 + 1, 10, {});
-  c.save(); c.beginPath(); A.rrect(c, hx + 34, hy + hh / 2 - 6, bw, 13, 6.5); c.fillStyle = 'rgba(60,20,10,.25)'; c.fill();
-  c.beginPath(); A.rrect(c, hx + 34, hy + hh / 2 - 6, Math.max(8, bw * game.hp / game.maxHp), 13, 6.5); const hg = c.createLinearGradient(0, hy, 0, hy + hh); hg.addColorStop(0, '#ff8a8a'); hg.addColorStop(1, '#e02c3a'); c.fillStyle = hg; c.fill(); c.restore();
-  A.hdText(c, String(game.hp), hx + 34 + bw / 2, hy + hh / 2 + 1, 11, '#fff', { stroke: '#7a1010', sw: 3 });
-  const [[px, py], [sx, sy], [qx, qy]] = L.btn;
-  button(px, py, 16, '#7ac8ff', (x, y) => { c.save(); c.fillStyle = '#fff'; c.strokeStyle = '#1f5a8a'; c.lineWidth = 1.5; for (const dx of [-5, 2]) { c.beginPath(); A.rrect(c, x + dx, y - 6, 4, 12, 1.5); c.fill(); c.stroke(); } c.restore(); }, openPause);
-  button(sx, sy, 16, speed > 1 ? '#ff9a2a' : '#ffcf3a', (x, y) => A.hdText(c, '×' + speed, x, y + 1, 13, '#fff', { stroke: '#8a5a00', sw: 3.5 }), () => { speed = speed > 1 ? 1 : 2; });
-  button(qx, qy, 16, '#8fd06a', (x, y) => A.hdText(c, '?', x, y + 1, 17, '#fff', { stroke: '#2a6a1a', sw: 3.5 }), () => openGuide(game.L.plants, bugsOf(game.L), T.plantsHere, T.bugsHere));
-  drawCards();
-  // right column: zoom at the top of the field, powers at the bottom
-  const [, fy0, , fh] = faUI(), pr = 19, pb = fy0 + fh - pr - 4;
-  if (zmax > 1.15) {
-    const zy = PORT ? fy0 + pr + 4 : 144, inn = zoom < 1.05;
-    button(COLX, zy, 17, '#fff3d6', (x, y) => zoomIcon(x, y, inn), () => { const cx = FA[0] + FA[2] / 2, cy = FA[1] + FA[3] / 2; if (inn) zoomTo(Math.min(2, zmax), cx, cy); else zoomTo(1, cx, cy); });
-  }
-  button(COLX, pb - 48, pr, '#8fd6ff', (x, y) => A.iconFrost(x, y, c), () => usePower(game, 'frost'), !game.powers.frost || game.phase !== 'wave');
-  badge(COLX, pb - 48, pr, game.powers.frost);
-  button(COLX, pb, pr, '#4aa8ee', (x, y) => A.iconRain(x, y, c), () => usePower(game, 'rain'), !game.powers.rain);
-  badge(COLX, pb, pr, game.powers.rain);
+}
+function dewPill(x, y, w, h) {
+  DEW = [x + 18, y + h / 2];
+  A.uiPanel(c, x, y, w, h, h / 2, '#fff3d6', { ol: '#6a3e1c' });
+  A.hdDrop(c, x + 18, y + h / 2 + 1, 8.5); A.hdText(c, String(game.dew), x + w / 2 + 10, y + h / 2, 19, '#ffffff', { stroke: '#2a6fa8', sw: 5 });
+}
+function hpPill(x, y, w, h) {
+  A.uiPanel(c, x, y, w, h, h / 2, '#fff3d6', { ol: '#6a3e1c' });
+  A.hdApple(c, x + 17, y + h / 2 + 1, 10, {});
+  const bx = x + 32, bw = w - 40, k = game.hp / game.maxHp;
+  c.save(); c.beginPath(); A.rrect(c, bx, y + h / 2 - 7, bw, 14, 7); c.fillStyle = 'rgba(60,20,10,.25)'; c.fill();
+  c.beginPath(); A.rrect(c, bx, y + h / 2 - 7, Math.max(10, bw * k), 14, 7); const g = c.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, '#ff8a8a'); g.addColorStop(1, '#e02c3a'); c.fillStyle = g; c.fill(); c.restore();
+  A.hdText(c, String(game.hp), bx + bw / 2, y + h / 2 + 1, 11, '#fff', { stroke: '#7a1010', sw: 3 });
+}
+function goButton(x, y, w, h, t) {
+  const pulse = 1 + Math.sin(t * 5) * .03;
+  c.save(); c.translate(x + w / 2, y + h / 2); c.scale(pulse, pulse); c.shadowColor = 'rgba(80,200,40,.7)'; c.shadowBlur = 10; A.uiPanel(c, -w / 2, -h / 2, w, h, Math.min(h / 2, 16), '#5cc23e', { ol: '#1f6a17', olw: 2.5 }); c.restore();
+  A.hdText(c, T.go, x + w / 2, y + h / 2 + .5, 16, '#fff', { stroke: '#1f5a14', sw: 4 });
+  ui.push({ x: x - 4, y: y - 4, w: w + 8, h: h + 8, fn: () => { ghost = null; pop = null; startWave(game); }, s: 'u' });
+}
+function bugChip(k, n, cx, cy) {
+  const s = bugSprite(k, 0), sc = k === 'rhino' ? .3 : .5;
+  c.save(); c.translate(cx, cy); c.rotate(-Math.PI / 2); c.scale(sc, sc); blit(s, -s.w / 2, -s.h / 2); c.restore();
+  A.hdText(c, '×' + n, cx + 12, cy + 3, 12, '#fff', { stroke: '#4a2a12', sw: 3.5, align: 'left' });
+}
+// who comes in the next wave: a row (portrait, bottom band) or a column (landscape, left band)
+function previewRow(x, cy, w) {
+  const prev = wavePreview(game), cw = 44, tw = prev.length * cw + 34, x0 = x + (w - tw) / 2;
+  A.uiPanel(c, x0, cy - 15, tw, 30, 15, 'rgba(60,35,18,.78)', { ol: '#2a1a0e' });
+  A.hdText(c, `${game.wave + 1}/${game.waves}`, x0 + 17, cy + .5, 11, '#ffe9a0', { stroke: null });
+  prev.forEach(([k, n], i) => bugChip(k, n, x0 + 38 + i * cw, cy));
+}
+function previewColumn(x, y, w, hmax) {
+  const prev = wavePreview(game), rh = Math.min(28, hmax / Math.max(1, prev.length));
+  prev.forEach(([k, n], i) => { const cy = y + rh * i + rh / 2; A.uiPanel(c, x + 6, cy - 12, w - 12, 24, 12, 'rgba(60,35,18,.7)', { ol: '#2a1a0e', olw: 1.5 }); bugChip(k, n, x + 26, cy); });
+}
+function pauseBtn(x, y) { button(x, y, 16, '#7ac8ff', (bx, by) => { c.save(); c.fillStyle = '#fff'; c.strokeStyle = '#1f5a8a'; c.lineWidth = 1.5; for (const dx of [-5, 2]) { c.beginPath(); A.rrect(c, bx + dx, by - 6, 4, 12, 1.5); c.fill(); c.stroke(); } c.restore(); }, openPause); }
+function speedBtn(x, y) { button(x, y, 16, speed > 1 ? '#ff9a2a' : '#ffcf3a', (bx, by) => A.hdText(c, '×' + speed, bx, by + 1, 13, '#fff', { stroke: '#8a5a00', sw: 3.5 }), () => { speed = speed > 1 ? 1 : 2; }); }
+function zoomBtn(x, y) {
+  const inn = zoom < 1.05;
+  button(x, y, 16, '#fff3d6', (bx, by) => zoomIcon(bx, by, inn), () => { const cx = FA[0] + FA[2] / 2, cy = FA[1] + FA[3] / 2; zoomTo(inn ? Math.min(2, zmax) : 1, cx, cy); });
+}
+function powerBtns([fx0, fy0], [rx, ry]) {
+  button(fx0, fy0, 19, '#8fd6ff', (x, y) => A.iconFrost(x, y, c), () => usePower(game, 'frost'), !game.powers.frost || game.phase !== 'wave');
+  badge(fx0, fy0, 19, game.powers.frost);
+  button(rx, ry, 19, '#4aa8ee', (x, y) => A.iconRain(x, y, c), () => usePower(game, 'rain'), !game.powers.rain);
+  badge(rx, ry, 19, game.powers.rain);
 }
 // magnifier with a plus (zoom in) or a minus (back to the whole field)
 function zoomIcon(x, y, plus) {
@@ -551,59 +602,12 @@ function zoomIcon(x, y, plus) {
   c.restore();
 }
 function badge(x, y, r, n) { if (!n) return; c.save(); c.beginPath(); c.arc(x + r * .72, y - r * .68, 9, 0, A.TAU); c.fillStyle = '#ff4646'; c.fill(); c.lineWidth = 2; c.strokeStyle = '#fff'; c.stroke(); c.restore(); A.hdText(c, String(n), x + r * .72, y - r * .68 + .5, 11, '#fff', { stroke: null }); }
-function drawCards() {
-  const list = game.L.plants, n = list.length;
-  let cw, ch, pos, gap = 6;
-  if (PORT) {
-    [cw, ch] = cardSize();
-    const top = UH - PBOT + (PBOT - ch) / 2 + 2, x0 = (UW - (n * cw + (n - 1) * gap)) / 2; pos = (k, on) => [x0 + k * (cw + gap), on ? top - 6 : top];
-    shelf(-14, UH - PBOT, UW + 28, PBOT + 20, 0, 0, 0, UH + 20);
-  } else {
-    const T = trayLayout(); ({ cw, ch, gap } = T);
-    pos = (k) => [gap + 2 + (k % T.cols) * (cw + gap), T.top + Math.floor(k / T.cols) * (ch + gap)];
-    shelf(-14, LTOP - 6, TRAY + 12, UH - LTOP + 20, 0, 0, TRAY, 0);
-  }
-  list.forEach((type, k) => {
-    const P = PLANTS[type], on = sel === type, [x, y] = pos(k, on), poor = game.dew < P.cost;
-    c.save(); if (on) { c.shadowColor = 'rgba(255,220,60,.95)'; c.shadowBlur = 14; }
-    A.uiPanel(c, x, y, cw, ch, 12, on ? '#fff0b8' : '#fbe7c2', { ol: on ? '#c88a10' : '#7a4a22', olw: on ? 3 : 2 }); c.restore();
-    // the plant sprite is 70x84 with its base at (35, 66); fit it above the price
-    const s = plantSprite(type, 1), k2 = Math.min((cw - 6) / 44, (ch - 14) / 46);
-    c.save(); c.beginPath(); A.rrect(c, x + 2, y + 2, cw - 4, ch - 4, 10); c.clip(); c.translate(x + cw / 2, y + ch - 13); c.scale(k2, k2); blit(s, -35, -64); c.restore();
-    const label = String(P.cost); c.save(); c.font = '900 12px Nunito'; const bw = c.measureText(label).width + 22; c.restore();
-    const bx = x + cw / 2 - bw / 2, by = y + ch - 15;
-    c.save(); c.beginPath(); A.rrect(c, bx, by, bw, 16, 8); c.fillStyle = 'rgba(40,25,10,.82)'; c.fill(); c.restore();
-    A.hdDrop(c, bx + 8, by + 8.5, 4.2); A.hdText(c, label, bx + bw / 2 + 5, by + 8.5, 12, poor ? '#ff9a8a' : '#fff', { stroke: null });
-    if (poor) { c.save(); c.beginPath(); A.rrect(c, x, y, cw, ch, 12); c.fillStyle = 'rgba(60,40,30,.35)'; c.fill(); c.restore(); }
-    ui.push({ x: x - gap / 2, y: y - gap / 2 - (PORT ? 6 : 0), w: cw + gap, h: ch + gap + (PORT ? 12 : 0), fn: () => selectCard(type), s: 'u', card: type });
-  });
-}
-function shelf(x, y, w, h, gx0_, gy0_, gx1, gy1) {
-  c.save(); c.shadowColor = 'rgba(0,0,0,.35)'; c.shadowBlur = 10; c.beginPath(); A.rrect(c, x, y, w, h, 16);
-  const tg = c.createLinearGradient(gx0_, gy0_ || y, gx1, gy1 || y); tg.addColorStop(0, '#7a4a26'); tg.addColorStop(1, '#a8703c'); c.fillStyle = tg; c.fill(); c.restore();
-  c.save(); c.beginPath(); A.rrect(c, x, y, w, h, 16); c.lineWidth = 2.5; c.strokeStyle = '#4a2a12'; c.stroke(); c.restore();
-}
 // One line: wave progress, and while building also who comes next and the start button.
 function waveBar(x, y, w, h, text, ts) {
   A.uiPanel(c, x, y, w, h, h / 2, '#5a3a22', { ol: '#2a1a0e' });
-  const done = game.phase === 'build' ? game.wave / game.waves : (game.wave - 1 + Math.min(1, game.waveTime / Math.max(1, (game.L.waves[game.wave - 1] || [[0, 1, 1, 0]]).reduce((s, [, n, gap, d]) => s + d + n * gap, 0)))) / game.waves;
+  const done = game.phase !== 'wave' ? game.wave / game.waves : (game.wave - 1 + Math.min(1, game.waveTime / Math.max(1, (game.L.waves[game.wave - 1] || [[0, 1, 1, 0]]).reduce((s, [, n, gap, d]) => s + d + n * gap, 0)))) / game.waves;
   c.save(); c.beginPath(); A.rrect(c, x + 4, y + 4, Math.max(h - 8, (w - 8) * done), h - 8, (h - 8) / 2); const g = c.createLinearGradient(0, y + 4, 0, y + h - 4); g.addColorStop(0, '#a8f070'); g.addColorStop(1, '#4cb02e'); c.fillStyle = g; c.fill(); c.restore();
   A.hdText(c, text, x + w / 2, y + h / 2 + .5, ts, '#ffffff', { stroke: '#2a1a0e', sw: 4 });
-}
-function drawWaveRow(x, y, w, h, ts, t) {
-  if (game.phase !== 'build') { const bw = Math.min(w, 220); waveBar(x + (w - bw) / 2, y, bw, h, T.wave(game.wave, game.waves), ts); return; }
-  const prev = wavePreview(game), chipW = 46, bw = 88, barW = Math.max(64, w - bw - prev.length * chipW - 10);
-  c.save(); c.font = `900 ${ts}px Nunito`; const long = `${T.next} ${game.wave + 1} / ${game.waves}`, txt = c.measureText(long).width + 16 < barW ? long : `${game.wave + 1} / ${game.waves}`; c.restore();
-  waveBar(x, y, barW, h, txt, ts);
-  prev.forEach(([k, n], i) => {
-    const cx = x + barW + 6 + i * chipW + 12, cy = y + h / 2, s = bugSprite(k, 0), sc = (k === 'rhino' ? .3 : .55) * h / 28;
-    c.save(); c.translate(cx, cy); c.rotate(-Math.PI / 2); c.scale(sc, sc); blit(s, -s.w / 2, -s.h / 2); c.restore();
-    A.hdText(c, '×' + n, cx + 18, cy + 4, 12, '#fff', { stroke: '#4a2a12', sw: 3.5 });
-  });
-  const bx = x + w - bw, pulse = 1 + Math.sin(t * 5) * .03;
-  c.save(); c.translate(bx + bw / 2, y + h / 2); c.scale(pulse, pulse); c.shadowColor = 'rgba(80,200,40,.7)'; c.shadowBlur = 10; A.uiPanel(c, -bw / 2, -h / 2, bw, h, h / 2, '#5cc23e', { ol: '#1f6a17', olw: 2.5 }); c.restore();
-  A.hdText(c, T.go, bx + bw / 2, y + h / 2 + .5, 15, '#fff', { stroke: '#1f5a14', sw: 4 });
-  ui.push({ x: bx - 4, y: y - 6, w: bw + 8, h: h + 12, fn: () => { sel = null; ghost = null; pop = null; startWave(game); }, s: 'u' });
 }
 function drawPop() {
   const p = pop, up = upgradeCost(p), { x, by, ly } = nearCell(p.i, p.j);
@@ -688,9 +692,10 @@ const LOCK = '<svg width="18" height="20" viewBox="0 0 18 20"><rect x="2" y="8" 
 function showModal(html) { $('modal').hidden = !html; if (html) $('card').innerHTML = html; }
 function openPause() {
   paused = true;
-  showModal(`<h2>${T.pause}</h2><div class="row"><button class="btn" id="mResume">${T.resume}</button><button class="btn alt" id="mRestart">${T.restart}</button><button class="btn alt" id="mHome">${T.levels}</button></div>`);
+  showModal(`<h2>${T.pause}</h2><div class="row"><button class="btn" id="mResume">${T.resume}</button><button class="btn alt" id="mHelp">${T.help}</button><button class="btn alt" id="mRestart">${T.restart}</button><button class="btn alt" id="mHome">${T.levels}</button></div>`);
   $('mResume').onclick = () => { showModal(null); paused = false; };
   $('mRestart').onclick = () => startLevel(levelIdx);
+  $('mHelp').onclick = () => openGuide(game.L.plants, bugsOf(game.L), T.plantsHere, T.bugsHere, openPause);
   $('mHome').onclick = () => { showModal(null); showHome(true); };
 }
 function endScreen(won) {
@@ -699,7 +704,7 @@ function endScreen(won) {
   const hasNext = won && levelIdx + 1 < LEVELS.length;
   showModal(`<h1 class="${won ? 'win' : 'lose'}">${won ? T.won : T.lost}</h1>${won ? `<div class="stars">${'★'.repeat(st)}<s>${'★'.repeat(3 - st)}</s></div>` : ''}
     <p>${won ? `Жуков: ${game.stats.kills} · укусов: ${game.stats.bites}` : `Дошли до волны ${game.wave} из ${game.waves}`}</p>
-    <div class="row">${hasNext ? `<button class="btn" id="mNext">${T.nextLevel}</button>` : ''}<button class="btn ${hasNext ? 'alt' : ''}" id="mAgain">${T.again}</button><button class="btn alt" id="mHome">${T.levels}</button></div>`);
+    <div class="row">${hasNext ? `<button class="btn" id="mNext">${T.nextLevel}</button>` : ''}<button class="btn ${hasNext ? 'alt' : ''}" id="mAgain">${T.retry}</button><button class="btn alt" id="mHome">${T.levels}</button></div>`);
   if (hasNext) $('mNext').onclick = () => startLevel(levelIdx + 1);
   $('mAgain').onclick = () => startLevel(levelIdx);
   $('mHome').onclick = () => { showModal(null); showHome(true); };

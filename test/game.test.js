@@ -47,7 +47,7 @@ test('upgrades raise the level up to 3, powers are limited', () => {
 
 test('bugs never walk through plants', () => {
   const g = createGame(1); g.dew = 2000;
-  for (let j = 1; j < ROWS; j++) place(g, 'pumpkin', 10, j);
+  for (let j = 1; j < ROWS; j++) assert.ok(place(g, 'pumpkin', 7, j), `row ${j}`);
   startWave(g);
   for (let n = 0; n < 60 * 60 && g.phase === 'wave'; n++) {
     step(g, 1 / 60);
