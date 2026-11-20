@@ -1,7 +1,20 @@
 # Fruit Defense
 
-A browser tower-defense game for the family: bugs crawl towards a fruit, and you stop them by planting plants on the
-field. Plants are the towers, bugs come in many kinds.
+A browser tower-defense game for the family. Bugs crawl from the anthill to the apple; you plant a garden on the open
+field and the plants are the towers. Bugs always take the shortest way, so every plant you put down reshapes their
+trail — you build the maze yourself (the way can never be closed completely). Landscape, no ads, works offline (PWA),
+Russian for now.
 
-Started over from scratch on 2026-11-20. The genre study the design is built on is in
-[docs/research.md](docs/research.md) (in Russian).
+- `public/data.js` — plants, bugs and the three levels with their waves.
+- `public/game.js` — simulation (no DOM): distance field to the fruit, placement rules, bugs, shots, waves, powers.
+- `public/art.js` — every picture is drawn by code (volume shading, sprites, terrain, effects, UI pieces).
+- `public/view.js` — drawing with cached sprites, input, HUD, menus. `?dev` exposes `window.__fd` for scripted checks.
+- `server/` — Node 22, no dependencies: static files and `/healthz`.
+- `node --test test/*.test.js` — pathing and placement rules, economy, server, offline cache list, and a bot that must win
+  every level. `node test/bot.mjs [levels...]` prints how the bot did, wave by wave.
+- [docs/research.md](docs/research.md) — the genre study the design started from (in Russian).
+
+When anything in `public/` changes, bump `VERSION` in both `public/game.js` and `public/sw.js`.
+Release: tag `vX.Y.Z` → GitHub Actions builds `ghcr.io/zxibizz/fruit-game:X.Y.Z`, Flux rolls out 0.x tags by itself.
+
+See [CREDITS.md](CREDITS.md) for third-party assets.
