@@ -9,6 +9,7 @@ import { PLANTS, BUGS, LEVELS } from './data.js';
 const T = {
   wave: (n, m) => `Волна ${n} / ${m}`, build: 'Стройка', go: 'В бой!', next: 'Волна',
   plant: { pumpkin: 'Тыква', rose: 'Шиповник', clover: 'Клевер', corn: 'Кукуруза', mint: 'Мята', pepper: 'Перец', dandelion: 'Одуванчик' },
+  eaten: { pumpkin: 'съедена', rose: 'съеден', clover: 'съеден', corn: 'съедена', mint: 'съедена', pepper: 'съеден', dandelion: 'съеден' },
   role: { pumpkin: 'стена, держит путь', rose: 'шипы, бьёт и летающих', clover: 'даёт росу', corn: 'зёрна навесом, по площади', mint: 'холод: замедляет', pepper: 'огонь вокруг себя', dandelion: 'снайпер, вдвое по летающим' },
   problem: { busy: 'Здесь занято', bug: 'Здесь жук', blocks: 'Нельзя закрыть жукам путь', poor: 'Не хватает росы' },
   gain: (n) => (n > 0 ? `путь +${n}` : n < 0 ? `путь ${n}` : 'путь тот же'),
@@ -107,7 +108,7 @@ function startLevel(n) {
 }
 function banner(text, life = 2, top = false) { banners.push({ text, t: 0, life, top }); }
 function selectCard(type) {
-  pop = null; ghost = null;
+  pop = null; ghost = null; blockCache = null;
   sel = sel === type ? null : type;
 }
 function tapCell(i, j) {
@@ -135,11 +136,11 @@ function handleEvents() {
       case 'splash': { const x = px(e.x), y = py(e.y); for (let n = 0; n < 8; n++) fx.push({ k: 'kern', x, y, vx: (Math.random() - .5) * 90, vy: -30 - Math.random() * 50, t: 0, life: .4 }); break; }
       case 'fire': { const [x, y] = cellCenter(e.p.i, e.p.j); fx.push({ k: 'fire', x, y, t: 0, life: .45, r: PLANTS.pepper.range[e.p.lvl - 1] * CELL }); bump(e.p, .2); break; }
       case 'shoot': bump(e.p, .12); break;
-      case 'bite': { const [x, y] = cellCenter(...game.fruit); fx.push({ k: 'dmg', x, y: y - 40, t: 0, life: .9, txt: `-${BUGS[e.b.kind].bite}`, red: true }); anim.set('apple', 0); break; }
+      case 'bite': { angles.delete(e.b.id); const [x, y] = cellCenter(...game.fruit); fx.push({ k: 'dmg', x, y: y - 40, t: 0, life: .9, txt: `-${BUGS[e.b.kind].bite}`, red: true }); anim.set('apple', 0); break; }
       case 'collect': { const x = px(e.d.x), y = py(e.d.y); fx.push({ k: 'fly', x, y, t: 0, life: .5 }); break; }
       case 'place': bump(e.p, .35, true); dust(e.p); terrainDirty = true; break;
       case 'upgrade': { const [x, y] = cellCenter(e.p.i, e.p.j); for (let n = 0; n < 6; n++) fx.push({ k: 'spark', x: x + (Math.random() - .5) * 30, y: y - 10 - Math.random() * 30, t: n * .05, life: .5 }); bump(e.p, .3, true); break; }
-      case 'sell': case 'plantDead': dust(e.p); terrainDirty = true; if (pop === e.p) pop = null; if (e.t === 'plantDead') banner(`${T.plant[e.p.type]} съеден${e.p.type === 'pumpkin' ? 'а' : ''}!`, 1.4); break;
+      case 'sell': case 'plantDead': dust(e.p); terrainDirty = true; if (pop === e.p) pop = null; if (e.t === 'plantDead') banner(`${T.plant[e.p.type]} ${T.eaten[e.p.type]}!`, 1.4); break;
       case 'chew': { const [x, y] = cellCenter(e.p.i, e.p.j); for (let n = 0; n < 6; n++) fx.push({ k: 'crumb', x, y: y - 6, vx: (Math.random() - .5) * 50, vy: -20 - Math.random() * 30, t: 0, life: .5, col: e.p.type === 'pumpkin' ? '#f7a23a' : '#6cc04a' }); bump(e.p, .2); break; }
       case 'wave': banner(T.wave(e.n, game.waves), 1.4); break;
       case 'waveDone': banner(T.waveDone(e.bonus), 1.8); if (levelIdx === 0 && e.n === 1) banner(T.hint2, 5, true); break;
@@ -191,6 +192,8 @@ function draw(dt) {
 
 function ring(x, y, r) { c.save(); c.beginPath(); c.arc(x, y, r, 0, A.TAU); c.fillStyle = 'rgba(255,255,255,.13)'; c.fill(); c.setLineDash([8, 6]); c.lineWidth = 2.2; c.strokeStyle = 'rgba(255,255,255,.85)'; c.stroke(); c.restore(); }
 function drawGrid() {
+  if (game.phase === 'wave' && Math.floor(now / 500) !== blockCache?.tick) blockCache = null;
+  if (!blockCache) { blockCache = new Set(blockingCells(game).map(([i, j]) => i + ',' + j)); blockCache.tick = Math.floor(now / 500); }
   if (!blockCache) blockCache = new Set(blockingCells(game).map(([i, j]) => i + ',' + j));
   c.save();
   for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) {

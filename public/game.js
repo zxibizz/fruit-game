@@ -103,14 +103,14 @@ export function place(g, type, i, j) {
 }
 export function upgradeCost(p) { return p.lvl < 3 ? PLANTS[p.type].up[p.lvl - 1] : null; }
 export function upgrade(g, p) {
-  const c = upgradeCost(p); if (c == null || g.dew < c) return false;
+  const c = upgradeCost(p); if (c == null || g.dew < c || g.phase === 'won' || g.phase === 'lost') return false;
   g.dew -= c; p.spent += c; p.lvl++; const mh = stat(p, 'hp'); p.hp += mh - p.maxHp; p.maxHp = mh;
   g.events.push({ t: 'upgrade', p });
   return true;
 }
 export const refund = (p) => Math.floor(p.spent / 2);
 export function removePlant(g, p, sold = true) {
-  const k = g.plants.indexOf(p); if (k < 0) return;
+  const k = g.plants.indexOf(p); if (k < 0 || (sold && (g.phase === 'won' || g.phase === 'lost'))) return;
   g.plants.splice(k, 1); g.grid[p.j][p.i] = null; g.dist = computeDist(g);
   if (sold) g.dew += refund(p);
   g.events.push({ t: sold ? 'sell' : 'plantDead', p });
@@ -171,7 +171,10 @@ function progress(g, b) {
 
 function updateBug(g, b, dt) {
   if (b.frozen > 0) { b.frozen -= dt; return; }
-  if (b.burn > 0) { b.burn -= dt; damage(g, b, b.burnDps * dt + b.armor, 'burn'); if (b.hp <= 0) return; }
+  if (b.burn > 0) {
+    b.burn -= dt; b.hp -= b.burnDps * dt; // burn ignores armor and has no 1-damage floor
+    if (b.hp <= 0) { g.dew += BUGS[b.kind].reward; g.stats.kills++; g.events.push({ t: 'kill', b, reward: BUGS[b.kind].reward }); return; }
+  }
   const B = BUGS[b.kind];
   if (b.chew > 0) {
     b.chew -= dt;
