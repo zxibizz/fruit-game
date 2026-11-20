@@ -74,7 +74,7 @@ const visField = () => [(FBOX[0] - ox) / ws, (FBOX[1] - oy) / ws, FBOX[2] / ws, 
 function resize() {
   const vw = innerWidth, vh = innerHeight, was = PORT;
   PORT = vh > vw;
-  dpr = Math.min(pixelRatio(vw), 5); seen = [vw, vh, devicePixelRatio, visualViewport?.scale || 1];
+  dpr = Math.min(pixelRatio(vw), 5, Q.dpr || 9); seen = [vw, vh, devicePixelRatio, visualViewport?.scale || 1]; DIAG.resizes++;
   uk = PORT ? clamp(Math.min(vw / 340, vh / 560), 1, 1.8) : clamp(Math.min(vw / 740, vh / 340), 1, 1.8);
   UW = vw / uk; const sz = cardSize(); PBOT = sz[1] + 16;
   UW = vw / uk; UH = vh / uk;
@@ -107,6 +107,20 @@ function pixelRatio(vw) {
 function cardSize() { const n = game ? game.L.plants.length : 4, cw = Math.min(64, (UW - 16 - 6 * (n - 1)) / n); return [cw, Math.min(66, cw + 6)]; }
 function free(cnv) { if (cnv && cnv.width) { cnv.width = 0; cnv.height = 0; } }
 let seen = [0, 0, 0];
+// ?diag draws a 1:1 test patch and live numbers in the corner; ?dpr=2 caps the canvas density
+const Q = Object.fromEntries(new URLSearchParams(location.search)); Q.dpr = Number(Q.dpr) || 0;
+const DIAG = { on: 'diag' in Q, resizes: 0, frames: 0, fps: 0, t0: 0 };
+function drawDiag(ts) {
+  DIAG.frames++; if (ts - DIAG.t0 > 1000) { DIAG.fps = DIAG.frames * 1000 / (ts - DIAG.t0); DIAG.frames = 0; DIAG.t0 = ts; }
+  if (!DIAG.on) return;
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  const x0 = Math.round(8 * dpr), y0 = Math.round((PORT ? PTOP + 30 : 50) * uk * dpr), w = Math.round(250 * dpr), h = Math.round(64 * dpr);
+  c.fillStyle = '#fff8ea'; c.fillRect(x0, y0, w, h);
+  for (let i = 0; i < 24; i++) { c.fillStyle = i % 2 ? '#000' : '#fff'; c.fillRect(x0 + Math.round(6 * dpr) + i, y0 + Math.round(6 * dpr), 1, Math.round(20 * dpr)); }
+  c.fillStyle = '#5a3a1c'; c.font = `700 ${Math.round(13 * dpr)}px system-ui`; c.textBaseline = 'top';
+  c.fillText(`fps ${DIAG.fps.toFixed(0)} · пересозданий ${DIAG.resizes}`, x0 + Math.round(40 * dpr), y0 + Math.round(8 * dpr));
+  c.fillText(`холст ${cv.width}×${cv.height} @${dpr.toFixed(2)} ui ${uk.toFixed(2)} поле ${ws.toFixed(2)}`, x0 + Math.round(6 * dpr), y0 + Math.round(36 * dpr));
+}
 function layer(w, h, k = Math.max(ws, uk) * dpr) {
   const cnv = document.createElement('canvas');
   cnv.width = Math.ceil(w * k); cnv.height = Math.ceil(h * k);
@@ -269,6 +283,7 @@ function frame(ts) {
   }
   if (innerWidth !== seen[0] || innerHeight !== seen[1] || devicePixelRatio !== seen[2] || (visualViewport?.scale || 1) !== seen[3]) resize();
   if (game) draw(paused ? 0 : dt);
+  drawDiag(ts);
   requestAnimationFrame(frame);
 }
 
