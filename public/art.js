@@ -95,6 +95,9 @@ function strokePts(c, pts, w, color, o = {}) {
 function star5(x, y, r) { return c => { for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr2 = i % 2 ? r * .45 : r; c.lineTo(x + Math.cos(a) * rr2, y + Math.sin(a) * rr2); } c.closePath(); }; }
 
 let LW = 844, LH = 390;
+// Canvas blur filters are missing in some browsers (Safari and Chrome on iOS): soft effects then use gradients.
+export const CAN_BLUR = (() => { try { const x = document.createElement('canvas').getContext('2d'); x.filter = 'blur(2px)'; return x.filter === 'blur(2px)'; } catch { return false; } })();
+function softBlob(c, x, y, rx, ry, rot, rgb, a) { c.save(); c.translate(x, y); c.rotate(rot); c.scale(rx, ry); const g = c.createRadialGradient(0, 0, 0, 0, 0, 1); g.addColorStop(0, `rgba(${rgb},${a})`); g.addColorStop(.55, `rgba(${rgb},${a * .7})`); g.addColorStop(1, `rgba(${rgb},0)`); c.fillStyle = g; c.beginPath(); c.arc(0, 0, 1, 0, TAU); c.fill(); c.restore(); }
 export function setView(w, h) { LW = w; LH = h; }
 const FONT = 'Nunito, Rubik, system-ui, sans-serif';
 const HS = {
@@ -511,11 +514,12 @@ hdLegs = function (c, xs, len, col, w = 1.7) {
 hdPath = function (c, pts, w = 30, seed = 1) {
   const N = noise1(seed), total = pts.reduce((s, p, i) => i ? s + Math.hypot(p[0] - pts[i - 1][0], p[1] - pts[i - 1][1]) : 0, 0), step = 2.5;
   const stamp = (grow, col, blur) => { c.save(); if (blur) c.filter = `blur(${blur}px)`; c.fillStyle = col; c.beginPath(); for (let d = 0; d <= total; d += step) { const p = along(pts, d / total), r = w / 2 + N(d) * 3.2 + grow; c.moveTo(p.x + r, p.y); c.arc(p.x, p.y, r, 0, TAU); } c.fill(); c.restore(); };
-  stamp(9, 'rgba(30,70,15,.30)', 5);
+  if (CAN_BLUR) stamp(9, 'rgba(30,70,15,.30)', 5); else for (const g of [13, 9, 5]) stamp(g, 'rgba(30,70,15,.1)');
   stamp(3, '#6e4426');
   stamp(0, '#c08852');
-  c.save(); c.filter = 'blur(6px)'; strokePts(c, pts, w * .55, 'rgba(238,200,145,.8)'); c.restore();
-  for (const off of [-.2, .2]) { const rut = []; for (let d = 0; d <= total; d += 6) { const p = along(pts, d / total); rut.push([p.x - Math.sin(p.a) * w * off, p.y + Math.cos(p.a) * w * off]); } c.save(); c.filter = 'blur(1.5px)'; strokePts(c, rut, 2.4, 'rgba(110,65,30,.22)'); c.restore(); }
+  if (CAN_BLUR) { c.save(); c.filter = 'blur(6px)'; strokePts(c, pts, w * .55, 'rgba(238,200,145,.8)'); c.restore(); }
+  else for (const k of [.7, .55, .4, .25]) strokePts(c, pts, w * k, 'rgba(238,200,145,.24)');
+  for (const off of [-.2, .2]) { const rut = []; for (let d = 0; d <= total; d += 6) { const p = along(pts, d / total); rut.push([p.x - Math.sin(p.a) * w * off, p.y + Math.cos(p.a) * w * off]); } c.save(); if (CAN_BLUR) c.filter = 'blur(1.5px)'; strokePts(c, rut, 2.4, 'rgba(110,65,30,.18)'); c.restore(); }
   const R = rng(seed + 7);
   for (let i = 0; i < total / 3; i++) { const p = along(pts, R()), ox = (R() - .5) * w * .85, oy = (R() - .5) * w * .85; c.beginPath(); c.arc(p.x + ox, p.y + oy, .6 + R() * 1.1, 0, TAU); c.fillStyle = R() > .5 ? 'rgba(100,60,28,.45)' : 'rgba(255,228,180,.55)'; c.fill(); }
   for (let i = 0; i < total / 55; i++) { const p = along(pts, R()), ox = (R() - .5) * w * .7, oy = (R() - .5) * w * .7, cols = ['#c9b79a', '#a89a86', '#d8b48a', '#9c8a76']; hdBall(c, p.x + ox, p.y + oy, 2.2 + R() * 2.4, 1.6 + R() * 1.6, cols[i % 4], { olk: .45, specA: .6, rot: R() * 3, noBounce: true }); }
@@ -548,11 +552,11 @@ hdGrass = function (c, o = {}) {
 
 // Dappled light under unseen trees plus a warm/cool grade.
 function hdDapple(c) {
-  c.save(); c.globalCompositeOperation = 'multiply'; c.filter = 'blur(18px)';
-  for (const [x, y, rx, ry] of [[760, 330, 120, 70], [820, 120, 70, 90], [230, 360, 110, 40], [450, 0, 160, 40]]) { c.beginPath(); c.ellipse(x, y, rx, ry, .3, 0, TAU); c.fillStyle = 'rgba(70,110,90,.38)'; c.fill(); }
+  c.save(); c.globalCompositeOperation = 'multiply';
+  for (const [x, y, rx, ry] of [[760, 330, 120, 70], [820, 120, 70, 90], [230, 360, 110, 40], [450, 0, 160, 40], [90, 120, 90, 60]]) softBlob(c, x / 844 * LW, y / 390 * LH, rx + 22, ry + 22, .3, '70,110,90', .42);
   c.restore();
-  c.save(); c.globalCompositeOperation = 'screen'; c.filter = 'blur(10px)';
-  for (const [x, y, r] of [[330, 140, 34], [520, 260, 40], [690, 190, 28], [180, 270, 30]]) { c.beginPath(); c.arc(x, y, r, 0, TAU); c.fillStyle = 'rgba(255,250,200,.09)'; c.fill(); }
+  c.save(); c.globalCompositeOperation = 'screen';
+  for (const [x, y, r] of [[330, 140, 34], [520, 260, 40], [690, 190, 28], [180, 270, 30]]) softBlob(c, x / 844 * LW, y / 390 * LH, r + 12, r + 12, 0, '255,250,200', .12);
   c.restore();
 }
 function hdGrade(c) {
@@ -562,7 +566,7 @@ function hdGrade(c) {
 // Top border: two layers of hedge with flowers and a soft cast shadow.
 hdBorderBushes = function (c, seed = 2) {
   const R = rng(seed);
-  c.save(); c.filter = 'blur(6px)'; c.fillStyle = 'rgba(20,60,15,.45)'; c.fillRect(0, 0, LW, 30); c.restore();
+  c.save(); const sg = c.createLinearGradient(0, 0, 0, 40); sg.addColorStop(0, 'rgba(20,60,15,.45)'); sg.addColorStop(1, 'rgba(20,60,15,0)'); c.fillStyle = sg; c.fillRect(0, 0, LW, 40); c.restore();
   for (let x = 40; x < LW + 30; x += 30 + R() * 16) { const r = 18 + R() * 9; hdBall(c, x, -8 + R() * 6, r, r * .75, '#2f7a26', { specA: .25, noBounce: true }); }
   for (let x = 70; x < LW + 30; x += 36 + R() * 22) { const y = 4 + R() * 6, r = 13 + R() * 7; hdBall(c, x, y, r, r * .78, R() > .5 ? '#45a036' : '#3d952f', { specA: .35 });
     for (let k = 0; k < 3; k++) hdLeaf(c, x + (R() - .5) * r, y + r * .4, 7 + R() * 4, .8 + R() * 1.5, '#5cb446', { w: .45 });

@@ -66,7 +66,7 @@ function cellAt(x, y) { const a = Math.floor(x / CELL), b = Math.floor(y / CELL)
 const screenAngle = (vx, vy) => (PORT ? Math.atan2(-vx, vy) : Math.atan2(vy, vx));
 const offEntry = (first) => (PORT ? [first[0], -60] : [FW() + 40, first[1]]);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const PTOP = 66, PBOT = 88, LTOP = 46, MIN_CELL = 38; // portrait: HUD rows on top, card shelf below; smallest cell in CSS px
+const PTOP = 74, LTOP = 46, MIN_CELL = 38; let PBOT = 80; // portrait: HUD rows on top, card shelf below; smallest cell in CSS px
 const toUI = (wx, wy) => [(ox + wx * ws) / uk, (oy + wy * ws) / uk];
 function applyCam() { ox = BASE[0] - (PORT ? 0 : cam); oy = BASE[1] - (PORT ? cam : 0); }
 // world rect of the field area that is on screen now
@@ -74,8 +74,9 @@ const visField = () => [(FBOX[0] - ox) / ws, (FBOX[1] - oy) / ws, FBOX[2] / ws, 
 function resize() {
   const vw = innerWidth, vh = innerHeight, was = PORT;
   PORT = vh > vw;
-  dpr = Math.min(devicePixelRatio || 1, 4); seen = [vw, vh, devicePixelRatio];
+  dpr = Math.min(pixelRatio(vw), 5); seen = [vw, vh, devicePixelRatio, visualViewport?.scale || 1];
   uk = PORT ? clamp(Math.min(vw / 340, vh / 560), 1, 1.8) : clamp(Math.min(vw / 740, vh / 340), 1, 1.8);
+  UW = vw / uk; const sz = cardSize(); PBOT = sz[1] + 16;
   UW = vw / uk; UH = vh / uk;
   cv.width = Math.round(vw * dpr); cv.height = Math.round(vh * dpr); cv.style.width = vw + 'px'; cv.style.height = vh + 'px';
   const fl = PORT ? 4 : TRAY * uk, ft = (PORT ? PTOP : LTOP) * uk, aw = vw - fl - (PORT ? 4 : 6), ah = vh - ft - (PORT ? PBOT * uk : 4);
@@ -93,6 +94,17 @@ function resize() {
   for (const v of sprites.values()) free(v.cnv); sprites.clear(); free(grassLayer); grassLayer = null; terrainDirty = true;
 }
 // iOS counts canvas memory until garbage collection, so give the pixels back right away
+// Real device pixels per CSS pixel. Chrome on iOS with page zoom narrows the page but keeps devicePixelRatio, and
+// pinch zoom enlarges the canvas without telling it: both would make the picture soft.
+function pixelRatio(vw) {
+  let r = (devicePixelRatio || 1) * Math.max(1, visualViewport?.scale || 1);
+  if (matchMedia('(pointer: coarse)').matches && screen.width) {
+    const sw = PORT ? Math.min(screen.width, screen.height) : Math.max(screen.width, screen.height), z = sw / vw;
+    if (z > 1.02 && z < 3) r *= z;
+  }
+  return r;
+}
+function cardSize() { const n = game ? game.L.plants.length : 4, cw = Math.min(64, (UW - 16 - 6 * (n - 1)) / n); return [cw, Math.min(66, cw + 6)]; }
 function free(cnv) { if (cnv && cnv.width) { cnv.width = 0; cnv.height = 0; } }
 let seen = [0, 0, 0];
 function layer(w, h, k = Math.max(ws, uk) * dpr) {
@@ -161,7 +173,7 @@ const cardSprite = (type) => sprite(`card:${type}`, 50, 52, (x) => A.hdPlant(x, 
 
 // ---------- game flow ----------
 function startLevel(n) {
-  levelIdx = n; game = createGame(n, Date.now() & 0xffff);
+  levelIdx = n; game = createGame(n, Date.now() & 0xffff); resize();
   sel = ghost = pop = null; fx = []; banners = []; angles.clear(); anim.clear(); speed = 1;
   grassLayer = null; terrainDirty = true; paused = false;
   showHome(false); showModal(null); ufx = []; cam = PORT ? camMax : 0; applyCam();
@@ -255,7 +267,7 @@ function frame(ts) {
     let acc = dt * speed; while (acc > 1e-6) { const h = Math.min(acc, 1 / 60); step(game, h); acc -= h; }
     handleEvents();
   }
-  if (innerWidth !== seen[0] || innerHeight !== seen[1] || devicePixelRatio !== seen[2]) resize();
+  if (innerWidth !== seen[0] || innerHeight !== seen[1] || devicePixelRatio !== seen[2] || (visualViewport?.scale || 1) !== seen[3]) resize();
   if (game) draw(paused ? 0 : dt);
   requestAnimationFrame(frame);
 }
@@ -420,7 +432,7 @@ function drawFx(dt, list) {
   if (list === fx) fx = fx.filter((f) => f.t < f.life); else ufx = ufx.filter((f) => f.t < f.life);
 }
 function drawBanners(dt) {
-  let topY = PORT ? PTOP + (game.phase === 'build' && !sel ? 74 : 22) : 64; const midX = PORT ? UW / 2 : TRAY + (UW - TRAY) / 2;
+  let topY = PORT ? PTOP + 22 : 64; const midX = PORT ? UW / 2 : TRAY + (UW - TRAY) / 2;
   for (const b of banners) {
     b.t += dt; const k = b.t / b.life; if (k >= 1) continue;
     if (b.top && sel && !ghost) continue; // the plant info panel is in that spot
@@ -441,18 +453,12 @@ function drawBanners(dt) {
 function drawHud(t) {
   // layout: [dew panel], [wave bar], [fruit hp panel], buttons y and x (help, speed, pause)
   const L = PORT
-    ? { dew: [6, 6, 86, 30], wave: [UW / 2 - 92, 42, 184, 20], hp: [98, 6, 92, 30], by: 21, bx: [UW - 88, UW - 54, UW - 20], ts: 12 }
-    : { dew: [8, 7, 112, 32], wave: [Math.max(130, Math.min(UW / 2 - 122, UW - 330 - 244)), 9, 244, 26], hp: [UW - 242, 7, 120, 32], by: 23, bx: [UW - 98, UW - 60, UW - 22], ts: 14 };
+    ? { dew: [6, 6, 86, 30], wave: [6, 41, UW - 12, 28], hp: [98, 6, 92, 30], by: 21, bx: [UW - 88, UW - 54, UW - 20], ts: 12 }
+    : { dew: [8, 7, 112, 32], wave: [128, 8, UW - 128 - 252, 30], hp: [UW - 242, 7, 120, 32], by: 23, bx: [UW - 98, UW - 60, UW - 22], ts: 14 };
   const [dx, dy, dw, dh] = L.dew; DEW = [dx + 20, dy + dh / 2];
   A.uiPanel(c, dx, dy, dw, dh, dh / 2, '#fff3d6', { ol: '#6a3e1c' });
   A.hdDrop(c, dx + 20, dy + dh / 2 + 1, 8.5); A.hdText(c, String(game.dew), dx + dw / 2 + 12, dy + dh / 2, 20, '#ffffff', { stroke: '#2a6fa8', sw: 5 });
-  // wave progress
-  const [wx, wy, ww, wh] = L.wave;
-  A.uiPanel(c, wx, wy, ww, wh, wh / 2, '#5a3a22', { ol: '#2a1a0e' });
-  const done = game.phase === 'build' ? game.wave / game.waves : (game.wave - 1 + Math.min(1, game.waveTime / Math.max(1, (game.L.waves[game.wave - 1] || [[0, 1, 1, 0]]).reduce((s, [, n, gap, d]) => s + d + n * gap, 0)))) / game.waves;
-  c.save(); c.beginPath(); A.rrect(c, wx + 4, wy + 4, Math.max(wh - 8, (ww - 8) * done), wh - 8, (wh - 8) / 2); const g = c.createLinearGradient(0, wy + 4, 0, wy + wh - 4); g.addColorStop(0, '#a8f070'); g.addColorStop(1, '#4cb02e'); c.fillStyle = g; c.fill(); c.restore();
-  for (let k = 1; k < game.waves; k++) { c.beginPath(); c.arc(wx + 4 + (ww - 8) * k / game.waves, wy + wh / 2, 2.4, 0, A.TAU); c.fillStyle = 'rgba(255,255,255,.55)'; c.fill(); }
-  A.hdText(c, game.phase === 'build' ? `${T.build} · ${game.wave + 1} / ${game.waves}` : T.wave(game.wave, game.waves), wx + ww / 2, wy + wh / 2 + .5, L.ts, '#ffffff', { stroke: '#2a1a0e', sw: 4 });
+  drawWaveRow(...L.wave, L.ts, t);
   // fruit hp
   const [hx, hy, hw, hh] = L.hp, bw = hw - 44;
   A.uiPanel(c, hx, hy, hw, hh, hh / 2, '#fff3d6', { ol: '#6a3e1c' });
@@ -471,14 +477,13 @@ function drawHud(t) {
   badge(UW - (PORT ? 74 : 86), py0, pr, game.powers.frost);
   button(UW - (PORT ? 28 : 34), py0, pr, '#4aa8ee', (x, y) => A.iconRain(x, y, c), () => usePower(game, 'rain'), !game.powers.rain);
   badge(UW - (PORT ? 28 : 34), py0, pr, game.powers.rain);
-  if (game.phase === 'build' && !(PORT && sel)) drawWavePanel(t);
 }
 function badge(x, y, r, n) { if (!n) return; c.save(); c.beginPath(); c.arc(x + r * .72, y - r * .68, 9, 0, A.TAU); c.fillStyle = '#ff4646'; c.fill(); c.lineWidth = 2; c.strokeStyle = '#fff'; c.stroke(); c.restore(); A.hdText(c, String(n), x + r * .72, y - r * .68 + .5, 11, '#fff', { stroke: null }); }
 function drawCards() {
   const list = game.L.plants, n = list.length, gap = 6;
   let cw, ch, pos;
   if (PORT) {
-    cw = Math.min(64, (UW - 16 - gap * (n - 1)) / n); ch = Math.min(72, cw + 10);
+    [cw, ch] = cardSize();
     const top = UH - PBOT + (PBOT - ch) / 2 + 2, x0 = (UW - (n * cw + (n - 1) * gap)) / 2; pos = (k, on) => [x0 + k * (cw + gap), on ? top - 6 : top];
     shelf(-14, UH - PBOT, UW + 28, PBOT + 20, 0, 0, 0, UH + 20);
   } else {
@@ -505,14 +510,27 @@ function shelf(x, y, w, h, gx0_, gy0_, gx1, gy1) {
   const tg = c.createLinearGradient(gx0_, gy0_ || y, gx1, gy1 || y); tg.addColorStop(0, '#7a4a26'); tg.addColorStop(1, '#a8703c'); c.fillStyle = tg; c.fill(); c.restore();
   c.save(); c.beginPath(); A.rrect(c, x, y, w, h, 16); c.lineWidth = 2.5; c.strokeStyle = '#4a2a12'; c.stroke(); c.restore();
 }
-function drawWavePanel(t) {
-  const prev = wavePreview(game), step = PORT ? 52 : 62, pw = Math.min(UW - 12, Math.max(PORT ? 220 : 250, (PORT ? 100 : 110) + prev.length * step)), ph = PORT ? 48 : 56, x = (PORT ? UW / 2 : TRAY + (UW - TRAY) / 2) - pw / 2, y = PORT ? PTOP + 6 : UH - ph - 8;
-  c.save(); c.shadowColor = 'rgba(0,0,0,.35)'; c.shadowBlur = 12; A.uiPanel(c, x, y, pw, ph, 18, '#fff3d6', { ol: '#6a3e1c', olw: 2.5 }); c.restore();
-  prev.forEach(([k, n], i) => { const bx = x + 28 + i * step, by = y + ph / 2; const s = bugSprite(k === 'rhino' ? 'rhino' : k, 0); c.save(); c.translate(bx, by); c.rotate(-Math.PI / 2); const sc = (k === 'rhino' ? .45 : .8) * (PORT ? .82 : 1); c.scale(sc, sc); blit(s, -s.w / 2, -s.h / 2); c.restore(); A.hdText(c, '×' + n, bx + 22, by + 12, 13, '#fff', { stroke: '#6a3e1c', sw: 4 }); });
-  const bw = PORT ? 84 : 96, bx = x + pw - bw - 10, by = y + ph / 2 - 16, pulse = 1 + Math.sin(t * 5) * .03;
-  c.save(); c.translate(bx + bw / 2, by + 16); c.scale(pulse, pulse); c.shadowColor = 'rgba(80,200,40,.7)'; c.shadowBlur = 12; A.uiPanel(c, -bw / 2, -16, bw, 32, 16, '#5cc23e', { ol: '#1f6a17', olw: 2.5 }); c.restore();
-  A.hdText(c, T.go, bx + bw / 2, by + 16, PORT ? 15 : 17, '#fff', { stroke: '#1f5a14', sw: 4.5 });
-  ui.push({ x: bx - 4, y: by - 4, w: bw + 8, h: 40, fn: () => { sel = null; ghost = null; pop = null; startWave(game); }, s: 'u' });
+// One line: wave progress, and while building also who comes next and the start button.
+function waveBar(x, y, w, h, text, ts) {
+  A.uiPanel(c, x, y, w, h, h / 2, '#5a3a22', { ol: '#2a1a0e' });
+  const done = game.phase === 'build' ? game.wave / game.waves : (game.wave - 1 + Math.min(1, game.waveTime / Math.max(1, (game.L.waves[game.wave - 1] || [[0, 1, 1, 0]]).reduce((s, [, n, gap, d]) => s + d + n * gap, 0)))) / game.waves;
+  c.save(); c.beginPath(); A.rrect(c, x + 4, y + 4, Math.max(h - 8, (w - 8) * done), h - 8, (h - 8) / 2); const g = c.createLinearGradient(0, y + 4, 0, y + h - 4); g.addColorStop(0, '#a8f070'); g.addColorStop(1, '#4cb02e'); c.fillStyle = g; c.fill(); c.restore();
+  A.hdText(c, text, x + w / 2, y + h / 2 + .5, ts, '#ffffff', { stroke: '#2a1a0e', sw: 4 });
+}
+function drawWaveRow(x, y, w, h, ts, t) {
+  if (game.phase !== 'build') { const bw = Math.min(w, 220); waveBar(x + (w - bw) / 2, y, bw, h, T.wave(game.wave, game.waves), ts); return; }
+  const prev = wavePreview(game), chipW = 46, bw = 88, barW = Math.max(64, w - bw - prev.length * chipW - 10);
+  c.save(); c.font = `900 ${ts}px Nunito`; const long = `${T.next} ${game.wave + 1} / ${game.waves}`, txt = c.measureText(long).width + 16 < barW ? long : `${game.wave + 1} / ${game.waves}`; c.restore();
+  waveBar(x, y, barW, h, txt, ts);
+  prev.forEach(([k, n], i) => {
+    const cx = x + barW + 6 + i * chipW + 12, cy = y + h / 2, s = bugSprite(k, 0), sc = (k === 'rhino' ? .3 : .55) * h / 28;
+    c.save(); c.translate(cx, cy); c.rotate(-Math.PI / 2); c.scale(sc, sc); blit(s, -s.w / 2, -s.h / 2); c.restore();
+    A.hdText(c, '×' + n, cx + 18, cy + 4, 12, '#fff', { stroke: '#4a2a12', sw: 3.5 });
+  });
+  const bx = x + w - bw, pulse = 1 + Math.sin(t * 5) * .03;
+  c.save(); c.translate(bx + bw / 2, y + h / 2); c.scale(pulse, pulse); c.shadowColor = 'rgba(80,200,40,.7)'; c.shadowBlur = 10; A.uiPanel(c, -bw / 2, -h / 2, bw, h, h / 2, '#5cc23e', { ol: '#1f6a17', olw: 2.5 }); c.restore();
+  A.hdText(c, T.go, bx + bw / 2, y + h / 2 + .5, 15, '#fff', { stroke: '#1f5a14', sw: 4 });
+  ui.push({ x: bx - 4, y: y - 6, w: bw + 8, h: h + 12, fn: () => { sel = null; ghost = null; pop = null; startWave(game); }, s: 'u' });
 }
 function drawPop() {
   const p = pop, vf = visField(), [x0, y] = cellCenter(p.i, p.j), x = clamp(x0, vf[0] + 66, vf[0] + vf[2] - 66), up = upgradeCost(p), yy = y - 96 > vf[1] ? y - 56 : y + 50;
@@ -598,6 +616,7 @@ function drawLogo() {
 async function boot() {
   try { await document.fonts.load('900 16px Nunito'); } catch { /* font is optional */ }
   resize(); drawLogo(); showHome(true);
+  $('diag').textContent = `${VERSION} · ${innerWidth}×${innerHeight} @${devicePixelRatio} → ${dpr.toFixed(2)} · экран ${screen.width}×${screen.height}`;
   game = createGame(0); paused = true; // a field behind the menu
   requestAnimationFrame(frame);
   if (new URLSearchParams(location.search).has('dev')) window.__fd = { get game() { return game; }, startLevel, set speed(v) { speed = v; }, cell: (i, j) => { const [x, y] = cellCenter(i, j); return [ox + x * ws, oy + y * ws]; }, scroll: (v) => { cam = clamp(v, 0, camMax); applyCam(); }, get camMax() { return camMax; }, layout: () => ({ card: ui.filter((u) => u.s === 'u' && u.h > 40 && u.w < 90).map((u) => [(u.x + u.w / 2) * uk, (u.y + u.h / 2) * uk]) }) };
