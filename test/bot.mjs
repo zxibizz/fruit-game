@@ -57,6 +57,7 @@ function layout(level, terrain) {
 // What a garden is worth: the damage a bug takes on its way. For every cell of the trail, the damage per second of
 // the plants that reach it, times the time a bug spends there (longer by a mint, longer in mud).
 function worth(g, tr, o) {
+  const armor = o.armor || 0, hit = (d) => Math.max(1, d - armor);
   const at = (p) => (o.terrain ? p : { type: p.type, lvl: p.lvl, i: -1, j: -1 }), st = (p, name) => pstat(g, at(p), name);
   const plants = []; for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) { const p = g.grid[j][i]; if (p && p.type) plants.push(p); }
   const time = tr.map(([a, b], k) => {
@@ -67,8 +68,8 @@ function worth(g, tr, o) {
   for (const p of plants) {
     const P = PLANTS[p.type]; let dps = 0;
     if (P.eat) dps = st(p, 'chomp') / st(p, 'eat');
-    else if (p.type === 'pepper') dps = 2 * st(p, 'dmg') * st(p, 'rate') + 2 * st(p, 'burn') * Math.min(1.5, st(p, 'burnT') / 2);
-    else if (P.dmg) dps = st(p, 'dmg') * st(p, 'rate') * (st(p, 'multi') || 1) * (P.splash ? 1 + st(p, 'splash') * .75 : 1) * (st(p, 'stun') ? 1.1 : 1);
+    else if (p.type === 'pepper') dps = 2 * hit(st(p, 'dmg')) * st(p, 'rate') + 2 * st(p, 'burn') * Math.min(1.5, st(p, 'burnT') / 2);
+    else if (P.dmg) dps = hit(st(p, 'dmg')) * st(p, 'rate') * (st(p, 'multi') || 1) * (P.splash ? 1 + st(p, 'splash') * .75 : 1) * (st(p, 'stun') ? 1.1 : 1);
     if (!dps) continue;
     let buff = 0; for (const q of plants) if (PLANTS[q.type].buff && q !== p && Math.hypot(q.i - p.i, q.j - p.j) <= st(q, 'range')) buff = Math.max(buff, st(q, 'buff'));
     const r = st(p, 'range'); let n = 0;
@@ -92,7 +93,10 @@ export function playLevel(level, { seed = 7, verbose = false, maxPlants = Infini
   // where the trail will run when the walls stand: nothing but the walls is planted on it; without a maze, the trail as it is
   const keep = new Set();
   { const f = createGame(level); for (const [i, j] of planned) if (!f.grid[j][i] && f.tiles[j][i] !== 'nettle') f.grid[j][i] = { type: 'pumpkin' }; for (const [i, j] of trailOf(f, computeDist(f))) keep.add(kOf(i, j)); }
+  // the armor a hit meets in the next waves, weighed by the health that wears it
+  const armorSoon = () => { let sum = 0, all = 0; for (const w of L.waves.slice(g.wave, g.wave + 3)) for (const [kind, n] of w) { const B = BUGS[kind], q = n * B.hp * (B.fly ? 0 : 1); sum += q * (B.armor || 0); all += q; } return all ? sum / all : 0; };
   const best = () => {
+    o.armor = armorSoon();
     const tr = trailOf(g), now = worth(g, tr, o), on = new Set(tr.map(([i, j]) => kOf(i, j)));
     let top = null;
     const offer = (gain, cost, run) => { if (gain > 1e-6 && (!top || gain / cost > top.gain / top.cost)) top = { gain, cost, run }; };
@@ -124,8 +128,8 @@ export function playLevel(level, { seed = 7, verbose = false, maxPlants = Infini
     // repairs first: a hole the bugs run through is closed at once for dew; other roots grow back by themselves
     const tr = new Set(trailOf(g).map(([i, j]) => kOf(i, j))), on = (s) => tr.has(kOf(s.i, s.j));
     for (const s of g.stubs.slice()) if (g.phase === 'wave' && on(s) && g.dew >= regrowCost(s)) regrow(g, s);
-    // the maze grows with the level: a new wall is closed every second wave, with pumpkins where nothing stands yet
-    const due = Math.min(walls.length, 1 + Math.floor(g.wave / 2));
+    // the maze grows with the level: two walls at once and one more every wave: first-level pumpkins are cheap, and a long trail tires the bugs, with pumpkins where nothing stands yet
+    const due = Math.min(walls.length, 2 + g.wave);
     for (const [col, gap] of walls.slice(0, due)) for (let j = 0; j < ROWS; j++) {
       if (j === gap || g.grid[j][col] || stubAt(g, col, j) || !room() || placeProblem(g, col, j)) continue;
       if (!place(g, 'pumpkin', col, j)) return;

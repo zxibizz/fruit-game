@@ -1,7 +1,7 @@
 // Simulation: no DOM, plain data. The view reads the state and the events, and calls the actions below.
-import { COLS, ROWS, FRUIT_HP, PLANTS, BUGS, LEVELS, PERKS, BREAK, EARLY_DEW, REPAIR, REGROW, REFUND, CHEW_GROWTH, POWER_EVERY, POWER_MAX, FERTILE, FERTILE_ADD, MUD, NETTLE, NETTLE_BOSS, WEED_COST, BROOD_REWARD, FATIGUE } from './data.js';
+import { COLS, ROWS, FRUIT_HP, PLANTS, BUGS, LEVELS, PERKS, BREAK, EARLY_DEW, REPAIR, REGROW, REFUND, CHEW_GROWTH, POWER_EVERY, POWER_MAX, FERTILE, FERTILE_ADD, MUD, NETTLE, NETTLE_BOSS, WEED_COST, BROOD_REWARD, FATIGUE, FLY_HP } from './data.js';
 
-export const VERSION = '0.14.0';
+export const VERSION = '0.15.0';
 export { COLS, ROWS, BREAK };
 
 const DIRS = [[-1, 0], [0, -1], [0, 1], [1, 0]]; // tie order: towards the fruit side first
@@ -235,7 +235,7 @@ function gain(g, n) { g.dew += n; g.stats.earned += n; }
 // How much stronger the bugs of a wave are than in the first one, and how much harder they bite the plants.
 export const hpMul = (g, wave = g.wave) => 1 + g.L.hpGrowth * (wave - 1) + (g.L.hpLate || 0) * (wave - 1) ** 2;
 const bossMul = (g, wave) => g.L.boss.find(([at]) => at === wave)?.[3] ?? 1;
-export const bugHp = (g, kind, wave = g.wave) => Math.round(BUGS[kind].hp * hpMul(g, wave) * (BUGS[kind].boss ? bossMul(g, wave) : 1));
+export const bugHp = (g, kind, wave = g.wave) => Math.round(BUGS[kind].hp * (BUGS[kind].fly ? 1 + (hpMul(g, wave) - 1) * FLY_HP : hpMul(g, wave)) * (BUGS[kind].boss ? bossMul(g, wave) : 1));
 const chewMul = (g) => 1 + CHEW_GROWTH * (g.wave - 1);
 // A bug comes out of anthill e, or (from: a boss) appears where its boss is.
 function spawn(g, kind, e = 0, from = null) {

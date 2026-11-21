@@ -17,7 +17,7 @@ and in portrait (turned there).
   the end of every level: the rhino beetle runs, the queen lets ants out, the slug king splits into snails, the
   hornet flies over the maze, the spider webs the plants.
 - **Balance**: a level is meant to be hard and to be won by thought. Plants that hit walkers reach only the cells
-  next to them; bugs tire as they walk (every cell adds 3% to the damage they take), so a long winding trail with the
+  next to them; bugs tire as they walk (every cell adds 5% to the damage they take), so a long winding trail with the
   best plants near its end does several times more than the same plants by a straight road. The first level of a
   plant is cheap — a trail is quick to shape — and the upgrades are dear: there is never dew for all of them. No
   plant makes dew (it comes from beaten bugs, finished waves and waves called early). Caterpillars bite plants, mole
@@ -42,9 +42,10 @@ and in portrait (turned there).
 - `server/` — Node 22, no dependencies: static files and `/healthz`.
 - `node --test test/*.test.js` — pathing and placement rules, economy, repairs, bosses, the ground, perks, saving, server, offline
   cache list, and the balance: the smart bot of `test/bot.mjs` (a maze through mud and nettles, plants where bugs are
-  slowest and most tired, mended holes, frost and rain, the perks of two stars a level) must win every level, a fully
-  grown garden beside the untouched trail must lose every level even with every perk and endless dew, and half a
-  garden, no powers, no perks or no eye for the ground must do worse. The suite takes a few minutes.
+  slowest and most tired, mended holes, frost and rain, the perks of two stars a level) must win every level; a
+  garden beside the untouched trail must lose every level (on the first levels it must leak by the middle), on most
+  levels even with every perk; half a garden, no powers, no perks or no eye for the ground must do worse. The suite
+  takes a few minutes.
   `node test/bot.mjs [levels...]` prints how the bot did, wave by wave.
 - [docs/research.md](docs/research.md) — the genre study the design started from (in Russian).
 

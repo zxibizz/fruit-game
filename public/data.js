@@ -42,7 +42,9 @@ export const REFUND = .5;
 export const CHEW_GROWTH = .04;
 // A walking bug tires: every cell it has walked adds FATIGUE to the damage it takes (flyers do not tire). So the longer
 // the trail, the weaker the bugs get on it, and the best plants belong near its end.
-export const FATIGUE = .03;
+export const FATIGUE = .05;
+// Flyers do not tire and cross the field in a straight line, so their health grows with the waves only by this share.
+export const FLY_HP = .45;
 // Frost and rain come back (up to POWER_MAX of each) after every POWER_EVERY-th wave.
 export const POWER_EVERY = 10, POWER_MAX = 2;
 
@@ -105,8 +107,10 @@ export const BROOD_REWARD = .34;
 // - the first level of a plant is cheap and the upgrades are dear: the field fills fast, and the dew of a level
 //   (rich scales it) grows most plants, never all of them at once;
 // - a hole in a wall lets the whole wave through, so holes are to be closed: by dew at once, by an aloe, or by time.
-// hpLate is set per level so that a fully grown garden beside the untouched trail loses even with every perk and
-// endless dew, while a thought-out maze with the perks of two stars a level keeps most of the fruit (test/bot.mjs).
+// The health of the bugs grows from the first waves on (hpGrowth), so a garden beside the untouched trail starts to
+// let bugs through by the middle of a level and is lost well before its end, even with every perk, while a
+// thought-out maze with the perks of two stars a level gets through (test/bot.mjs). The dew at the start is enough to
+// lay the first walls at once.
 // A level's field is a picture of 8 rows of 14 cells: . free, A the fruit, E an anthill (last column only),
 // R rock, S stump, L log, W water, X weeds (can be cleared), f fertile soil, m mud, n nettles.
 // The waves are put together by makeWaves from a short recipe:
@@ -127,7 +131,7 @@ export const LEVELS = [
       '....R.........',
       '..LL..........',
     ],
-    dew: 150, hpGrowth: .2, hpLate: .085, rich: 1.4, waveBonus: 20,
+    dew: 370, hpGrowth: 1.4, hpLate: .03, rich: 1.2, waveBonus: 20,
     plants: ['pumpkin', 'rose', 'corn', 'aloe'],
     count: 20, budget: [8, 5.2], roster: [['ant', 1], ['beetle', 3], ['grasshopper', 6], ['caterpillar', 9], ['cricket', 13]], boss: [[10, 'rhino', 1, .3], [20, 'rhino', 1, .35]],
   },
@@ -143,7 +147,7 @@ export const LEVELS = [
       '.........R.R..',
       '.....f..S.....',
     ],
-    dew: 160, hpGrowth: .2, hpLate: .085, rich: 1.9, waveBonus: 25,
+    dew: 380, hpGrowth: 1.4, hpLate: .03, rich: 1.3, waveBonus: 25,
     plants: ['pumpkin', 'rose', 'corn', 'aloe', 'mint'],
     count: 22, budget: [10, 5], roster: [['ant', 1], ['aphid', 2], ['grasshopper', 3], ['caterpillar', 5], ['beetle', 7], ['cricket', 10], ['snail', 14]], boss: [[11, 'queen', 1, .3], [22, 'queen', 2, .4]],
   },
@@ -159,7 +163,7 @@ export const LEVELS = [
       '...S......S...',
       '.....m........',
     ],
-    dew: 180, hpGrowth: .22, hpLate: .05, rich: 1.4, waveBonus: 28,
+    dew: 400, hpGrowth: 1, hpLate: .03, rich: 1.5, waveBonus: 28,
     plants: ['pumpkin', 'rose', 'corn', 'aloe', 'mint', 'pepper'],
     count: 24, budget: [11, 5.4], roster: [['ant', 1], ['snail', 2], ['aphid', 3], ['pillbug', 5], ['caterpillar', 7], ['cricket', 9], ['grasshopper', 12], ['beetle', 15]], boss: [[12, 'slugking', 1, .4], [24, 'slugking', 1, .6]],
   },
@@ -175,7 +179,7 @@ export const LEVELS = [
       '..S......WW...',
       '.........W....',
     ],
-    dew: 190, hpGrowth: .22, hpLate: .05, rich: 1.6, waveBonus: 28,
+    dew: 410, hpGrowth: 0.7, hpLate: .03, rich: 1.3, waveBonus: 28,
     plants: ['pumpkin', 'rose', 'corn', 'aloe', 'mint', 'pepper', 'dandelion'],
     count: 24, budget: [12, 5.6], roster: [['ant', 1], ['butterfly', 3], ['beetle', 4], ['caterpillar', 6], ['cricket', 10], ['snail', 13], ['aphid', 16]], boss: [[12, 'hornet', 1, .3], [24, 'hornet', 2, .4]],
   },
@@ -191,7 +195,7 @@ export const LEVELS = [
       '..LL.......S..',
       '......n.......',
     ],
-    dew: 200, hpGrowth: .23, hpLate: .04, rich: 1.7, waveBonus: 30,
+    dew: 420, hpGrowth: 1.3, hpLate: .03, rich: 1.4, waveBonus: 30,
     plants: ['pumpkin', 'rose', 'corn', 'aloe', 'mint', 'pepper', 'dandelion', 'flytrap'],
     count: 25, budget: [12, 5.8], roster: [['ant', 1], ['pillbug', 2], ['firefly', 4], ['grasshopper', 6], ['caterpillar', 8], ['butterfly', 10], ['cricket', 12], ['snail', 15]], boss: [[12, 'spider', 1, .3], [25, 'spider', 2, .3]],
   },
@@ -207,7 +211,7 @@ export const LEVELS = [
       '...........R..',
       '...S..........',
     ],
-    dew: 220, hpGrowth: .23, hpLate: .03, rich: 1.75, waveBonus: 30,
+    dew: 440, hpGrowth: 1, hpLate: .03, rich: 1.6, waveBonus: 30,
     plants: ['pumpkin', 'rose', 'corn', 'aloe', 'mint', 'pepper', 'dandelion', 'flytrap', 'bell'],
     count: 26, budget: [13, 6], roster: [['ant', 1], ['aphid', 2], ['beetle', 3], ['wasp', 5], ['caterpillar', 7], ['firefly', 9], ['cricket', 11], ['pillbug', 14], ['snail', 17]], boss: [[13, 'queen', 1, .4], [26, 'rhino', 2, .6]],
   },
@@ -223,7 +227,7 @@ export const LEVELS = [
       '.....X..X.....',
       '.X.........R..',
     ],
-    dew: 220, hpGrowth: .24, hpLate: .03, rich: 1.5, waveBonus: 32,
+    dew: 440, hpGrowth: .6, hpLate: .03, rich: 1.6, waveBonus: 32,
     plants: ['pumpkin', 'rose', 'corn', 'aloe', 'mint', 'pepper', 'dandelion', 'flytrap', 'bell'],
     count: 28, budget: [13, 6], roster: [['ant', 1], ['grasshopper', 2], ['pillbug', 3], ['caterpillar', 5], ['butterfly', 7], ['cricket', 9], ['firefly', 11], ['snail', 13], ['wasp', 16], ['aphid', 19]], boss: [[9, 'rhino', 1, .4], [18, 'slugking', 1, .4], [28, 'spider', 2, .6]],
   },
@@ -239,7 +243,7 @@ export const LEVELS = [
       '......WW......',
       '..m...W.......',
     ],
-    dew: 230, hpGrowth: .25, hpLate: .035, rich: 1.8, waveBonus: 32,
+    dew: 450, hpGrowth: 0.7, hpLate: .03, rich: 1.6, waveBonus: 32,
     plants: ['pumpkin', 'rose', 'corn', 'aloe', 'mint', 'pepper', 'dandelion', 'flytrap', 'bell'],
     count: 28, budget: [14, 6.2], roster: [['ant', 1], ['snail', 2], ['wasp', 3], ['aphid', 5], ['pillbug', 6], ['caterpillar', 8], ['firefly', 10], ['cricket', 12], ['beetle', 15], ['butterfly', 18]], boss: [[9, 'hornet', 1, .4], [18, 'spider', 1, .4], [28, 'slugking', 2, .6]],
   },
@@ -255,7 +259,7 @@ export const LEVELS = [
       '.....S.......E',
       '..f.....LL....',
     ],
-    dew: 240, hpGrowth: .25, hpLate: .026, rich: 1.6, waveBonus: 34,
+    dew: 460, hpGrowth: 1, hpLate: .025, rich: 1.45, waveBonus: 34,
     plants: ['pumpkin', 'rose', 'corn', 'aloe', 'mint', 'pepper', 'dandelion', 'flytrap', 'bell'],
     count: 30, budget: [14, 6.4], roster: [['ant', 1], ['beetle', 2], ['butterfly', 3], ['pillbug', 4], ['caterpillar', 6], ['cricket', 8], ['firefly', 10], ['snail', 12], ['wasp', 14], ['grasshopper', 17], ['aphid', 20]], boss: [[10, 'queen', 1, .4], [20, 'hornet', 1, .4], [30, 'rhino', 2, .5]],
   },
