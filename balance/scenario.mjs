@@ -60,6 +60,6 @@ export function runScenario(sc) {
   const worst = Object.entries(byWave).sort((a, b) => b[1] - a[1])[0] || [null, 0];
   const first = Object.keys(byWave).length ? Math.min(...Object.keys(byWave).map(Number)) : null;
   return { won: r.won, hp: r.hp, maxHp: r.maxHp, wave: r.wave, waves: L.count, score: r.won ? r.hp / r.maxHp : -(1 - (r.wave - 1) / L.count),
-    firstBite: first, bites, biteCount, bossBites, worstWave: worst[0] && Number(worst[0]), worstShare: bites ? worst[1] / bites : 0, byKind, plants: r.plants, grown: r.grown, maxed: r.maxed, trail: r.trail,
+    firstBite: first, bites, biteCount, bossBites, worstWave: worst[0] && Number(worst[0]), worstShare: bites ? worst[1] / bites : 0, byKind, plants: r.plants, kinds: r.kinds, eaten: r.eaten, grown: r.grown, maxed: r.maxed, trail: r.trail,
     spare: o.bank ? null : r.dew, income: r.income, powersUsed: r.powersUsed, ms: Date.now() - t };
 }

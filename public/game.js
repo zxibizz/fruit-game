@@ -1,10 +1,11 @@
 // Simulation: no DOM, plain data. The view reads the state and the events, and calls the actions below.
-import { COLS, ROWS, FRUIT_HP, PLANTS, BUGS, LEVELS, PERKS, BREAK, EARLY_DEW, REPAIR, REGROW, REFUND, CHEW_GROWTH, POWER_EVERY, POWER_MAX, wavePay, FERTILE, FERTILE_ADD, MUD, NETTLE, NETTLE_BOSS, WEED_COST, BROOD_REWARD, FLY_HP, TUNE } from './data.js';
+import { COLS, ROWS, FRUIT_HP, PLANTS, BUGS, LEVELS, PERKS, BREAK, EARLY_DEW, REPAIR, REGROW, REFUND, CHEW_GROWTH, POWER_EVERY, POWER_MAX, wavePay, FERTILE, FERTILE_ADD, MUD, NETTLE, NETTLE_BOSS, WEED_COST, BROOD_REWARD, FLY_HP, TUNE, MARK_T } from './data.js';
 
-export const VERSION = '0.21.0';
+export const VERSION = '0.22.0';
 // The version of a saved level: raised when the balance changes so much that a garden grown under the old rules does
-// not belong in the new level (2: no fatigue, tight packs, one health rule; such a save is dropped).
-const SAVE_V = 2;
+// not belong in the new level (2: no fatigue, tight packs, one health rule; 3: the plants given their places and
+// every level retuned; an older save is dropped).
+const SAVE_V = 3;
 export { COLS, ROWS, BREAK };
 
 const DIRS = [[-1, 0], [0, -1], [0, 1], [1, 0]]; // tie order: towards the fruit side first
@@ -308,10 +309,12 @@ function kill(g, b, how) {
   if (B.split && !b.fly) for (let n = 0; n < B.split[1]; n++) spawn(g, B.split[0], b.e, b);
 }
 // Health lost for any reason other than a hit (fire, nettles, thorns): no armor, no floor.
-function lose(g, b, amount, how) { if (b.hp <= 0) return; b.hp -= amount; if (b.hp <= 0) kill(g, b, how); }
+// A bug marked by a rose takes more of everything.
+const marked = (b) => (b.mark > 0 ? 1 + b.markV : 1);
+function lose(g, b, amount, how) { if (b.hp <= 0) return; b.hp -= amount * marked(b); if (b.hp <= 0) kill(g, b, how); }
 function damage(g, b, amount, src) {
   if (b.hp <= 0) return;
-  const dmg = Math.max(1, amount - b.armor);
+  const dmg = Math.max(1, amount - b.armor) * marked(b);
   b.hp -= dmg; b.hit = .15;
   g.events.push({ t: 'hit', b, dmg, src });
   if (b.hp <= 0) kill(g, b, src);
@@ -443,13 +446,14 @@ function updatePlant(g, p, dt) {
   p.cd -= dt; if (p.cd > 0) return;
   const quick = 1 + (p.buff || 0);
   if (P.eat) { // bites the strongest bug it reaches, through any armor; what is left with no health is swallowed
-    const air = !!pstat(g, p, 'eatAir'); let best = null;
-    for (const b of bugs) if (inRange(b, air) && (!best || b.hp > best.hp)) best = b;
+    const air = !!pstat(g, p, 'eatAir'), chomp = pstat(g, p, 'chomp'), gulp = pstat(g, p, 'gulp'); let best = null, meal = null;
+    const fits = (b) => !BUGS[b.kind].boss && (b.hp <= chomp || b.hp <= gulp * b.maxHp);
+    for (const b of bugs) if (inRange(b, air)) { if (!best || b.hp > best.hp) best = b; if (fits(b) && (!meal || b.hp > meal.hp)) meal = b; }
     if (!best) return;
+    const whole = !!meal; if (whole) best = meal; // the biggest bug it can swallow, else a bite of the strongest
     p.cd = pstat(g, p, 'eat') / quick; p.busy = 1.2;
-    const whole = best.hp <= pstat(g, p, 'chomp') && !BUGS[best.kind].boss;
     g.events.push({ t: 'eat', p, b: best, whole });
-    damage(g, best, pstat(g, p, 'chomp') + best.armor, whole ? 'eat' : p.type);
+    damage(g, best, (whole ? Math.max(chomp, best.hp) : chomp) + best.armor, whole ? 'eat' : p.type);
     return;
   }
   if (p.type === 'pepper') {
@@ -464,15 +468,15 @@ function updatePlant(g, p, dt) {
   const multi = pstat(g, p, 'multi') || 1, seen = [];
   // a plant that is weak against walkers (the dandelion) takes the flyers first
   // …and not at a bug the shots already on their way will finish (all the shooters on one bug was damage thrown away)
-  const splash = !!pstat(g, p, 'splash');
-  for (const b of bugs) if (inRange(b) && (splash || (b.coming || 0) < b.hp)) seen.push([progress(g, b) + (P.ground && !b.fly ? 1e3 : 0), b]);
+  const splash = !!pstat(g, p, 'splash'), mark = pstat(g, p, 'mark');
+  for (const b of bugs) if (inRange(b) && (splash || (b.coming || 0) < b.hp)) seen.push([progress(g, b) + (P.ground && !b.fly ? 1e3 : 0) + (mark && b.mark > .5 ? 500 : 0), b]);
   if (!seen.length) return;
   seen.sort((a, b) => a[0] - b[0]);
   p.cd = 1 / (pstat(g, p, 'rate') * quick);
   for (const [, best] of seen.slice(0, multi)) {
     const weak = P.ground && !best.fly, dmg = pstat(g, p, 'dmg') * (weak ? P.ground : 1);
-    const est = splash ? 0 : Math.max(1, dmg - best.armor); best.coming = (best.coming || 0) + est; // what it will take
-    g.shots.push({ id: g.nextId++, kind: P.shot, from: p.type, x: px, y: py - .25, sx: px, sy: py - .25, target: best, tx: best.x, ty: best.y, speed: P.speed, dmg, est, splash: pstat(g, p, 'splash') || 0, hits: P.hits ? P.hits[p.lvl - 1] : 0, stun: weak ? 0 : pstat(g, p, 'stun') || 0, air: !!P.air });
+    const est = splash ? 0 : Math.max(1, dmg - best.armor) * marked(best); best.coming = (best.coming || 0) + est; // what it will take
+    g.shots.push({ id: g.nextId++, kind: P.shot, from: p.type, x: px, y: py - .25, sx: px, sy: py - .25, target: best, tx: best.x, ty: best.y, speed: P.speed, dmg, est, splash: pstat(g, p, 'splash') || 0, hits: P.hits ? P.hits[p.lvl - 1] : 0, mark, stun: weak ? 0 : pstat(g, p, 'stun') || 0, air: !!P.air });
     g.events.push({ t: 'shoot', p, target: best });
   }
 }
@@ -486,6 +490,7 @@ function updateShot(g, s, dt) {
       for (const b of near.slice(0, s.hits || Infinity)) damage(g, b, s.dmg, s.from); g.events.push({ t: 'splash', x: s.tx, y: s.ty, kind: s.kind, r: s.splash }); }
     else if (s.target && s.target.hp > 0 && !s.target.gone) {
       damage(g, s.target, s.dmg, s.from);
+      if (s.mark && s.target.hp > 0) { const t = s.target, old = t.mark > 0 ? t.markV || 0 : 0; t.mark = MARK_T; t.markV = Math.max(s.mark, old); } // a mark run out leaves nothing
       if (s.stun && s.target.hp > 0) freeze(s.target, s.stun * (BUGS[s.target.kind].boss ? .3 : 1));
     }
     return;
@@ -505,7 +510,7 @@ export function step(g, dt) {
   // roots grow back by themselves (aloes add to it in updatePlant); where that would close the way, they wait
   for (const s of g.stubs.slice()) { s.grow = Math.min(1, s.grow + dt / g.regrow); if (s.grow >= 1) regrow(g, s, true); }
   sortBugs(g); try { for (const p of g.plants.slice()) updatePlant(g, p, dt); } finally { bkOn = false; }
-  for (const b of g.bugs.slice()) { if (b.hit > 0) b.hit -= dt; if (b.hp > 0) updateBug(g, b, dt); }
+  for (const b of g.bugs.slice()) { if (b.hit > 0) b.hit -= dt; if (b.mark > 0) b.mark -= dt; if (b.hp > 0) updateBug(g, b, dt); }
   for (const s of g.shots) updateShot(g, s, dt);
   g.shots = g.shots.filter((s) => !s.done);
   g.bugs = g.bugs.filter((b) => b.hp > 0);

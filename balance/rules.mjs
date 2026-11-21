@@ -4,6 +4,8 @@ import { BUGS } from '../public/data.js';
 const med = (a) => { const s = [...a].sort((x, y) => x - y); return s.length ? (s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2) : null; };
 const fmt = (r) => (r.won ? `W ${r.hp}/${r.maxHp}` : `L w${r.wave}`);
 export const SOFT = [7, 9]; // levels (1-based) where the most perks of their time may still carry a lazy garden through
+export const PLACE = .12; // how much of the fruit (or of the level, when lost) a plant must be worth where it has its place
+export const LEAK = .75; // a lazy garden on the first levels lets the first bug through by this share of the waves
 export const IDLE = 400; // dew left at the end of a level with nothing more to buy: a couple of upgrades at most
 
 export function check(results, { soft = SOFT } = {}) {
@@ -34,7 +36,7 @@ export function check(results, { soft = SOFT } = {}) {
     for (const r of g('lazy')) {
       // every perk at once is a replay after the whole game; the soft levels may give in to the most perks of their time
       if (r.res.won) add('lazy loses', r.opts.meta === 'full' || (soft.includes(L) && r.opts.meta === 'exp3') ? 'warn' : 'fail', `${r.name} ${fmt(r.res)}`);
-      else if (L <= 3 && r.res.firstBite > r.res.waves * .55) add('lazy leaks early', 'warn', `${r.name}: first bite at wave ${r.res.firstBite}/${r.res.waves}`);
+      else if (L <= 3 && r.res.firstBite > r.res.waves * LEAK) add('lazy leaks early', 'warn', `${r.name}: first bite at wave ${r.res.firstBite}/${r.res.waves}`);
     }
     // a skill taken away must not help; alternatives that beat the bot's own way are worth knowing
     for (const r of g('skill')) {
@@ -49,6 +51,23 @@ export function check(results, { soft = SOFT } = {}) {
     chain(['route 0.25', 'route 0.5', 'route 0.75', 'smart'], 'longer route pays');
     // a plant whose loss helps: misused by the bot, or not worth its dew
     for (const r of g('plant')) if (r.res.score > sm + .15) add('every plant helps', 'info', `${r.name} ${fmt(r.res)} beats smart`);
+  }
+  // every plant has a place: over the levels that have it, the smart bot plants it on most of them, and without it
+  // some level goes clearly worse (PLACE below the bot's median) while hardly any goes better; read only off a plan
+  // that plays without each plant (full) on three levels or more
+  const kinds = new Map();
+  for (const [n, rs] of by) {
+    const smart = rs.filter((r) => r.group === 'smart'); if (!smart.length) continue;
+    const sm = med(smart.map((r) => r.res.score)), base = smart.find((r) => r.waveSeed == null) || smart[0];
+    for (const r of rs.filter((q) => q.group === 'plant')) { const k = r.name.replace(/^no /, ''); if (!kinds.has(k)) kinds.set(k, []);
+      kinds.get(k).push({ level: n + 1, drop: sm - r.res.score, used: base.res.kinds?.[k] || 0 }); }
+  }
+  for (const [k, ls] of kinds) {
+    if (ls.length < 3) continue;
+    const used = ls.filter((x) => x.used > 0), worse = ls.filter((x) => x.drop >= PLACE), better = ls.filter((x) => x.drop <= -PLACE);
+    const text = `${k}: planted on ${used.length}/${ls.length} levels (${ls.map((x) => `L${x.level} ×${x.used}`).join(', ')}); without it worse on ${worse.map((x) => `L${x.level}`).join(', ') || 'none'}, better on ${better.map((x) => `L${x.level}`).join(', ') || 'none'}`;
+    const bad = used.length * 2 < ls.length || !worse.length || better.length > worse.length;
+    out.push({ level: ls[0].level, rule: 'every plant has a place', severity: bad ? 'fail' : 'info', text });
   }
   return out;
 }

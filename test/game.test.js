@@ -1,9 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame, step, place, placeProblem, plantOn, plantProblem, trail, trails, startWave, removePlant, upgrade, usePower, earlyBonus, regrow, regrowCost, stubAt, heal, healCost, refund, pstat, clearWeed, snapshot, restore, bugHp, COLS, ROWS, BREAK } from '../public/game.js';
-import { LEVELS, PLANTS, BUGS, PLANT_ORDER, PERKS, PERK_ORDER, REGROW, WEED_COST, FERTILE, wavePay } from '../public/data.js';
+import { LEVELS, PLANTS, BUGS, PLANT_ORDER, PERKS, PERK_ORDER, REGROW, WEED_COST, FERTILE, MARK_T, wavePay } from '../public/data.js';
 import { playLevel, expectedMeta, fullMeta } from './bot.mjs';
 import { waveLint } from '../balance/lint.mjs';
+import { LEAK } from '../balance/rules.mjs';
 
 test('every level has a way from the entrance to the fruit', () => {
   LEVELS.forEach((L, n) => {
@@ -124,7 +125,7 @@ test('a garden beside the untouched trail loses every level, however it is plant
     const r = playLevel(n, { route: 0, meta: expectedMeta(n) });
     assert.equal(r.won, false, `level ${n + 1}`);
     // («Опушка» is the exception: a row of corn with mint holds there until the last waves, and loses in them)
-    if (n < 3 && n !== 1) assert.ok(Math.min(...Object.keys(r.bites).map((k) => parseInt(k, 10))) <= LEVELS[n].count * .55, `level ${n + 1}: it leaks by the middle`);
+    if (n < 3 && n !== 1) assert.ok(Math.min(...Object.keys(r.bites).map((k) => parseInt(k, 10))) <= LEVELS[n].count * LEAK, `level ${n + 1}: it leaks well before the end`);
     if (!soft.includes(n)) for (const place of ['best', 'end', 'start', 'spread']) assert.equal(playLevel(n, { route: 0, meta: expectedMeta(n, 3), place }).won, false, `level ${n + 1}, three stars a level, planted ${place}`);
   }
 });
@@ -329,4 +330,43 @@ test('a wave got through pays by the level, a bug gives its own reward whatever 
     }
     assert.ok(kills > 0); assert.equal(paid, LEVELS[level].pay[0]);
   }
+});
+
+// One bug of a kind walking level 9 (every plant is there), with the health asked for.
+function lone(kind, hp, plants) {
+  const g = createGame(8); g.dew = 1e6; g.hp = g.maxHp = 1e6;
+  startWave(g); g.queue = [{ kind, at: 0, e: 0 }];
+  for (let n = 0; n < 600 && !g.bugs.length; n++) step(g, 1 / 60);
+  const b = g.bugs[0]; b.hp = b.maxHp = hp; g.events.length = 0;
+  for (let n = 0; n < 60 * 4; n++) step(g, 1 / 60); // a few cells onto the field
+  const i = Math.floor(b.x), j = Math.floor(b.y);
+  for (const [type, lvl, di, dj] of plants) { assert.ok(place(g, type, i + di, j + dj), `${type} at ${i + di},${j + dj}`); const p = g.plants[g.plants.length - 1]; for (let l = 1; l < lvl; l++) upgrade(g, p); }
+  return { g, b };
+}
+const hitsOf = (g, secs, src) => { const out = []; for (let n = 0; n < 60 * secs; n++) { step(g, 1 / 60); for (const e of g.events) if (e.t === 'hit' && (!src || e.src === src)) out.push(e); g.events.length = 0; } return out; };
+
+test('a bug pricked by a rose takes more from every plant for a while', () => {
+  const { g, b } = lone('snail', 1e5, [['rose', 1, -1, 1]]);
+  const first = hitsOf(g, 3, 'rose'); assert.ok(first.length >= 2);
+  assert.equal(first[0].dmg, PLANTS.rose.dmg[0]); // the first prick finds it unmarked
+  assert.ok(Math.abs(first[1].dmg - PLANTS.rose.dmg[0] * (1 + PLANTS.rose.mark[0])) < 1e-6, `${first[1].dmg}`);
+  assert.ok(b.mark > 0 && b.mark <= MARK_T);
+});
+
+test('a flytrap swallows a bug the others have worn down, however thick, but never a boss', () => {
+  const big = 1e5, { g, b } = lone('snail', big, [['flytrap', 1, -1, 1]]);
+  b.hp = big * (PLANTS.flytrap.gulp[0] + .2); hitsOf(g, 1.5); assert.ok(b.hp > 0, 'too healthy to swallow: a bite only');
+  b.hp = big * (PLANTS.flytrap.gulp[0] - .05); hitsOf(g, PLANTS.flytrap.eat[0] + 1); assert.ok(b.hp <= 0, 'worn down: swallowed whole');
+  const boss = lone('rhino', big, [['flytrap', 1, -1, 1]]); boss.b.hp = big * .1; hitsOf(boss.g, 2); assert.ok(boss.b.hp > 0);
+});
+
+test('a cob of corn hits only so many bugs of a pack', () => {
+  const g = createGame(0); g.dew = 1e6; g.hp = g.maxHp = 1e6; startWave(g);
+  g.queue = Array.from({ length: 12 }, (_, n) => ({ kind: 'ant', at: n * .05, e: 0 }));
+  for (let n = 0; n < 60 * 4; n++) step(g, 1 / 60);
+  for (const q of g.bugs) q.hp = q.maxHp = 1e5;
+  const lead = g.bugs[0]; assert.ok(place(g, 'corn', Math.floor(lead.x) - 1, Math.floor(lead.y) + 1)); g.events.length = 0;
+  let most = 0, cur = 0;
+  for (let n = 0; n < 60 * 6; n++) { step(g, 1 / 60); cur = g.events.filter((e) => e.t === 'hit' && e.src === 'corn').length; most = Math.max(most, cur); g.events.length = 0; }
+  assert.equal(most, PLANTS.corn.hits[0]);
 });
