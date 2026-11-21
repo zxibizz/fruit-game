@@ -27,8 +27,14 @@ and in portrait (turned there).
   small reward, the same everywhere. Bosses are strong but a grown garden kills them. No
   plant makes dew (it comes from finished waves, beaten bugs and waves called early). Caterpillars bite plants, mole
   crickets eat through walls; eaten plants leave roots that grow back by themselves, faster by an aloe, or at once
-  for dew. Freezes do not chain; dandelions shoot far and take the flyers first (they cross the maze in a straight line),
-  walkers only next to them and weaker.
+  for dew. Freezes do not chain; flyers cross the maze in a straight line.
+- **Every plant has its place**: the pumpkin is the wall; corn is the all-rounder for packs (a cob hits a few bugs);
+  the pepper burns every bug around it, a little each — for dense crowds of small ones; the rose marks the bugs it
+  pricks (they take more from every plant) and reaches flyers; the flytrap bites through armor and swallows whole a
+  bug the others have worn down — for the few thick ones; the dandelion is the far shot at flyers; mint slows, the
+  bell makes neighbours shoot faster, the aloe mends what is eaten. `node balance/lab.mjs` measures each plant apart
+  from the levels (a fixed maze, a garden of one kind for a sum of dew, a pack of one kind of bug), and the matrix
+  fails when a plant is not planted by the bot or when no level goes worse without it.
 - **Stars and perks**: up to three stars a level; they buy permanent perks (more dew at the start, a sturdier apple,
   a stronger plant…), which can be taken back and dealt again for free.
 - A level in progress is kept between waves and can be continued from the home screen.

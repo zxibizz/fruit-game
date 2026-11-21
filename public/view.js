@@ -13,16 +13,16 @@ const T = {
   plant: { pumpkin: 'Тыква', rose: 'Шиповник', aloe: 'Алоэ', corn: 'Кукуруза', mint: 'Мята', pepper: 'Перец', dandelion: 'Одуванчик', flytrap: 'Мухоловка', bell: 'Колокольчик' },
   eaten: { pumpkin: 'съедена', rose: 'съеден', aloe: 'съедено', corn: 'съедена', mint: 'съедена', pepper: 'съеден', dandelion: 'съеден', flytrap: 'съедена', bell: 'съеден' },
   // a few words for the card under the plant's name
-  role: { pumpkin: 'Стена', rose: 'Стрелок', aloe: 'Лекарь', corn: 'Бьёт по толпе', mint: 'Замедляет', pepper: 'Огонь вокруг', dandelion: 'Дальний, по летающим', flytrap: 'Сильный укус', bell: 'Помощник' },
+  role: { pumpkin: 'Стена', rose: 'Метит шипами', aloe: 'Лекарь', corn: 'Бьёт по толпе', mint: 'Замедляет', pepper: 'Жжёт толпу', dandelion: 'Дальний, по летающим', flytrap: 'Глотает ослабленных', bell: 'Помощник' },
   about: {
     pumpkin: 'Живая стена. Не стреляет, зато крепкая и дешёвая: из тыкв строят лабиринт, чтобы жуки шли дольше.',
-    rose: 'Колет шипами одного жука на соседних клетках. Достаёт и летающих. Быстрый и недорогой.',
+    rose: 'Колет шипами, и уколотый жук несколько секунд получает больше урона от всех растений. Сам бьёт слабо — ставь рядом с сильными. Достаёт и летающих.',
     aloe: 'Не воюет: лечит покусанные растения вокруг, а съеденные рядом с ним отрастают гораздо быстрее.',
     corn: 'Кидает початок навесом: зёрна задевают нескольких жуков рядом с целью. Хороша против толпы. Летающих не достаёт.',
     mint: 'Холодит: жуки рядом ползут медленнее и дольше остаются под обстрелом. Сама не бьёт — ставь рядом со стрелками.',
-    pepper: 'Обжигает сразу всех жуков вокруг себя и поджигает их. Огонь не замечает броню.',
+    pepper: 'Обжигает сразу всех жуков вокруг себя, сколько бы их ни было, и поджигает. Каждому достаётся немного: хорош против плотной толпы мелких. Огонь не замечает броню.',
     dandelion: 'Бьёт очень далеко и сильно — первыми сбивает летающих. Ползущих тоже бьёт, но только рядом с собой и слабее. Ставь так, чтобы доставал до яблока: туда летят все.',
-    flytrap: 'Кусает одного жука очень сильно — броня не спасает. Мелких глотает целиком. Потом жуёт.',
+    flytrap: 'Кусает одного жука очень сильно — броня не спасает. А жука, которого другие уже потрепали, глотает целиком, даже толстого. Потом жуёт. Боссов не глотает.',
     bell: 'Звенит — и растения на соседних клетках стреляют чаще. Сам не бьёт.',
   },
   // what the third level adds
@@ -406,9 +406,9 @@ function statRows(type, lvl, p = null) {
   const P = PLANTS[type], g = game || { meta: metaNow(), tiles: [] }, at = (l) => ({ type, lvl: l, i: p ? p.i : -1, j: p ? p.j : -1 });
   const v = (name, l) => pstat(g, at(l), name), rows = [], nx = lvl < 3 ? lvl + 1 : null;
   const add = (label, name, f = num) => { if (P[name] == null) return; const a = v(name, lvl), b = nx ? v(name, nx) : null; if (!a && !b) return; rows.push([label, f(a), b != null && f(b) !== f(a) ? f(b) : null]); };
-  add('Урон', 'dmg'); add('Целей', 'multi'); add('Огонь/с', 'burn');
+  add('Урон', 'dmg'); add('Уколотый получает', 'mark', (s) => `+${Math.round(s * 100)}%`); add('Целей', 'multi'); add('Огонь/с', 'burn');
   add('Выстрелов/с', 'rate', (r) => num(r));
-  add('Укус', 'chomp'); add('Кусает раз в', 'eat', (s) => `${num(s)} с`);
+  add('Укус', 'chomp'); add('Глотает, если здоровья', 'gulp', (s) => `до ${Math.round(s * 100)}%`); add('Кусает раз в', 'eat', (s) => `${num(s)} с`);
   add('Замедление', 'slow', (s) => `${Math.round(s * 100)}%`);
   add('Лечит/с', 'heal'); add('Отращивает за', 'regrow', (s) => `${num(s)} с`);
   add('Соседи чаще на', 'buff', (s) => `${Math.round(s * 100)}%`);
@@ -636,6 +636,7 @@ function drawBug(b, t, dt) {
   c.save(); c.globalAlpha = em; c.translate(x, y - (b.fly ? Math.sin(t * 6 + b.id) * 3 : 0)); c.rotate(a + (b.chew > 0 || b.gnaw ? Math.sin(t * 30) * .12 : 0)); if (em < 1) c.scale(.4 + em * .6, .4 + em * .6);
   if (b.hit > 0 || b.sting > 0) c.filter = 'brightness(1.8)';
   blit(s, -s.w / 2, -s.h / 2); c.restore();
+  if (b.mark > 0) { c.save(); c.globalAlpha = Math.min(1, b.mark) * .9; c.translate(x + 9 * sc, y - 11 * sc); c.rotate(.5); c.beginPath(); c.moveTo(0, -6); c.lineTo(3, 3); c.lineTo(-3, 3); c.closePath(); c.fillStyle = '#e8336a'; c.fill(); c.lineWidth = 1; c.strokeStyle = '#7a1030'; c.stroke(); c.restore(); } // pricked by a rose
   if (b.frozen > 0) A.fxIced(c, x, y, 13 * sc);
   if (b.mended > 0 && Math.random() < .15) fx.push({ k: 'spark', x: x + (Math.random() - .5) * 12, y: y - 6, t: 0, life: .4 });
   if (b.burn > 0 && Math.random() < .4) fx.push({ k: 'ember', x: x + (Math.random() - .5) * 14, y: y - 4, vx: 0, vy: -30, t: 0, life: .35 });

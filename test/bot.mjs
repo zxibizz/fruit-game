@@ -13,7 +13,7 @@
 //   closes holes for dew at once.
 // Run directly to see how it did: node test/bot.mjs [level ...]
 import { createGame, bugHp, computeDist, step, place, upgrade, upgradeCost, startWave, placeProblem, trails, regrow, regrowCost, removePlant, refund, stubAt, usePower, pstat, COLS, ROWS } from '../public/game.js';
-import { LEVELS, BUGS, PLANTS, PERKS, PERK_ORDER, MUD, EARLY_DEW, BREAK, wavePay } from '../public/data.js';
+import { LEVELS, BUGS, PLANTS, PERKS, PERK_ORDER, MUD, EARLY_DEW, BREAK, MARK_T, wavePay } from '../public/data.js';
 const rng = (s) => () => ((s = (Math.imul(s, 1103515245) + 12345) & 0x7fffffff) / 0x7fffffff);
 const show = process.env.MAP ? (await import(process.env.MAP)).show : null;
 const kOf = (i, j) => i + ',' + j, within = (dx, dy, r) => dx * dx + dy * dy <= r * r;
@@ -71,9 +71,14 @@ function study(g, tr, o) {
   const plants = []; for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) { const p = g.grid[j][i]; if (p && p.type) plants.push(p); }
   const mints = plants.filter((p) => PLANTS[p.type].slow).map((p) => [p.i, p.j, st(p, 'range'), st(p, 'slow') + (st(p, 'chill') ? .06 : 0)]);
   const bells = plants.filter((p) => PLANTS[p.type].buff).map((p) => [p, st(p, 'range'), st(p, 'buff')]);
+  // a rose marks the bugs it pricks: all the damage they take on the cells it reaches is that much more, for the
+  // share of the crowd it keeps marked (what it pricks in MARK_T seconds over the walkers in its reach)
+  const roses = plants.filter((p) => PLANTS[p.type].mark).map((p) => { const r = st(p, 'range'), cells = tr.filter(([a, b]) => within(a - p.i, b - p.j, r)).length;
+    return [p.i, p.j, r, st(p, 'mark') * Math.min(1, (st(p, 'multi') || 1) * st(p, 'rate') * MARK_T / Math.max(1, (o.crowd ?? 1) * cells))]; });
   const time = tr.map(([a, b], k) => {
     let slow = 0; for (const [i, j, r, v] of mints) if (within(a - i, b - j, r)) slow = Math.max(slow, v);
-    return 1 / ((1 - slow) * (o.terrain && g.tiles[b][a] === 'mud' && !g.grid[b][a] ? MUD : 1));
+    let mark = 0; for (const [i, j, r, v] of roses) if (within(a - i, b - j, r)) mark = Math.max(mark, v);
+    return (1 + mark) / ((1 - slow) * (o.terrain && g.tiles[b][a] === 'mud' && !g.grid[b][a] ? MUD : 1));
   });
   return { g, tr, o, armor, st, plants, time, bells };
 }
@@ -83,8 +88,8 @@ function study(g, tr, o) {
 // share of the coming health) cross the field in a straight line from the anthill to the fruit.
 function term(S, p) {
   const { g, tr, o, st, time, bells } = S, P = PLANTS[p.type], hit = (d) => Math.max(1, d - S.armor); let dps = 0; S.air = 0;
-  if (P.eat) dps = st(p, 'chomp') / st(p, 'eat');
-  else if (p.type === 'pepper') dps = 2 * hit(st(p, 'dmg')) * st(p, 'rate') + 2 * st(p, 'burn') * Math.min(1.5, st(p, 'burnT') / 2);
+  if (P.eat) dps = Math.min(o.hpG || Infinity, st(p, 'chomp') + st(p, 'gulp') * (o.hpG || 0)) / st(p, 'eat'); // a bite, or a worn bug swallowed
+  else if (p.type === 'pepper') dps = hit(st(p, 'dmg')) * st(p, 'rate') + st(p, 'burn') * Math.min(1, st(p, 'burnT') * st(p, 'rate')); // to every bug in its reach
   else if (P.dmg) dps = hit(st(p, 'dmg')) * st(p, 'rate') * (st(p, 'stun') ? 1.1 : 1);
   if (!dps) return 0;
   let buff = 0; for (const [q, r, v] of bells) if (q !== p && within(q.i - p.i, q.j - p.j, r)) buff = Math.max(buff, v);
@@ -120,10 +125,10 @@ function flyTime(g, p, r) {
   }
   return sum / FLY_ROWS.length * 1.5; // the fruit end matters most: every flyer passes there
 }
-export { study, term, trailOf };
+export { study, term, trailOf, layout };
 function worth(g, tr, o) { const [G, A] = sums(study(g, tr, o)); return value(o, G, A); }
 // plants that change the others' share: their worth is counted over the whole garden
-const wide = (type) => !!(PLANTS[type].slow || PLANTS[type].buff);
+const wide = (type) => !!(PLANTS[type].slow || PLANTS[type].buff || PLANTS[type].mark);
 
 // The share of the pay for a wave that the bot keeps for repairs once the diggers come.
 export const RESERVE = .6;
@@ -189,11 +194,28 @@ export function playLevel(level, { seed = 7, verbose = false, maxPlants = Infini
     if (where === 'spread' && offers.length) { const ok = offers.filter((q) => q.cost <= g.dew); return ok.length ? ok[Math.floor(R() * ok.length)] : top; }
     return top;
   };
+  const aloe = L.plants.includes('aloe') && (!allowed || allowed.includes('aloe')), eatenAt = [];
   let seen = '', need = 0;
   const tryBuild = () => {
     // repairs first: a hole the bugs run through is closed at once for dew; other roots grow back by themselves
     const tr = new Set(trailOf(g).map(([i, j]) => kOf(i, j))), on = (s) => tr.has(kOf(s.i, s.j));
     if (repair) for (const s of g.stubs.slice()) if (g.phase === 'wave' && on(s) && g.dew >= regrowCost(s)) regrow(g, s);
+    // an aloe where the plants keep being eaten: by two eaten ones that no aloe reaches yet, as near to all of them
+    // as a free cell off the trail gets; an aloe with much to mend around it is grown
+    if (aloe) {
+      const cover = (q) => g.plants.some((p) => p.type === 'aloe' && within(p.i - q[0], p.j - q[1], pstat(g, p, 'range')));
+      const bare = eatenAt.filter((q) => !cover(q)), r0 = PLANTS.aloe.range[0];
+      if (bare.length >= 2 && g.plants.filter((p) => p.type === 'aloe').length < 6 && g.dew >= PLANTS.aloe.cost) {
+        let top = null, topN = 1;
+        for (let i = 0; i < COLS; i++) for (let j = 0; j < ROWS; j++) {
+          if (g.grid[j][i] || stubAt(g, i, j) || keep.has(kOf(i, j)) || tr.has(kOf(i, j)) || planned.some(([a, b]) => a === i && b === j)) continue;
+          const n = bare.filter((q) => within(q[0] - i, q[1] - j, r0)).length; if (n > topN && !placeProblem(g, i, j)) { topN = n; top = [i, j]; }
+        }
+        if (top) place(g, 'aloe', top[0], top[1]);
+      }
+      for (const p of g.plants) if (p.type === 'aloe' && upgrades !== 'none') { const c = upgradeCost(p), n = eatenAt.filter((q) => within(p.i - q[0], p.j - q[1], pstat(g, p, 'range'))).length;
+        if (c != null && n >= 4 * p.lvl && g.dew >= c + 50) upgrade(g, p); }
+    }
     // the maze grows with the level: two walls at once and one more every wave: first-level pumpkins are cheap, and a long trail keeps a pack under the plants longer, with pumpkins where nothing stands yet
     const due = Math.min(walls.length, 2 + g.wave);
     for (const [col, gap] of walls.slice(0, due)) for (let j = 0; j < ROWS; j++) {
@@ -227,13 +249,13 @@ export function playLevel(level, { seed = 7, verbose = false, maxPlants = Infini
     if (g.phase === 'build' && (early || g.wave === 0)) { tryBuild(); const dew = g.dew; startWave(g); if (bank) g.dew = dew; }
     for (let n = 0; n < 15; n++) step(g, 1 / 30);
     t += .5; usePowers();
-    for (const e of g.events) { if (e.t === 'kill') { income += e.reward; if (bank) g.dew -= e.reward; } if (e.t === 'waveDone') { income += e.bonus; if (bank) g.dew -= e.bonus; } if (e.t === 'plantDead') eaten++; if (e.t === 'bite') bites[`${g.wave}:${e.b.kind}${e.b.brood ? '*' : ''}`] = (bites[`${g.wave}:${e.b.kind}${e.b.brood ? '*' : ''}`] || 0) + 1; }
+    for (const e of g.events) { if (e.t === 'kill') { income += e.reward; if (bank) g.dew -= e.reward; } if (e.t === 'waveDone') { income += e.bonus; if (bank) g.dew -= e.bonus; } if (e.t === 'plantDead') { eaten++; eatenAt.push([e.p.i, e.p.j]); } if (e.t === 'bite') bites[`${g.wave}:${e.b.kind}${e.b.brood ? '*' : ''}`] = (bites[`${g.wave}:${e.b.kind}${e.b.brood ? '*' : ''}`] || 0) + 1; }
     if (g.events.some((e) => e.t === 'waveDone') && g.wave % 5 === 0) log.push(`${g.wave}:${g.hp}hp/${g.plants.length}p`);
     powersUsed += g.events.filter((e) => e.t === 'power').length; if (watch) watch(g, o);
     if (verbose && g.events.some((e) => e.t === 'waveDone')) console.log(`  after wave ${g.wave}: hp ${g.hp} dew ${g.dew} plants ${g.plants.length} (${g.plants.filter((p) => p.lvl > 1).length} grown) eaten ${eaten} t ${Math.round(t)}s`);
     g.events.length = 0; tryBuild();
   }
-  const res = { worth: o.nG ? Math.round(worth(g, trailOf(g), o) * 100) / 100 : 0, trail: trailOf(g).length, level, won: g.phase === 'won', hp: g.hp, maxHp: g.maxHp, wave: g.wave, waves: g.waves, plants: g.plants.length, grown: g.plants.filter((p) => p.lvl > 1).length, maxed: g.plants.filter((p) => p.lvl === 3).length, dew: g.dew, eaten, income, log, bites, powersUsed, time: Math.round(t) };
+  const res = { worth: o.nG ? Math.round(worth(g, trailOf(g), o) * 100) / 100 : 0, trail: trailOf(g).length, level, won: g.phase === 'won', hp: g.hp, maxHp: g.maxHp, wave: g.wave, waves: g.waves, plants: g.plants.length, grown: g.plants.filter((p) => p.lvl > 1).length, maxed: g.plants.filter((p) => p.lvl === 3).length, dew: g.dew, eaten, income, kinds: g.plants.reduce((c, p) => { c[p.type] = (c[p.type] || 0) + 1; return c; }, {}), log, bites, powersUsed, time: Math.round(t) };
   if (show) show(g);
   if (verbose) console.log(`level ${level + 1} ${L.name}: ${res.won ? 'won' : 'LOST'} hp ${res.hp}/${g.maxHp} wave ${res.wave}/${g.waves} plants ${res.plants} (${res.grown} grown) dew left ${g.dew} eaten ${eaten} income ${income} time ${res.time}s bites ${JSON.stringify(bites)}`);
   return res;
