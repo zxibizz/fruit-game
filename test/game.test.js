@@ -116,9 +116,10 @@ test('bugs never walk into plants; a plant put on a cell with bugs lets them out
 // rain used. It has the perks of a player who took two stars on every earlier level.
 // playLevels: [[level, options], ...] played in one go, the bot's reports back in the same order
 const playLevels = (list) => play(list.map(([level, opts]) => ({ level, opts }))).map((x) => x.res);
-const smart = playLevels(LEVELS.map((_, n) => [n, { meta: expectedMeta(n) }]));
+// (played when the first balance test asks: the other tests do not need the native bot, nor cargo)
+let smartRuns; const smart = () => (smartRuns ??= playLevels(LEVELS.map((_, n) => [n, { meta: expectedMeta(n) }])));
 test('played with thought, every level is won', () => {
-  smart.forEach((r, n) => { assert.ok(r.won, `level ${n + 1} lost at wave ${r.wave}`); assert.ok(r.plants >= 40, `level ${n + 1}: ${r.plants} plants`); });
+  smart().forEach((r, n) => { assert.ok(r.won, `level ${n + 1} lost at wave ${r.wave}`); assert.ok(r.plants >= 40, `level ${n + 1}: ${r.plants} plants`); });
 });
 
 // The full picture — many seeds, other draws of the waves, exploits, every skill and perk switched off — is the balance
@@ -138,7 +139,7 @@ test('a garden beside the untouched trail loses every level, however it is plant
 
 test('half a garden or no frost and rain: the levels go worse', () => {
   const score = (list) => list.reduce((s, r) => s + (r.won ? r.hp / r.maxHp : -(1 - (r.wave - 1) / r.waves)), 0), some = [1, 2, 4, 6, 7];
-  const base = score(some.map((n) => smart[n]));
+  const base = score(some.map((n) => smart()[n]));
   assert.ok(score(playLevels(some.map((n) => [n, { maxPlants: 30, meta: expectedMeta(n) }]))) < base, 'half a garden');
   assert.ok(score(playLevels(some.map((n) => [n, { powers: false, meta: expectedMeta(n) }]))) < base, 'no powers');
 });

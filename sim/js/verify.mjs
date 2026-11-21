@@ -26,7 +26,9 @@ const levels = (opt('--levels') ? range(opt('--levels')) : LEVELS.map((_, n) => 
 // plants, every upgrade) — and stopped after STEPS steps of the game (the bosses of the middle of a level are in)
 const STEPS = 26000, FAST = [[2, 'no repair'], [3, 'exploit spread'], [4, 'smart s7'], [5, 'smart s7'], [7, 'eager powers']];
 const all = plan('full', LEVELS.map((_, n) => n));
-const tasks = (kind === 'full' ? all.filter((t) => levels.includes(t.level)) : FAST.filter(([n]) => levels.includes(n)).map(([n, name]) => { const t = all.find((x) => x.level === n && x.name === name); return { ...t, opts: { ...t.opts, steps: STEPS } }; }))
+const tasks = (kind === 'full' ? all.filter((t) => levels.includes(t.level)) : FAST.filter(([n]) => levels.includes(n)).map(([n, name]) => {
+  const t = all.find((x) => x.level === n && x.name === name); if (!t) throw new Error(`verify: no scenario '${name}' in balance/plans.mjs any more: pick another for the fast set`);
+  return { ...t, opts: { ...t.opts, steps: STEPS } }; }))
   .map((t) => ({ ...t, set: {} }));
 // players with no plan: a few on every level, with no perks and with all of them
 for (const n of levels) for (let k = 0; k < (kind === 'full' ? 12 : 2); k++) tasks.push({ level: n, name: `random ${k}`, random: true, opts: { seed: 100 + k * 7 + n, meta: k % 2 ? 'full' : 'none', steps: kind === 'full' ? 9000 : 6000 }, set: {} });
@@ -34,17 +36,23 @@ for (const n of levels) for (let k = 0; k < (kind === 'full' ? 12 : 2); k++) tas
 const t0 = Date.now();
 execFileSync('cargo', ['build', '--release', '--quiet'], { cwd: join(root, 'sim'), stdio: ['ignore', 'inherit', 'inherit'] });
 const dir = opt('--keep') || mkdtempSync(join(tmpdir(), 'fruit-verify-')); mkdirSync(dir, { recursive: true });
-// one batch per draw of the waves (the overrides change the data for good: a worker each)
+for (const f of readdirSync(dir)) if (/^(\d{4}(\.ops)?|data-\d+)\.json$/.test(f)) rmSync(join(dir, f)); // what an earlier run left in --keep
+// one batch per draw of the waves (the overrides change the data for good: a worker each). A party is three files:
+// NNNN.json (what it is), NNNN.ops.json (the actions and the hashes, written by fruit-sim) and the data of its batch
 const groups = new Map(); for (const t of tasks) { const k = String(t.waveSeed ?? null); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(t); }
-let n = 0;
+let n = 0, gi = 0;
 for (const list of groups.values()) {
-  const m = await new Promise((res) => { const w = new Worker(join(root, 'balance', 'native.mjs'), { workerData: { bin, jobs, tasks: list, record: true } }); w.once('message', res); w.once('error', (e) => res({ ok: false, err: String(e) })); });
-  if (!m.ok) { console.error(m.err); process.exit(1); }
-  list.forEach((t, k) => writeFileSync(join(dir, `${String(n++).padStart(4, '0')}.json`), JSON.stringify({ name: `L${t.level + 1} ${t.name}`, data: m.data, level: t.level, seed: m.opts[k].seed ?? 7, meta: m.opts[k].meta, ops: m.ops[k] })));
+  const ids = list.map(() => String(n++).padStart(4, '0'));
+  const m = await new Promise((res) => { const w = new Worker(join(root, 'balance', 'native.mjs'), { workerData: { bin, jobs, tasks: list, record: ids.map((id) => join(dir, `${id}.ops.json`)) } }); w.once('message', res); w.once('error', (e) => res({ ok: false, err: String(e) })); });
+  const broke = m.ok ? m.out.map((x, k) => x.err && `L${list[k].level + 1} ${list[k].name}: ${x.err}`).filter(Boolean) : [m.err];
+  if (broke.length) { console.error(broke.join('\n')); process.exit(1); }
+  writeFileSync(join(dir, `data-${gi}.json`), JSON.stringify(m.data));
+  list.forEach((t, k) => writeFileSync(join(dir, `${ids[k]}.json`), JSON.stringify({ name: `L${t.level + 1} ${t.name}`, data: `data-${gi}.json`, level: t.level, seed: m.opts[k].seed ?? 7, meta: m.opts[k].meta, ops: `${ids[k]}.ops.json` })));
+  gi++;
 }
 const tPlay = Date.now() - t0;
 // the replays: `jobs` Node processes, each with its share of the parties
-const files = readdirSync(dir).filter((f) => f.endsWith('.json')).sort().map((f) => join(dir, f));
+const files = readdirSync(dir).filter((f) => /^\d{4}\.json$/.test(f)).sort().map((f) => join(dir, f));
 const cov = args.includes('--coverage') ? mkdtempSync(join(tmpdir(), 'fruit-cov-')) : null;
 const outs = await Promise.all(Array.from({ length: jobs }, (_, j) => new Promise((res) => {
   const mine = files.filter((_, k) => k % jobs === j); if (!mine.length) return res({ code: 0, out: '' });
@@ -52,7 +60,7 @@ const outs = await Promise.all(Array.from({ length: jobs }, (_, j) => new Promis
   p.stdout.on('data', (d) => { out += d; }); p.stderr.on('data', (d) => { out += d; }); p.on('close', (code) => res({ code, out }));
 })));
 const bad = outs.flatMap((o) => o.out.split('\n').filter((l) => /MISMATCH|Error/.test(l)));
-const steps = files.reduce((s, f) => s + (readFileSync(f, 'utf8').match(/\["s",/g) || []).length, 0);
+const opsOf = (f) => readFileSync(f.replace(/\.json$/, '.ops.json'), 'utf8'), steps = files.reduce((s, f) => s + (opsOf(f).match(/\["s",/g) || []).length, 0);
 for (const l of bad) console.log(l);
 if (cov) {
   // the lines of game.js nothing ran: by the ranges V8 counted as never entered, over all the replay processes
@@ -77,14 +85,16 @@ const first = bad.map((l) => l.match(/^(.*): MISMATCH at op (\d+)/)).find(Boolea
 if (first) {
   const file = files.find((f) => JSON.parse(readFileSync(f, 'utf8')).name === first[1]), at = first[2], lines = (cmd, a) => execFileSync(cmd, a, { maxBuffer: 1 << 28 }).toString().trim().split('\n');
   const js = lines(process.execPath, [join(here, 'replay.mjs'), file, '--no-check', '--dump-at', at]), rs = lines(bin, ['replay', file, '--no-check', '--dump-at', at]);
-  const ops = JSON.parse(readFileSync(file, 'utf8')).ops, before = ops.slice(0, Number(at)).filter((o) => o[0] !== 's').slice(-3).map((o) => o.join(' ')).join('; ');
+  const ops = JSON.parse(opsOf(file)), before = ops.slice(0, Number(at)).filter((o) => o[0] !== 's').slice(-3).map((o) => o.join(' ')).join('; ');
   console.log(`\n${first[1]}, step ${ops.slice(0, Number(at) + 1).filter((o) => o[0] === 's').length} (the last actions before it: ${before || '-'}). The state after it, game.js against game.rs:`);
   let shown = 0; for (let k = 0; k < Math.max(js.length, rs.length) && shown < 12; k++) {
     const [, a, av, ...name] = (js[k] || '').split(' '), [, b, bv] = (rs[k] || '').split(' ');
     if (a !== b) { shown++; console.log(`  ${name.join(' ') || `number ${k}`}: ${av ?? 'none'} in game.js, ${bv ?? 'none'} in game.rs`); }
   }
-  const kept = opt('--keep') || join(tmpdir(), 'fruit-verify-failed'); if (!opt('--keep')) { rmSync(kept, { recursive: true, force: true }); mkdirSync(kept); writeFileSync(join(kept, 'party.json'), readFileSync(file)); }
-  console.log(`  the party: ${opt('--keep') ? file : join(kept, 'party.json')} (replay it: node sim/js/replay.mjs <party> --dump-at K; sim/target/release/fruit-sim replay <party> --no-check --dump-at K)`);
+  // the party stays for a closer look: one file with everything in it
+  const kept = join(opt('--keep') || tmpdir(), 'fruit-verify-failed.json'), tr = JSON.parse(readFileSync(file, 'utf8'));
+  writeFileSync(kept, JSON.stringify({ ...tr, data: JSON.parse(readFileSync(join(dir, tr.data), 'utf8')), ops }));
+  console.log(`  the party: ${kept} (the whole state after action K: node sim/js/replay.mjs <party> --dump-at K; sim/target/release/fruit-sim replay <party> --no-check --dump-at K)`);
 }
 if (!opt('--keep')) rmSync(dir, { recursive: true });
 console.log(`${kind}: ${files.length} parties, ${steps} steps, ${failed ? `${bad.length} DIFFER` : 'all the same in both'}; played in ${(tPlay / 1000).toFixed(1)} s, replayed in ${((Date.now() - t0 - tPlay) / 1000).toFixed(1)} s`);

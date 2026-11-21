@@ -435,7 +435,7 @@ pub fn play_level<'a>(d: &'a Data, level: usize, opt: &Opts, layouts: &dyn Fn(us
     (res, b.ops)
 }
 
-// A player with no plan at all, for the parity check (sim/check.sh): it plants, grows, sells, mends, calls waves and
+// A player with no plan at all, for the parity check (sim/js/verify.mjs): it plants, grows, sells, mends, calls waves and
 // spends frost and rain at random, often where it cannot, so the two copies of the rules meet states no bot gets
 // into. What it did goes to the list like a bot's party.
 pub fn play_random<'a>(d: &'a Data, level: usize, opt: &Opts) -> Vec<Op> {

@@ -4,6 +4,7 @@
 //   node sim/js/replay.mjs <file ...> [--no-check] [--check-only] [--repeat N] [--dump-at K]
 // --check-only: no timing run; --dump-at: prints the state after op K
 import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
 import * as D from '../../public/data.js';
 import { createGame, step, place, upgrade, startWave, regrow, removePlant, usePower, stubAt } from '../../public/game.js';
 import { hash, dump } from './hash.mjs';
@@ -40,7 +41,9 @@ function run(tr, checking) {
 }
 let bad = 0, total = 0;
 for (const f of files) {
-  const tr = JSON.parse(readFileSync(f, 'utf8')); load(tr.data);
+  const tr = JSON.parse(readFileSync(f, 'utf8'));
+  for (const k of ['data', 'ops']) if (typeof tr[k] === 'string') tr[k] = JSON.parse(readFileSync(join(dirname(f), tr[k]), 'utf8')); // files beside the party
+  load(tr.data);
   // the pay of a wave is counted from the level's recipe; the party has it counted already, and it must agree
   tr.data.LEVELS[tr.level].payAt.forEach((v, k) => { if (D.wavePay(D.LEVELS[tr.level], k + 1) !== v) throw new Error(`${f}: pay of wave ${k + 1}`); });
   const at = run(tr, check); let ms = 0;

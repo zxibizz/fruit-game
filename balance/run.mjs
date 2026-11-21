@@ -50,7 +50,7 @@ if (!existsSync(bin)) { for (const f of JS) cpSync(join(root, f), join(snap, f))
 const tasks = variants.flatMap((set, vi) => plan(kind, levels).map((sc) => ({ ...sc, set, vi })));
 // A result depends on the code of the simulation and the bot, the shared data (plants, bugs, perks, constants, the wave
 // builder) and its own level only: tuning one level reruns that level alone.
-const logic = createHash('sha1'); for (const f of ['balance/scenario.mjs', ...RS]) logic.update(readFileSync(join(root, f)));
+const logic = createHash('sha1'); for (const f of [...JS.filter((x) => x !== 'public/data.js'), ...RS]) logic.update(readFileSync(join(root, f)));
 logic.update(JSON.stringify(Object.fromEntries(Object.entries(DATA).filter(([k]) => k !== 'LEVELS'))) + DATA.makeWaves.toString()); const logicHash = logic.digest('hex');
 const levelHash = LEVELS.map((L) => createHash('sha1').update(JSON.stringify(L)).digest('hex'));
 const setFor = (set, n) => Object.fromEntries(Object.entries(set).filter(([k]) => !/^L\d+\./.test(k) || k.startsWith(`L${n + 1}.`))); // another level's override changes nothing here
@@ -66,10 +66,11 @@ const work = (file, workerData) => new Promise((res) => {
 });
 // one batch per variant of the data and draw of the waves; the binary plays a batch on `jobs` threads
 const groups = new Map(); for (const t of fresh) { const k = JSON.stringify([t.set, t.waveSeed ?? null]); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(t); }
+let lost = 0;
 for (const list of groups.values()) {
   const m = await work('native.mjs', { bin, jobs, tasks: list });
-  if (!m.ok) console.error(`\n${list.length} scenarios (${JSON.stringify(list[0].set)}, waves ${list[0].waveSeed ?? '-'}): ${m.err}`);
-  list.forEach((t, k) => keep(t, m.ok ? m.res[k] : null));
+  if (!m.ok) console.error(`\n${list.length} scenarios lost (${JSON.stringify(list[0].set)}, waves ${list[0].waveSeed ?? '-'}): ${m.err}`);
+  list.forEach((t, k) => { const x = m.ok ? m.out[k] : null; if (x?.err) console.error(`\n${t.name} L${t.level + 1}: ${x.err}`); if (!x?.res) lost++; keep(t, x?.res || null); });
 }
 tick();
 process.stderr.write('\n');
@@ -96,3 +97,5 @@ for (const v of report) {
 }
 if (lint.length) console.log('\nwave lint:\n' + lint.map((x) => `  ${x.severity} L${x.level} w${x.wave}: ${x.issue}`).join('\n'));
 console.log(`\n${out}/report.html`);
+// scenarios with no result are not in the findings above: a matrix with holes in it is not a clean one
+if (lost) { console.error(`\n${lost} of ${tasks.length} scenarios gave no result: the findings above are not the whole picture`); process.exitCode = 1; }

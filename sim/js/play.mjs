@@ -17,10 +17,10 @@ function call(bin, cmd, body, jobs) {
 }
 // scenarios: [{ level, opts, record?, random? }], opts as the bot takes them (balance/scenario.mjs resolve): seed,
 // route, terrain, powers (true, false, 'eager'), bank (dew), meta ({ perk: tier }), place, plants ([kinds] or null),
-// upgrades, early, repair, maxPlants, steps. Gives [{ res, ms, ops? }] in the same order; res is the bot's own report
-// (won, hp, maxHp, wave, waves, plants, grown, maxed, dew, eaten, income, kinds, bites, powersUsed, trail, worth, time).
-// record: the party comes along (ops: every action and the hash of the state after every step); random: a player
-// with no plan plays instead of the bot (for the parity check).
+// upgrades, early, repair, maxPlants, steps. Gives [{ res, ms }] in the same order, { err } for a party that broke;
+// res is the bot's own report (won, hp, maxHp, wave, waves, plants, grown, maxed, dew, eaten, income, kinds, bites,
+// powersUsed, trail, worth, time). record: a file the party is written to (every action and the hash of the state
+// after every step); random: a player with no plan plays instead of the bot (for the parity check).
 export function play(scenarios, { jobs = Math.max(1, Math.floor(availableParallelism() / 2)), bin = null, data = exportData() } = {}) {
   if (!bin) build(); // a given binary (a snapshot run.mjs took) is used as it is
   return call(bin || BIN, 'run', { data, scenarios }, jobs);

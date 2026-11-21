@@ -2,12 +2,14 @@
 // Every command takes a JSON file written by the JS side (sim/js/play.mjs, sim/js/verify.mjs):
 //   fruit-sim run <batch.json> [--jobs N]
 //     plays the scenarios of a batch { data, scenarios: [{ level, opts, record?, random? }] } on N threads and prints
-//     a JSON list of what came of each, in their order; with record, the party goes along (every action and the
-//     hash of the state after every step); random: a player with no plan instead of the bot
+//     a JSON list of what came of each, in their order ({ res, ms }, or { err } for a party that broke); record: a
+//     file to write the party to (every action and the hash of the state after every step); random: a player with
+//     no plan instead of the bot
 //   fruit-sim layout <{ data, level, terrain }.json>
 //     prints the maze the bot builds on a level: [[column, row of the gap], ...]
 //   fruit-sim replay <party.json ...> [--no-check] [--repeat N] [--dump-at K]
-//     replays parties { data, level, seed, meta, ops }: the hash of the state after every step must be the one
+//     replays parties { data, level, seed, meta, ops } (data and ops may be names of files beside the party, as
+//     sim/js/verify.mjs writes them): the hash of the state after every step must be the one
 //     written down. --dump-at K prints the state after action K number by number, in the lines of
 //     sim/js/replay.mjs --dump-at: the way to see where the two copies of the rules part
 mod bot;
@@ -33,8 +35,11 @@ fn meta_of(j: &J) -> Vec<(String, usize)> { j.obj().iter().map(|(k, v)| (k.clone
 fn load(file: &str) -> Party {
     let text = std::fs::read_to_string(file).unwrap_or_else(|e| panic!("{}: {}", file, e));
     let j = J::parse(&text).unwrap_or_else(|e| panic!("{}: {}", file, e));
-    let data = Data::read(j.at("data"));
-    let ops = j.at("ops").arr().iter().map(|o| {
+    // data and ops: there, or the names of files beside the party
+    let beside = |v: &J| -> Option<J> { if let J::Str(name) = v { let f = std::path::Path::new(file).with_file_name(name); let t = std::fs::read_to_string(&f).unwrap_or_else(|e| panic!("{}: {}", f.display(), e)); Some(J::parse(&t).unwrap_or_else(|e| panic!("{}: {}", f.display(), e))) } else { None } };
+    let (data_j, ops_j) = (beside(j.at("data")), beside(j.at("ops")));
+    let data = Data::read(data_j.as_ref().unwrap_or_else(|| j.at("data")));
+    let ops = ops_j.as_ref().unwrap_or_else(|| j.at("ops")).arr().iter().map(|o| {
         let a = o.arr(); let n = |k: usize| a[k].num() as i32;
         match a[0].str() {
             "s" => Op::Step(a[1].num() as u32),
@@ -124,7 +129,8 @@ fn run(file: &str, jobs: usize) {
     let j = J::parse(&text).unwrap_or_else(|e| panic!("{}: {}", file, e));
     let d = Data::read(j.at("data"));
     // random: a player with no plan (bot::play_random), for the parity check; its party is all there is to it
-    let scs: Vec<(usize, Opts, bool, bool)> = j.at("scenarios").arr().iter().map(|s| (s.at("level").num() as usize, opts_of(&d, s.at("opts")), s.get("record").map_or(false, |r| r.truthy()), s.get("random").map_or(false, |r| r.truthy()))).collect();
+    let scs: Vec<(usize, Opts, Option<String>, bool)> = j.at("scenarios").arr().iter().map(|s| (s.at("level").num() as usize, opts_of(&d, s.at("opts")),
+        s.get("record").and_then(|r| if let J::Str(f) = r { Some(f.clone()) } else { None }), s.get("random").map_or(false, |r| r.truthy()))).collect();
     // the maze of a level is the same for every scenario on it
     let mazes: Mutex<HashMap<(usize, bool), Vec<(i32, i32)>>> = Mutex::new(HashMap::new());
     let layouts = |level: usize, terrain: bool| -> Vec<(i32, i32)> {
@@ -137,9 +143,17 @@ fn run(file: &str, jobs: usize) {
             sc.spawn(|| loop {
                 let k = next.fetch_add(1, Ordering::SeqCst); if k >= scs.len() { break; }
                 let (level, opt, record, random) = &scs[k]; let t = Instant::now();
-                let (r, ops) = if *random { (Res::default(), Some(bot::play_random(&d, *level, opt))) } else { bot::play_level(&d, *level, opt, &layouts, *record) };
+                // a party that panics is its own failure: the others of the batch are played and reported
+                let played = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| if *random { (Res::default(), Some(bot::play_random(&d, *level, opt))) } else { bot::play_level(&d, *level, opt, &layouts, record.is_some()) }));
                 let ms = t.elapsed().as_secs_f64() * 1000.0;
-                *out[k].lock().unwrap() = format!("{{\"res\":{},\"ms\":{:.2}{}}}", res_json(&d, *level, &r), ms, ops.map_or(String::new(), |o| format!(",\"ops\":{}", ops_json(&d, &o))));
+                *out[k].lock().unwrap() = match played {
+                    Err(e) => format!("{{\"err\":{:?}}}", e.downcast_ref::<String>().cloned().or_else(|| e.downcast_ref::<&str>().map(|s| s.to_string())).unwrap_or_else(|| "panic".to_string())),
+                    Ok((r, ops)) => {
+                        // the party goes to a file of its own (half a megabyte of JSON each: too much to pass along in one piece)
+                        if let (Some(file), Some(o)) = (record, ops) { std::fs::write(file, ops_json(&d, &o)).unwrap_or_else(|e| panic!("{}: {}", file, e)); }
+                        format!("{{\"res\":{},\"ms\":{:.2}}}", res_json(&d, *level, &r), ms)
+                    }
+                };
             });
         }
     });
