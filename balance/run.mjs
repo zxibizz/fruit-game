@@ -3,7 +3,7 @@
 // Runs every scenario of the plan for every variant of the data in parallel (one worker per scenario, as many at a
 // time as there are cores), caches results by the code and the scenario, prints the findings per variant and writes
 // report.html and results.json to --out (default ~/tmp/balance/<time>).
-//   --set  overrides for every variant: L5.hpGrowth=1.9, PLANTS.dandelion.ground=.3, FLY_SHARE=.2
+//   --set  overrides for every variant: L5.dew=500, TUNE.hpGrowth=1.2, PLANTS.dandelion.ground=.3, FLY_SHARE=.2
 //   --grid variants to compare: every combination of the listed values is one variant
 import { Worker } from 'node:worker_threads';
 import { createHash } from 'node:crypto';

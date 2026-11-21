@@ -2,10 +2,10 @@
 import * as A from './art.js';
 import {
   createGame, step, plantOn, plantProblem, placeProblem, blockingCells, previewTrails, trails, upgrade, upgradeCost, removePlant, refund, isFresh,
-  startWave, earlyBonus, wavePreview, usePower, stars, regrow, regrowCost, clearStub, stubAt, heal, healCost, bugHp, rewardOf, pstat, clearWeed, tired,
+  startWave, earlyBonus, wavePreview, usePower, stars, regrow, regrowCost, clearStub, stubAt, heal, healCost, bugHp, rewardOf, pstat, clearWeed,
   snapshot, restore, COLS, ROWS, BREAK,
 } from './game.js';
-import { PLANTS, BUGS, LEVELS, PERKS, PERK_ORDER, PLANT_ORDER, WEED_COST, FERTILE } from './data.js';
+import { PLANTS, BUGS, LEVELS, PERKS, PERK_ORDER, PLANT_ORDER, WEED_COST, FERTILE, TUNE, FLY_HP } from './data.js';
 import { initAudio, applyVolume, sfx, muffleMusic } from './audio.js';
 
 const T = {
@@ -83,9 +83,9 @@ const T = {
   holdHint: 'Зажми растение или жука — узнаешь, кто это',
   dragHint: 'Сначала выбери растение на полке — или просто перетащи его на поле',
   hint2: 'Роса приходит за каждую пройденную волну. Дальше волны придут сами. Нажмёшь ▶ раньше — получишь ещё',
-  tiredHint: 'Жуки устают в пути: чем дольше ползут, тем больнее им достаётся. Делай тропинку длиннее, а лучшие растения ставь ближе к её концу',
+  tiredHint: 'Чем длиннее и извилистее тропинка, тем дольше жуки ползут мимо твоих растений. Ставь стрелков там, где тропинка проходит рядом несколько раз',
   upHint: 'Улучшения дорогие — копи росу и усиливай те растения, мимо которых жуки ползут дольше всего',
-  tiredNote: 'Жуки устают: каждая пройденная клетка добавляет 5% к урону по ним. Летающие не устают.',
+  growNote: `Жуки крепнут: каждая волна добавляет им ${Math.round(TUNE.hpGrowth * 100)}% начального здоровья (летающим — ${Math.round(TUNE.hpGrowth * FLY_HP * 100)}%), на всех уровнях одинаково.`,
   zoomHint: 'Поле можно приблизить двумя пальцами',
   undoHint: 'Ошиблась клеткой? Пока волна не началась, растение продаётся за полную цену',
   won: 'Яблоко спасено!', lost: 'Жуки съели яблоко', retry: 'Ещё раз', levels: 'Уровни', nextLevel: 'Дальше', resume: 'Продолжить',
@@ -396,7 +396,6 @@ function bugStats(kind, b) {
   if (B.dig) out.push('прогрызает стены');
   if (B.chew) out.push('кусает растения');
   if (B.mend) out.push('лечит жуков');
-  if (b && tired(b) >= 1.1) out.push(`устал: урон +${Math.round((tired(b) - 1) * 100)}%`);
   out.push(`кусает яблоко на ${B.bite}`, `+${b ? rewardOf(b) : B.reward} росы`);
   return out;
 }
@@ -638,7 +637,6 @@ function drawBug(b, t, dt) {
   if (b.hit > 0 || b.sting > 0) c.filter = 'brightness(1.8)';
   blit(s, -s.w / 2, -s.h / 2); c.restore();
   if (b.frozen > 0) A.fxIced(c, x, y, 13 * sc);
-  const tr = tired(b); if (tr >= 1.3 && !b.fly) for (let n = 0; n < (tr >= 2 ? 3 : tr >= 1.6 ? 2 : 1); n++) { const q = (t * 1.4 + n * .37 + b.id * .13) % 1; c.save(); c.globalAlpha = (1 - q) * .9; A.hdDrop(c, x + (n - 1) * 7 * sc + 6, y - 9 * sc - q * 9, 2.6); c.restore(); }
   if (b.mended > 0 && Math.random() < .15) fx.push({ k: 'spark', x: x + (Math.random() - .5) * 12, y: y - 6, t: 0, life: .4 });
   if (b.burn > 0 && Math.random() < .4) fx.push({ k: 'ember', x: x + (Math.random() - .5) * 14, y: y - 4, vx: 0, vy: -30, t: 0, life: .35 });
 }
@@ -1290,7 +1288,7 @@ function openGuide() {
     ? `<div class="item"><img src="${bugPic(k)}" alt=""><div class="tx"><h3>${T.bug[k]}${isBoss(k) ? ' <span class="tag" style="margin:0;background:#ffd0d8;color:#a01838">босс</span>' : ''}</h3><p>${T.bugAbout[k]}</p><div class="st">${bugStats(k).slice(1).join(' · ')}</div></div></div>`
     : `<div class="item off"><div class="tx"><h3>???</h3><p>${T.unknown}</p></div></div>`);
   showModal(`<div class="tabs"><button class="tab${guideTab === 'plants' ? ' on' : ''}" id="tP">${T.plantsTab}</button><button class="tab${guideTab === 'bugs' ? ' on' : ''}" id="tB">${T.bugsTab}</button></div>
-    <div class="body scroll">${guideTab === 'plants' ? PLANT_ORDER.map(plant).join('') : `<p style="font-size:13px;margin:0 0 8px">${T.tiredNote}</p>` + Object.keys(BUGS).map(bug).join('')}</div><div class="row foot"><button class="btn" id="mOk">${T.close}</button></div>`, true);
+    <div class="body scroll">${guideTab === 'plants' ? PLANT_ORDER.map(plant).join('') : `<p style="font-size:13px;margin:0 0 8px">${T.growNote}</p>` + Object.keys(BUGS).map(bug).join('')}</div><div class="row foot"><button class="btn" id="mOk">${T.close}</button></div>`, true);
   $('tP').onclick = () => { guideTab = 'plants'; sfx.tap(); openGuide(); }; $('tB').onclick = () => { guideTab = 'bugs'; sfx.tap(); openGuide(); };
   $('mOk').onclick = () => { showModal(null); if (!$('home').hidden) return; paused = false; };
 }

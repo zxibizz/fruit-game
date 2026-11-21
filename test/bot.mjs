@@ -13,7 +13,7 @@
 //   closes holes for dew at once.
 // Run directly to see how it did: node test/bot.mjs [level ...]
 import { createGame, bugHp, computeDist, step, place, upgrade, upgradeCost, startWave, placeProblem, trails, regrow, regrowCost, removePlant, refund, stubAt, usePower, pstat, COLS, ROWS } from '../public/game.js';
-import { LEVELS, BUGS, PLANTS, PERKS, PERK_ORDER, MUD, EARLY_DEW, BREAK, FATIGUE, wavePay } from '../public/data.js';
+import { LEVELS, BUGS, PLANTS, PERKS, PERK_ORDER, MUD, EARLY_DEW, BREAK, wavePay } from '../public/data.js';
 const rng = (s) => () => ((s = (Math.imul(s, 1103515245) + 12345) & 0x7fffffff) / 0x7fffffff);
 const show = process.env.MAP ? (await import(process.env.MAP)).show : null;
 const kOf = (i, j) => i + ',' + j, within = (dx, dy, r) => dx * dx + dy * dy <= r * r;
@@ -73,7 +73,7 @@ function study(g, tr, o) {
   const bells = plants.filter((p) => PLANTS[p.type].buff).map((p) => [p, st(p, 'range'), st(p, 'buff')]);
   const time = tr.map(([a, b], k) => {
     let slow = 0; for (const [i, j, r, v] of mints) if (within(a - i, b - j, r)) slow = Math.max(slow, v);
-    return (1 + FATIGUE * tr[k][2]) / ((1 - slow) * (o.terrain && g.tiles[b][a] === 'mud' && !g.grid[b][a] ? MUD : 1));
+    return 1 / ((1 - slow) * (o.terrain && g.tiles[b][a] === 'mud' && !g.grid[b][a] ? MUD : 1));
   });
   return { g, tr, o, armor, st, plants, time, bells };
 }

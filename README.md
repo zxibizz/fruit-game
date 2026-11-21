@@ -19,8 +19,9 @@ and in portrait (turned there).
   the end of every level: the rhino beetle runs, the queen lets ants out, the slug king splits into snails, the
   hornet flies over the maze, the spider webs the plants.
 - **Balance**: a level is meant to be hard and to be won by thought. Plants that hit walkers reach only the cells
-  next to them; bugs tire as they walk (every cell adds 5% to the damage they take), so a long winding trail with the
-  best plants near its end does several times more than the same plants by a straight road. The first level of a
+  next to them, so a long winding trail, with twice the cells beside it and the same plants passed again and again,
+  does far more than the same plants by a straight road. The health of every bug, bosses too, grows by one rule on
+  every level (`TUNE.hpGrowth` of its own health a wave). The first level of a
   plant is cheap — a trail is quick to shape — and the upgrades are dear: there is never dew for all of them. Most of
   the dew is the pay for every wave got through, growing evenly over a level (`pay` of the level); a bug gives its own
   small reward, the same everywhere. Bosses are strong but a grown garden kills them. No
@@ -54,7 +55,7 @@ and in portrait (turned there).
   picture is the balance matrix below.
   `node test/bot.mjs [levels...]` prints how the bot did, wave by wave.
 - `balance/` — the balance matrix (dev only, not in the image): `node balance/run.mjs [quick|full] [--levels 5,6-8]
-  [--set L5.hpGrowth=1.9,FLY_SHARE=.2] [--grid 'L5.hpGrowth=1.6|1.9;L5.pay=150/270|170/300']`. For every level it plays many
+  [--set L5.dew=500,FLY_SHARE=.2] [--grid 'L5.budget=12/5.8|12/6.4;L5.pay=150/270|170/300']`. For every level it plays many
   scenarios in parallel (a worker per scenario on a snapshot of the code, half the cores by default at the lowest
   priority — `--jobs N` for more; results cached
   per level, so tuning one level reruns only it): the smart bot on several seeds and on other draws of the waves; lazy

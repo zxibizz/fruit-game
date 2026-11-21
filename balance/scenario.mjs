@@ -1,6 +1,6 @@
 // One scenario of the balance matrix: a level, the overrides of the game data, and how the bot plays it.
 // Runs in a worker of its own (run.mjs), so overrides never leak into the next scenario.
-import { LEVELS, PLANTS, BUGS, PERKS, makeWaves } from '../public/data.js';
+import { LEVELS, PLANTS, BUGS, PERKS, TUNE, makeWaves } from '../public/data.js';
 import { playLevel, expectedMeta, fullMeta } from '../test/bot.mjs';
 
 // meta: 'none' | 'exp1' | 'exp2' (two stars a level before this one) | 'full' | 'perk:<key>' (that perk only, maxed)
@@ -17,17 +17,17 @@ const plantsOf = (spec, level) => {
   const [op, k] = spec.split(':'), all = LEVELS[level].plants;
   return op === 'no' ? all.filter((x) => x !== k) : ['pumpkin', k];
 };
-// Overrides: { 'L5.hpGrowth': 1.9, 'PLANTS.dandelion.ground': .3, 'BUGS.butterfly.hp': 12, FLY_SHARE: .2 }.
+// Overrides: { 'L5.dew': 500, 'L5.pay': '150/270', 'TUNE.hpGrowth': 1.2, 'PLANTS.dandelion.ground': .3, 'BUGS.butterfly.hp': 12, FLY_SHARE: .2 }.
 const WAVE_KEYS = new Set(['count', 'budget', 'roster', 'boss']);
 export function applyOverrides(set = {}, waveSeed = null) {
   const regen = new Set(); let flyShare;
   for (const [key, v] of Object.entries(set)) {
     const m = key.match(/^L(\d+)\.(.+)$/);
-    // L3.bossMul=.3/.5: the health multipliers of the level's bosses, in order (health only, the waves stay)
-    if (m && m[2] === 'bossMul') {
-      const L = LEVELS[Number(m[1]) - 1], xs = String(v).split('/').map(Number);
-      if (!L || xs.length !== L.boss.length || xs.some((x) => !(x > 0))) throw new Error(`${key}=${v}: level ${m[1]} has ${L ? L.boss.length : 'no'} bosses`);
-      xs.forEach((x, k) => { L.boss[k][3] = x; }); continue;
+    // L3.budget=11/5.4: the weight of the first wave / added per wave
+    if (m && m[2] === 'budget') {
+      const L = LEVELS[Number(m[1]) - 1], parts = String(v).split('/'), xs = parts.map(Number);
+      if (!L || parts.length !== 2 || xs.some((x) => !(x > 0))) throw new Error(`${key}=${v}: ${L ? 'first/added per wave' : `no level ${m[1]}`}`);
+      L.budget = xs; regen.add(Number(m[1]) - 1); continue;
     }
     // L3.pay=300/700: the dew for a wave got through, after the first wave / after the last but one
     if (m && m[2] === 'pay') {
@@ -38,7 +38,8 @@ export function applyOverrides(set = {}, waveSeed = null) {
     if (m && !(m[2] in (LEVELS[Number(m[1]) - 1] || {}))) throw new Error(`unknown override ${key}`);
     if (m) { const n = Number(m[1]) - 1; LEVELS[n][m[2]] = v; if (WAVE_KEYS.has(m[2])) regen.add(n); continue; }
     if (key === 'FLY_SHARE') { flyShare = v; LEVELS.forEach((_, n) => regen.add(n)); continue; }
-    const [root, ...path] = key.split('.'), obj = { PLANTS, BUGS, PERKS }[root]; if (!obj) throw new Error(`unknown override ${key}`);
+    const [root, ...path] = key.split('.'), obj = { PLANTS, BUGS, PERKS, TUNE }[root];
+    if (key === 'TUNE.bossEscort' || key === 'TUNE.gap') LEVELS.forEach((_, n) => regen.add(n)); if (!obj) throw new Error(`unknown override ${key}`);
     let o = obj; for (const p of path.slice(0, -1)) o = o[p]; o[path.at(-1)] = v;
   }
   if (waveSeed != null) LEVELS.forEach((_, n) => regen.add(n));

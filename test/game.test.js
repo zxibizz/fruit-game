@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame, step, place, placeProblem, plantOn, plantProblem, trail, trails, startWave, removePlant, upgrade, usePower, earlyBonus, regrow, regrowCost, stubAt, heal, healCost, refund, pstat, clearWeed, snapshot, restore, bugHp, COLS, ROWS, BREAK } from '../public/game.js';
-import { LEVELS, PLANTS, BUGS, PLANT_ORDER, PERKS, PERK_ORDER, REGROW, WEED_COST, FERTILE, FATIGUE, wavePay } from '../public/data.js';
+import { LEVELS, PLANTS, BUGS, PLANT_ORDER, PERKS, PERK_ORDER, REGROW, WEED_COST, FERTILE, wavePay } from '../public/data.js';
 import { playLevel, expectedMeta, fullMeta } from './bot.mjs';
 import { waveLint } from '../balance/lint.mjs';
 
@@ -109,7 +109,7 @@ test('bugs never walk into plants; a plant put on a cell with bugs lets them out
 });
 
 // Balance. The smart bot (test/bot.mjs) plays as the level asks: a maze over the whole field led through mud and
-// nettles, the best plants where bugs are slowest and most tired, upgrades where they pay, holes mended, frost and
+// nettles, the best plants where bugs are slowest, upgrades where they pay, holes mended, frost and
 // rain used. It has the perks of a player who took two stars on every earlier level.
 const smart = LEVELS.map((_, n) => playLevel(n, { meta: expectedMeta(n) }));
 test('played with thought, every level is won', () => {
@@ -135,12 +135,12 @@ test('half a garden or no frost and rain: the levels go worse', () => {
   assert.ok(score(some.map((n) => playLevel(n, { powers: false, meta: expectedMeta(n) }))) < base, 'no powers');
 });
 
-test('bugs tire on the way: the same hit hurts more after a long walk, and flyers do not tire', () => {
+test('a hit hurts the same wherever on the trail it lands', () => {
   const g = createGame(0); g.dew = 1000; send(g, 'snail');
   for (let k = 0; k < 60 * 12; k++) step(g, 1 / 60);
-  const b = g.bugs[0]; assert.ok(b.walk > 3);
+  const b = g.bugs[0];
   place(g, 'rose', Math.floor(b.x) - 1, Math.floor(b.y) + 1); const hit = () => { for (let k = 0; k < 600; k++) { step(g, 1 / 60); const e = g.events.find((q) => q.t === 'hit'); g.events.length = 0; if (e) return e; } };
-  const e = hit(); assert.ok(Math.abs(e.dmg - PLANTS.rose.dmg[0] * (1 + FATIGUE * e.b.walk)) < .5, `${e.dmg}`);
+  const e = hit(); assert.equal(e.dmg, PLANTS.rose.dmg[0]);
 });
 
 test('levels are long and their waves grow', () => {
