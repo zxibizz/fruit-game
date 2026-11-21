@@ -1012,14 +1012,20 @@ function wideBtn(x, y, w, h, col, ol, label, price, fn, disabled = false) {
 function drawPop() {
   const p = pop, w = Math.min(236, UW - LX - RX - 12);
   const hc0 = CELL / 2 * ws / uk, [fx0, fy0, fw, fh] = faUI(), [ux, y0] = toUI(...cellCenter(p.i, p.j)), uy = clamp(y0, fy0 + hc0, fy0 + fh - hc0);
-  const placeAt = (h) => { // above the plant if it fits, else below; else wherever it overflows less
-    const yUp = uy - hc0 * 2.5 - h - 8, yDown = uy + hc0 + 10, over = yDown + h - (UH - BOTY - 4), above = yUp >= TOPY + 4 || (over > 0 && TOPY + 4 - yUp < over);
-    const x = clamp(ux - w / 2, LX + 6, UW - RX - w - 6), y = above ? Math.max(TOPY + 4, yUp) : Math.min(yDown, UH - BOTY - h - 4);
+  // The panel keeps clear of the plant and its reach (the bigger ring, after the upgrade): it goes to the top or the
+  // bottom of the field, or beside the ring, wherever it covers least of it; nearer to the plant when all are clear.
+  const P = p.type ? PLANTS[p.type] : null, reach = P?.range && game.plants.includes(p) ? Math.max(pstat(game, p, 'range'), p.lvl < 3 ? pstat(game, { ...p, lvl: p.lvl + 1 }, 'range') : 0) : .5;
+  const rr = reach * CELL * ws / uk + 6, ry = uy - hc0 * .6; // the circle to keep clear, a little raised for the plant's height
+  const placeAt = (h) => {
+    const top = TOPH + 4, bottom = (TRAY.mode === 'row' ? TRAY.y - 4 : UH - BOTY) - h - 6, minX = TRAY.mode === 'col' ? Math.min(TRAY.x + TRAY.w + 10, UW - RX - w - 6) : LX + 6, maxX = UW - RX - w - 6; // not over the shelf
+    const near = clamp(ux - w / 2, minX, maxX), far = ux > (minX + maxX + w) / 2 ? minX : maxX, mid = clamp(ry - h / 2, top, Math.max(top, bottom));
+    const spots = [[near, top], [near, bottom], [ux - rr - 8 - w, mid], [ux + rr + 8, mid], [far, top], [far, bottom]].filter(([x]) => x >= minX - .5 && x <= maxX + .5);
+    const cover = (x, y) => { let n = 0; for (let a = 0; a < 8; a++) for (let b = 0; b < 8; b++) if (Math.hypot(x + (a + .5) * w / 8 - ux, y + (b + .5) * h / 8 - ry) < rr) n++; return n; };
+    let best = null, bs = Infinity;
+    for (const [x, y] of spots) { const sc = cover(x, y) * 1e4 + Math.hypot(x + w / 2 - ux, y + h / 2 - ry); if (sc < bs) { bs = sc; best = [x, y]; } }
+    const [x, y] = best;
     ui.push({ x, y, w, h, fn: () => {}, s: 'u' });
     c.save(); c.shadowColor = 'rgba(0,0,0,.35)'; c.shadowBlur = 12; A.uiPanel(c, x, y, w, h, 16, '#fff3d6', { ol: '#6a3e1c', olw: 2.5 }); c.restore();
-    const tx = clamp(ux, x + 18, x + w - 18); c.save(); c.beginPath();
-    if (above) { c.moveTo(tx - 9, y + h - 1.5); c.lineTo(tx, y + h + 8); c.lineTo(tx + 9, y + h - 1.5); } else { c.moveTo(tx - 9, y + 1.5); c.lineTo(tx, y - 8); c.lineTo(tx + 9, y + 1.5); }
-    c.fillStyle = '#fff3d6'; c.fill(); c.lineWidth = 2.5; c.strokeStyle = '#6a3e1c'; c.stroke(); c.restore();
     return [x, y];
   };
   const close = (x, y) => button(x + w - 17, y + 17, 11, '#e0884a', (bx, by) => { c.save(); c.lineCap = 'round'; c.lineWidth = 2.6; c.strokeStyle = '#fff'; c.beginPath(); c.moveTo(bx - 3.6, by - 3.6); c.lineTo(bx + 3.6, by + 3.6); c.moveTo(bx + 3.6, by - 3.6); c.lineTo(bx - 3.6, by + 3.6); c.stroke(); c.restore(); }, () => { pop = null; });
