@@ -11,7 +11,7 @@ const SMART = { route: 1, place: 'best', upgrades: 'greedy', meta: 'exp2', terra
 const smart = (o = {}) => ({ ...SMART, ...o });
 // a lazy garden as strong as it can be: every perk, and all the dew the level gives (bugs, waves, early calls) in hand from
 // the first wave — more than any player ever has at once, but not more than the level holds
-const EXPLOIT = { route: 0, bank: 'level', meta: 'full' };
+const EXPLOIT = { route: 0, bank: 'level', meta: 'full' }; // every perk at once: a replay after the whole game
 
 function forLevel(n, kind) {
   const out = [], add = (group, name, opts, extra = {}) => out.push({ level: n, group, name, opts, ...extra });
@@ -19,10 +19,12 @@ function forLevel(n, kind) {
   if (kind !== 'quick') for (const ws of [1, 2, 3]) add('smart', `smart waves${ws}`, smart(), { waveSeed: ws });
   for (const place of ['best', 'end', 'start', 'spread'])
     for (const upgrades of kind === 'quick' ? ['greedy'] : ['greedy', 'first']) add('exploit', `exploit ${place}${upgrades === 'first' ? ' grow' : ''}`, { ...EXPLOIT, place, upgrades });
-  // what a player without a maze really has: the dew as it comes, but every perk, planted any way
-  for (const place of ['best', 'end', 'start', 'spread']) add('lazy', `lazy ${place}`, { route: 0, meta: 'full', place });
+  // what a player without a maze really has: the dew as it comes, and the most perks there can be by this level (three
+  // stars on every level before it), planted any way
+  for (const place of ['best', 'end', 'start', 'spread']) add('lazy', `lazy ${place}`, { route: 0, meta: 'exp3', place });
   if (kind === 'quick') return out;
   add('lazy', 'lazy usual perks', { route: 0, meta: 'exp2' });
+  add('lazy', 'lazy every perk', { route: 0, meta: 'full' }); // a replay after the whole game: a warning only
   add('skill', 'half', smart({ maxPlants: 30 })); // half a garden: must do worse than a full one
   for (const r of [.25, .5, .75]) add('route', `route ${r}`, smart({ route: r }));
   for (const m of ['none', 'exp1', 'full']) add('meta', `meta ${m}`, smart({ meta: m }));

@@ -3,7 +3,8 @@
 import { BUGS } from '../public/data.js';
 const med = (a) => { const s = [...a].sort((x, y) => x - y); return s.length ? (s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2) : null; };
 const fmt = (r) => (r.won ? `W ${r.hp}/${r.maxHp}` : `L w${r.wave}`);
-export const SOFT = [7, 9]; // levels (1-based) where every perk at once may still carry a lazy garden
+export const SOFT = [7, 9]; // levels (1-based) where the most perks of their time may still carry a lazy garden through
+export const IDLE = 400; // dew left at the end of a level with nothing more to buy: a couple of upgrades at most
 
 export function check(results, { soft = SOFT } = {}) {
   const out = [], by = new Map();
@@ -21,6 +22,9 @@ export function check(results, { soft = SOFT } = {}) {
     if (spread > .6) add('bot steady', 'warn', `smart runs differ by ${spread.toFixed(2)}: ${smart.map((r) => `${r.name} ${fmt(r.res)}`).join(', ')}`);
     // every boss dies: a boss that only the fruit's health outlasts is a loss for a player with less of it
     for (const r of smart) if (r.res.bossBites) add('bosses die', r.waveSeed == null ? 'fail' : 'warn', `${r.name}: ${r.res.bossBites} boss(es) reached the fruit (${Object.entries(r.res.byKind).filter(([k]) => BUGS[k.replace('*', '')]?.boss).map(([k, d]) => `${k} −${d}`).join(', ')})`);
+    // no idle dew: a garden grown to the full with dew still piling up means the level pays more than it can use
+    const idle = smart.filter((r) => r.waveSeed == null && r.res.won && r.res.spare != null && r.res.plants > 0 && r.res.maxed >= r.res.plants * .95);
+    if (idle.length && med(idle.map((r) => r.res.spare)) > IDLE) add('no idle dew', 'fail', `the garden is grown to the full and ${Math.round(med(idle.map((r) => r.res.spare)))} dew is left (${idle.map((r) => r.res.spare).join(', ')})`);
     // one wave doing most of the damage: a spike
     for (const r of smart) if (r.res.biteCount - r.res.bossBites >= 4 && r.res.worstShare > .6) add('no spikes', 'warn', `${r.name}: wave ${r.res.worstWave} took ${Math.round(r.res.worstShare * 100)}% of the ${r.res.bites} fruit health lost (${Object.entries(r.res.byKind).map(([k, c]) => `${k} −${c}`).join(', ')})`);
     // the best lazy garden must lose
@@ -28,7 +32,8 @@ export function check(results, { soft = SOFT } = {}) {
     // all the dew of the level at once is more than any player has: a win there is a warning, not a break
     if (ex.length && ex[0].res.won) add('exploits lose', 'warn', `${ex.filter((r) => r.res.won).map((r) => `${r.name} ${fmt(r.res)}`).join(', ')}`);
     for (const r of g('lazy')) {
-      if (r.res.won) add('lazy loses', soft.includes(L) && r.opts.meta === 'full' ? 'warn' : 'fail', `${r.name} ${fmt(r.res)}`);
+      // every perk at once is a replay after the whole game; the soft levels may give in to the most perks of their time
+      if (r.res.won) add('lazy loses', r.opts.meta === 'full' || (soft.includes(L) && r.opts.meta === 'exp3') ? 'warn' : 'fail', `${r.name} ${fmt(r.res)}`);
       else if (L <= 3 && r.res.firstBite > r.res.waves * .55) add('lazy leaks early', 'warn', `${r.name}: first bite at wave ${r.res.firstBite}/${r.res.waves}`);
     }
     // a skill taken away must not help; alternatives that beat the bot's own way are worth knowing

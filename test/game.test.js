@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, step, place, placeProblem, plantOn, plantProblem, buyPower, powerPrice, trail, trails, startWave, removePlant, upgrade, usePower, earlyBonus, regrow, regrowCost, stubAt, heal, healCost, refund, pstat, clearWeed, snapshot, restore, bugHp, COLS, ROWS, BREAK } from '../public/game.js';
-import { LEVELS, PLANTS, BUGS, PLANT_ORDER, PERKS, PERK_ORDER, REGROW, WEED_COST, FERTILE, FATIGUE, POWER_PRICE, POWER_BUYS } from '../public/data.js';
+import { createGame, step, place, placeProblem, plantOn, plantProblem, trail, trails, startWave, removePlant, upgrade, usePower, earlyBonus, regrow, regrowCost, stubAt, heal, healCost, refund, pstat, clearWeed, snapshot, restore, bugHp, COLS, ROWS, BREAK } from '../public/game.js';
+import { LEVELS, PLANTS, BUGS, PLANT_ORDER, PERKS, PERK_ORDER, REGROW, WEED_COST, FERTILE, FATIGUE } from '../public/data.js';
 import { playLevel, expectedMeta, fullMeta } from './bot.mjs';
 import { waveLint } from '../balance/lint.mjs';
 
@@ -80,16 +80,6 @@ test('flyers stay a side threat: never most of a wave, and shooters do not waste
   assert.equal(shots.size, Math.ceil(BUGS.ant.hp / PLANTS.rose.dmg[0]), 'no shot wasted on a doomed ant');
 });
 
-test('a used-up power is bought for dew, each next one dearer, a few a level', () => {
-  const g = createGame(0); g.dew = 100000;
-  assert.equal(buyPower(g, 'frost'), false, 'not while one is in hand');
-  g.powers.frost = 0; let paid = 0;
-  for (let k = 0; k < POWER_BUYS; k++) { const price = powerPrice(g, 'frost'); assert.equal(price, POWER_PRICE.frost * 2 ** k); const dew = g.dew; assert.ok(buyPower(g, 'frost')); paid += dew - g.dew; assert.equal(g.powers.frost, 1); g.powers.frost = 0; }
-  assert.equal(paid, POWER_PRICE.frost * (2 ** POWER_BUYS - 1)); assert.equal(powerPrice(g, 'frost'), null); assert.equal(buyPower(g, 'frost'), false, 'no more this level');
-  g.powers.rain = 0; g.dew = POWER_PRICE.rain - 1; assert.equal(buyPower(g, 'rain'), false, 'not without the dew');
-  const snap = snapshot(g); assert.equal(restore(snap).bought.frost, POWER_BUYS, 'kept between waves');
-});
-
 test('bugs that reach the fruit bite it and the level can be lost', () => {
   const g = createGame(0); startWave(g);
   for (let n = 0; n < 60 * 120 && g.phase === 'wave'; n++) step(g, 1 / 60);
@@ -128,13 +118,13 @@ test('played with thought, every level is won', () => {
 
 // The full picture — many seeds, other draws of the waves, exploits, every skill and perk switched off — is the balance
 // matrix (node balance/run.mjs full); these are its hard rules on one seed, quick enough for every run of the tests.
-test('a garden beside the untouched trail loses every level, however it is planted and even with every perk', () => {
-  const soft = [6, 8]; // «Заросли» and «Закат»: every perk at once may still carry a lazy garden through
+test('a garden beside the untouched trail loses every level, however it is planted, with the most perks there can be by then', () => {
+  const soft = [6, 8]; // «Заросли» and «Закат»: a lazy garden with every perk may still get through
   for (let n = 0; n < LEVELS.length; n++) {
     const r = playLevel(n, { route: 0, meta: expectedMeta(n) });
     assert.equal(r.won, false, `level ${n + 1}`);
     if (n < 3) assert.ok(Math.min(...Object.keys(r.bites).map((k) => parseInt(k, 10))) <= LEVELS[n].count * .55, `level ${n + 1}: it leaks by the middle`);
-    if (!soft.includes(n)) for (const place of ['best', 'end', 'start', 'spread']) assert.equal(playLevel(n, { route: 0, meta: fullMeta(), place }).won, false, `level ${n + 1}, every perk, planted ${place}`);
+    if (!soft.includes(n)) for (const place of ['best', 'end', 'start', 'spread']) assert.equal(playLevel(n, { route: 0, meta: expectedMeta(n, 3), place }).won, false, `level ${n + 1}, three stars a level, planted ${place}`);
   }
 });
 

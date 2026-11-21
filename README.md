@@ -21,7 +21,9 @@ and in portrait (turned there).
 - **Balance**: a level is meant to be hard and to be won by thought. Plants that hit walkers reach only the cells
   next to them; bugs tire as they walk (every cell adds 5% to the damage they take), so a long winding trail with the
   best plants near its end does several times more than the same plants by a straight road. The first level of a
-  plant is cheap — a trail is quick to shape — and the upgrades are dear: there is never dew for all of them. No
+  plant is cheap — a trail is quick to shape — and the upgrades are dear: there is never dew for all of them. The dew a
+  bug gives fades over a level (half of it in the last wave): plenty while the maze is being built, none piling up
+  once the garden is grown. Bosses are strong but a grown garden kills them. No
   plant makes dew (it comes from beaten bugs, finished waves and waves called early). Caterpillars bite plants, mole
   crickets eat through walls; eaten plants leave roots that grow back by themselves, faster by an aloe, or at once
   for dew. Freezes do not chain; dandelions shoot far and take the flyers first (they cross the maze in a straight line),
@@ -47,8 +49,8 @@ and in portrait (turned there).
   cache list, no sudden walls of flyers in the waves, and the balance on one seed: the smart bot of `test/bot.mjs`
   (a maze through mud and nettles; it values a garden by the bugs it stops — walkers and flyers apart, a crowd sharing
   a single shooter while corn and pepper hit many; mended holes, frost and rain, the perks of two stars a level) must
-  win every level; a garden beside the untouched trail must lose every level, on most levels even with every perk and
-  planted any of four ways; half a garden or no powers must do worse. The suite takes a minute or two; the full
+  win every level; a garden beside the untouched trail must lose every level with the most perks there can be by then
+  (three stars on every level before), planted any of four ways; half a garden or no powers must do worse. The suite takes a minute or two; the full
   picture is the balance matrix below.
   `node test/bot.mjs [levels...]` prints how the bot did, wave by wave.
 - `balance/` — the balance matrix (dev only, not in the image): `node balance/run.mjs [quick|full] [--levels 5,6-8]
@@ -56,11 +58,12 @@ and in portrait (turned there).
   scenarios in parallel (a worker per scenario on a snapshot of the code, half the cores by default at the lowest
   priority — `--jobs N` for more; results cached
   per level, so tuning one level reruns only it): the smart bot on several seeds and on other draws of the waves; lazy
-  gardens beside the untouched trail with real dew and every perk, planted best, by the end, by the start or at
-  random (they must lose); "exploits" — the same with all the dew of the level at once (an upper bound, a warning
+  gardens beside the untouched trail with real dew and the most perks of their time, planted best, by the end, by the
+  start or at random (they must lose; with every perk at once — a replay — only a warning); "exploits" — the same with all the dew of the level at once (an upper bound, a warning
   only); the smart bot with one skill off (ground, frost and rain, early calls, repairs, upgrades), with fewer or more
   perks, with part of the maze, without one kind of plant. `rules.mjs` reads the results (the smart bot wins on every
-  seed and draw, lazy gardens lose, skills and perks pay, a longer route pays, no wave does most of the damage),
+  seed and draw, every boss dies, lazy gardens lose, no dew piles up once the garden is grown, skills and perks pay, a
+  longer route pays, no wave does most of the damage),
   `lint.mjs` looks at the waves alone for sudden walls of bugs (also in the tests). It prints the findings and writes
   `report.html` (level × scenario, coloured by how much fruit was left or how early it was lost) and `results.json`.
   `--grid` compares variants of the data side by side — the way to tune a level.
