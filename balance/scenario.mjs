@@ -23,6 +23,12 @@ export function applyOverrides(set = {}, waveSeed = null) {
   const regen = new Set(); let flyShare;
   for (const [key, v] of Object.entries(set)) {
     const m = key.match(/^L(\d+)\.(.+)$/);
+    // L3.bossMul=.3/.5: the health multipliers of the level's bosses, in order (health only, the waves stay)
+    if (m && m[2] === 'bossMul') {
+      const L = LEVELS[Number(m[1]) - 1], xs = String(v).split('/').map(Number);
+      if (!L || xs.length !== L.boss.length || xs.some((x) => !(x > 0))) throw new Error(`${key}=${v}: level ${m[1]} has ${L ? L.boss.length : 'no'} bosses`);
+      xs.forEach((x, k) => { L.boss[k][3] = x; }); continue;
+    }
     if (m) { const n = Number(m[1]) - 1; LEVELS[n][m[2]] = v; if (WAVE_KEYS.has(m[2])) regen.add(n); continue; }
     if (key === 'FLY_SHARE') { flyShare = v; LEVELS.forEach((_, n) => regen.add(n)); continue; }
     const [root, ...path] = key.split('.'), obj = { PLANTS, BUGS, PERKS }[root]; if (!obj) throw new Error(`unknown override ${key}`);
@@ -38,11 +44,12 @@ export function runScenario(sc) {
   if (o.bank === 'all') o.bank = 1e6; else if (o.bank === 'level') o.bank = true; // true: levelDew() in the bot
   const t = Date.now(), r = playLevel(n, o), L = LEVELS[n];
   // where the damage came from: the worst wave's share of all bites, and bites by kind
-  const byWave = {}, byKind = {}; let bites = 0;
-  for (const [k, c] of Object.entries(r.bites)) { const [w, kind] = k.split(':'); byWave[w] = (byWave[w] || 0) + c; byKind[kind] = (byKind[kind] || 0) + c; bites += c; }
+  // (by the fruit health they took: a boss bites far harder than an ant)
+  const byWave = {}, byKind = {}; let bites = 0, biteCount = 0, bossBites = 0;
+  for (const [k, c] of Object.entries(r.bites)) { const [w, kind0] = k.split(':'), kind = kind0.replace('*', ''), d = c * BUGS[kind].bite; byWave[w] = (byWave[w] || 0) + d; byKind[kind0] = (byKind[kind0] || 0) + d; bites += d; biteCount += c; if (BUGS[kind].boss) bossBites += c; }
   const worst = Object.entries(byWave).sort((a, b) => b[1] - a[1])[0] || [null, 0];
   const first = Object.keys(byWave).length ? Math.min(...Object.keys(byWave).map(Number)) : null;
   return { won: r.won, hp: r.hp, maxHp: r.maxHp, wave: r.wave, waves: L.count, score: r.won ? r.hp / r.maxHp : -(1 - (r.wave - 1) / L.count),
-    firstBite: first, bites, worstWave: worst[0] && Number(worst[0]), worstShare: bites ? worst[1] / bites : 0, byKind, plants: r.plants, grown: r.grown, trail: r.trail,
+    firstBite: first, bites, biteCount, bossBites, worstWave: worst[0] && Number(worst[0]), worstShare: bites ? worst[1] / bites : 0, byKind, plants: r.plants, grown: r.grown, trail: r.trail,
     spare: r.dew > 1e5 ? null : r.dew, powersUsed: r.powersUsed, ms: Date.now() - t };
 }

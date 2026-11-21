@@ -1,7 +1,7 @@
 // Simulation: no DOM, plain data. The view reads the state and the events, and calls the actions below.
-import { COLS, ROWS, FRUIT_HP, PLANTS, BUGS, LEVELS, PERKS, BREAK, EARLY_DEW, REPAIR, REGROW, REFUND, CHEW_GROWTH, POWER_EVERY, POWER_MAX, FERTILE, FERTILE_ADD, MUD, NETTLE, NETTLE_BOSS, WEED_COST, BROOD_REWARD, FATIGUE, FLY_HP } from './data.js';
+import { COLS, ROWS, FRUIT_HP, PLANTS, BUGS, LEVELS, PERKS, BREAK, EARLY_DEW, REPAIR, REGROW, REFUND, CHEW_GROWTH, POWER_EVERY, POWER_MAX, POWER_PRICE, POWER_BUYS, FERTILE, FERTILE_ADD, MUD, NETTLE, NETTLE_BOSS, WEED_COST, BROOD_REWARD, FATIGUE, FLY_HP } from './data.js';
 
-export const VERSION = '0.17.0';
+export const VERSION = '0.18.0';
 export { COLS, ROWS, BREAK };
 
 const DIRS = [[-1, 0], [0, -1], [0, 1], [1, 0]]; // tie order: towards the fruit side first
@@ -21,7 +21,7 @@ export function createGame(levelIndex, seed = 1, meta = {}) {
     dew: L.dew + tier('dew'), hp, maxHp: hp,
     wave: 0, waves: L.waves.length, phase: 'build', nextIn: null, // nextIn: seconds until the next wave starts by itself
     bugs: [], shots: [], plants: [], stubs: [], events: [], queue: [], // stubs: roots of the eaten plants
-    time: 0, waveTime: 0, powers: { frost: 1 + clouds, rain: 1 + clouds }, powerMax: POWER_MAX + clouds, nextId: 1, rand: mulberry32(seed),
+    time: 0, waveTime: 0, powers: { frost: 1 + clouds, rain: 1 + clouds }, bought: { frost: 0, rain: 0 }, powerMax: POWER_MAX + clouds, nextId: 1, rand: mulberry32(seed),
     regrow: REGROW * (tier('roots') || 1), refund: tier('refund') || REFUND,
     dist: null, dig: null, stats: { kills: 0, bites: 0, eaten: 0, earned: 0 },
   };
@@ -289,8 +289,16 @@ function spawn(g, kind, e = 0, from = null) {
   return b;
 }
 
+export const powerPrice = (g, kind) => (g.bought[kind] < POWER_BUYS ? POWER_PRICE[kind] * 2 ** g.bought[kind] : null);
+// Only a used-up power is bought, one at a time; null price: no more to buy on this level.
+export function buyPower(g, kind) {
+  const price = powerPrice(g, kind);
+  if (price == null || over(g) || g.powers[kind] > 0 || g.dew < price) return false;
+  g.dew -= price; g.bought[kind]++; g.powers[kind]++; g.events.push({ t: 'buyPower', kind, price });
+  return true;
+}
 export function usePower(g, kind) {
-  if (!g.powers[kind] || over(g)) return false;
+  if (!g.powers[kind] || over(g) || (kind === 'frost' && g.phase !== 'wave')) return false; // frost on an empty field is lost
   g.powers[kind]--;
   if (kind === 'frost') for (const b of g.bugs) freeze(b, BUGS[b.kind].boss ? 2 : 4, true);
   if (kind === 'rain') { for (const p of g.plants) { p.hp = p.maxHp; p.web = 0; } auras(g); for (const s of g.stubs.slice()) regrow(g, s, true); g.hp = Math.min(g.maxHp, g.hp + 3); }
@@ -527,7 +535,7 @@ export const stars = (g) => (g.hp >= g.maxHp * .8 ? 3 : g.hp >= g.maxHp * .4 ? 2
 export function snapshot(g) {
   const cleared = g.L.obstacles.filter(([i, j, t]) => t === 'weed' && g.grid[j][i]?.obstacle !== 'weed').map(([i, j]) => [i, j]);
   return {
-    v: 1, level: g.level, seed: g.seed, wave: g.wave, dew: g.dew, hp: g.hp, powers: { ...g.powers }, stats: { ...g.stats }, time: g.time, cleared,
+    v: 1, level: g.level, seed: g.seed, wave: g.wave, dew: g.dew, hp: g.hp, powers: { ...g.powers }, bought: { ...g.bought }, stats: { ...g.stats }, time: g.time, cleared,
     plants: g.plants.map((p) => ({ type: p.type, lvl: p.lvl, i: p.i, j: p.j, hp: p.hp, spent: p.spent })),
     stubs: g.stubs.map((s) => ({ type: s.type, lvl: s.lvl, i: s.i, j: s.j, spent: s.spent, grow: s.grow })),
   };
@@ -543,7 +551,7 @@ export function restore(snap, meta = {}) {
   }
   for (const s of snap.stubs || []) if (PLANTS[s.type] && [1, 2, 3].includes(s.lvl) && inside(s.i, s.j) && !g.grid[s.j][s.i]) g.stubs.push({ id: g.nextId++, ...s });
   Object.assign(g, { wave: snap.wave, dew: snap.dew, hp: Math.min(g.maxHp, snap.hp), time: snap.time || 0 });
-  Object.assign(g.powers, snap.powers); Object.assign(g.stats, snap.stats);
+  Object.assign(g.powers, snap.powers); Object.assign(g.bought, snap.bought || {}); Object.assign(g.stats, snap.stats);
   refresh(g);
   return g;
 }

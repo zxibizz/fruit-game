@@ -1,5 +1,6 @@
 // What the balance must hold, read off the results of a plan. Each finding: { level, rule, severity, text }.
 // fail: the balance is broken; warn: on the edge or the bot unsure; info: worth a look.
+import { BUGS } from '../public/data.js';
 const med = (a) => { const s = [...a].sort((x, y) => x - y); return s.length ? (s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2) : null; };
 const fmt = (r) => (r.won ? `W ${r.hp}/${r.maxHp}` : `L w${r.wave}`);
 export const SOFT = [7, 9]; // levels (1-based) where every perk at once may still carry a lazy garden
@@ -18,8 +19,10 @@ export function check(results, { soft = SOFT } = {}) {
     else if (sm < .2) add('smart margin', 'warn', `median ${Math.round(sm * 100)}% of the fruit left`);
     const spread = Math.max(...smart.map((r) => r.res.score)) - Math.min(...smart.map((r) => r.res.score));
     if (spread > .6) add('bot steady', 'warn', `smart runs differ by ${spread.toFixed(2)}: ${smart.map((r) => `${r.name} ${fmt(r.res)}`).join(', ')}`);
+    // every boss dies: a boss that only the fruit's health outlasts is a loss for a player with less of it
+    for (const r of smart) if (r.res.bossBites) add('bosses die', r.waveSeed == null ? 'fail' : 'warn', `${r.name}: ${r.res.bossBites} boss(es) reached the fruit (${Object.entries(r.res.byKind).filter(([k]) => BUGS[k.replace('*', '')]?.boss).map(([k, d]) => `${k} −${d}`).join(', ')})`);
     // one wave doing most of the damage: a spike
-    for (const r of smart) if (r.res.bites >= 4 && r.res.worstShare > .6) add('no spikes', 'warn', `${r.name}: wave ${r.res.worstWave} gave ${Math.round(r.res.worstShare * 100)}% of ${r.res.bites} bites (${Object.entries(r.res.byKind).map(([k, c]) => `${k} ${c}`).join(', ')})`);
+    for (const r of smart) if (r.res.biteCount - r.res.bossBites >= 4 && r.res.worstShare > .6) add('no spikes', 'warn', `${r.name}: wave ${r.res.worstWave} took ${Math.round(r.res.worstShare * 100)}% of the ${r.res.bites} fruit health lost (${Object.entries(r.res.byKind).map(([k, c]) => `${k} −${c}`).join(', ')})`);
     // the best lazy garden must lose
     const ex = g('exploit').sort((a, b) => b.res.score - a.res.score);
     // all the dew of the level at once is more than any player has: a win there is a warning, not a break

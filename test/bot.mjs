@@ -12,7 +12,7 @@
 //   (frost and rain at the first chance); early — calls every wave at once (else waits for the countdown); repair —
 //   closes holes for dew at once.
 // Run directly to see how it did: node test/bot.mjs [level ...]
-import { createGame, bugHp, computeDist, step, place, upgrade, upgradeCost, startWave, placeProblem, trails, regrow, regrowCost, removePlant, refund, stubAt, usePower, pstat, COLS, ROWS } from '../public/game.js';
+import { createGame, bugHp, buyPower, powerPrice, computeDist, step, place, upgrade, upgradeCost, startWave, placeProblem, trails, regrow, regrowCost, removePlant, refund, stubAt, usePower, pstat, COLS, ROWS } from '../public/game.js';
 import { LEVELS, BUGS, PLANTS, PERKS, PERK_ORDER, MUD, EARLY_DEW, BREAK, FATIGUE } from '../public/data.js';
 const rng = (s) => () => ((s = (Math.imul(s, 1103515245) + 12345) & 0x7fffffff) / 0x7fffffff);
 const show = process.env.MAP ? (await import(process.env.MAP)).show : null;
@@ -214,8 +214,10 @@ export function playLevel(level, { seed = 7, verbose = false, maxPlants = Infini
     if (!powers) return;
     if (powers === 'eager') { if (g.phase === 'wave' && g.bugs.length) { if (g.powers.frost) usePower(g, 'frost'); if (g.powers.rain && (g.stubs.length || g.hp < g.maxHp)) usePower(g, 'rain'); } return; }
     const near = g.bugs.filter((b) => Math.hypot(b.x - g.fruit[0] - .5, b.y - g.fruit[1] - .5) < 2.5);
-    if (g.powers.frost && (near.length >= 3 || near.some((b) => BUGS[b.kind].boss))) usePower(g, 'frost');
-    if (g.powers.rain && (g.hp <= g.maxHp - 3 || g.stubs.length >= 3 || g.plants.filter((p) => p.web > 0).length >= 2)) usePower(g, 'rain');
+    // used up: buys another when it is needed now and the dew is there (keeping some for the garden)
+    const want = (kind) => g.powers[kind] || (powerPrice(g, kind) != null && g.dew >= powerPrice(g, kind) + 100 && buyPower(g, kind));
+    if ((near.length >= 3 || near.some((b) => BUGS[b.kind].boss)) && want('frost')) usePower(g, 'frost');
+    if ((g.hp <= g.maxHp - 3 || g.stubs.length >= 3 || g.plants.filter((p) => p.web > 0).length >= 2) && want('rain')) usePower(g, 'rain');
   };
   let t = 0, income = 0, eaten = 0, powersUsed = 0; const log = [], bites = {}, hpAt = [];
   while (g.phase !== 'won' && g.phase !== 'lost' && t < 3600) {

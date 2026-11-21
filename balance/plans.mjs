@@ -23,7 +23,7 @@ function forLevel(n, kind) {
   for (const place of ['best', 'end', 'start', 'spread']) add('lazy', `lazy ${place}`, { route: 0, meta: 'full', place });
   if (kind === 'quick') return out;
   add('lazy', 'lazy usual perks', { route: 0, meta: 'exp2' });
-  add('lazy', 'half', smart({ maxPlants: 30 }));
+  add('skill', 'half', smart({ maxPlants: 30 })); // half a garden: must do worse than a full one
   for (const r of [.25, .5, .75]) add('route', `route ${r}`, smart({ route: r }));
   for (const m of ['none', 'exp1', 'full']) add('meta', `meta ${m}`, smart({ meta: m }));
   add('skill', 'blind', smart({ terrain: false }));

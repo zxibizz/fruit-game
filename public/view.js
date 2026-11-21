@@ -2,10 +2,10 @@
 import * as A from './art.js';
 import {
   createGame, step, plantOn, plantProblem, placeProblem, blockingCells, previewTrails, trails, upgrade, upgradeCost, removePlant, refund, isFresh,
-  startWave, earlyBonus, wavePreview, usePower, stars, regrow, regrowCost, clearStub, stubAt, heal, healCost, bugHp, bugReward, pstat, clearWeed, tired,
+  startWave, earlyBonus, wavePreview, usePower, buyPower, powerPrice, stars, regrow, regrowCost, clearStub, stubAt, heal, healCost, bugHp, bugReward, pstat, clearWeed, tired,
   snapshot, restore, COLS, ROWS, BREAK,
 } from './game.js';
-import { PLANTS, BUGS, LEVELS, PERKS, PERK_ORDER, PLANT_ORDER, WEED_COST, FERTILE } from './data.js';
+import { PLANTS, BUGS, LEVELS, PERKS, PERK_ORDER, PLANT_ORDER, WEED_COST, FERTILE, POWER_BUYS } from './data.js';
 import { initAudio, applyVolume, sfx, muffleMusic } from './audio.js';
 
 const T = {
@@ -75,6 +75,7 @@ const T = {
   },
   fresh: (list) => `Новое: ${list.join(', ')}. Зажми, чтобы узнать подробнее`, freshBug: (list) => `Новый жук: ${list.join(', ')}. Зажми его, чтобы узнать подробнее`,
   boss: (name) => `Босс: ${name}!`,
+  buyHint: `Мороз или дождь кончились? Их можно купить за росу — тапни по кнопке. Каждый следующий вдвое дороже, не больше ${POWER_BUYS} за уровень`,
   roots: (name) => `${name}: корни`, rootsHint: 'Корни отрастут сами. Тапни по ним — отрастут сразу, за росу', powersBack: 'Мороз и дождь снова с тобой', regrown: 'Отросло!', lvl: (n) => `уровень ${n}`,
   problem: { same: 'Здесь уже такое растение', busy: 'Здесь занято', blocks: 'Нельзя закрыть жукам путь', poor: 'Не хватает росы', nettle: 'На крапиве ничего не растёт', outside: '' },
   swap: (n, lvl) => (lvl > 1 ? `замена ур. ${lvl}, вернётся ${n}` : `замена, вернётся ${n}`), swapAgain: 'Тапни ещё раз — заменить',
@@ -507,6 +508,7 @@ function handleEvents() {
       case 'wave': banner(T.wave(e.n, game.waves), 1.4); sfx.waveStart(); { const nb = newBugs(e.n).filter((k) => !isBoss(k)); if (nb.length && !(levelIdx === 0 && e.n === 1)) banner(T.freshBug(nb.map((k) => T.bug[k].toLowerCase())), 7, true); } if (AP.mood === 'happy') appleMood('idle', 0); break;
       case 'waveDone': appleMood('happy', 2.6); appleCheer(); banner(T.waveDone(e.bonus), 1.8); sfx.waveDone(); if (e.powers) hintOnce('powers', T.powersBack, 4); if (levelIdx === 0 && e.n === 1) { hintOnce('early', T.hint2, 6); hintOnce('tired', T.tiredHint, 10); } if (levelIdx === 0 && e.n === 3) hintOnce('up', T.upHint, 9); break;
       case 'early': ufx.push({ k: 'gain', x: GO[0] + 30, y: GO[1] + 26, t: 0, life: 1.2, txt: T.early(e.bonus) }); sfx.early(e.bonus); break;
+      case 'buyPower': sfx.buy(); break;
       case 'power': if (e.kind === 'frost') { ufx.push({ k: 'flash', t: 0, life: .6, col: 'rgba(190,240,255,' }); sfx.frost(); } else { for (let n = 0; n < 70; n++) ufx.push({ k: 'rain', x: Math.random() * UW, y: -Math.random() * UH, t: 0, life: 1.2 }); sfx.rain(); terrainDirty = true; } break;
       case 'won': case 'lost': { dropSave(); if (e.t === 'won') appleCheer(); const g = game; setTimeout(() => { if (game === g) endScreen(e.t === 'won'); }, 900); break; }
     }
@@ -515,7 +517,7 @@ function handleEvents() {
   if (game.phase === 'build' && game.wave > 0 && game.events.some((e) => SAVED.has(e.t))) saveLevel();
   game.events.length = 0;
 }
-const SAVED = new Set(['place', 'upgrade', 'sell', 'weed', 'regrow', 'heal', 'waveDone']);
+const SAVED = new Set(['place', 'upgrade', 'sell', 'weed', 'regrow', 'heal', 'waveDone', 'buyPower']);
 function saveLevel() { if (game && game.phase === 'build' && game.wave > 0 && game.wave < game.waves) localStorage.setItem(SAVE, JSON.stringify(snapshot(game))); }
 let hpShake = 0;
 function heart(x, y, r) {
@@ -990,11 +992,24 @@ function bugChip(k, n, cx, cy, fn) {
 }
 function pauseBtn(x, y) { button(x, y, 16, '#7ac8ff', (bx, by) => { c.save(); c.fillStyle = '#fff'; c.strokeStyle = '#1f5a8a'; c.lineWidth = 1.5; for (const dx of [-5, 2]) { c.beginPath(); A.rrect(c, bx + dx, by - 6, 4, 12, 1.5); c.fill(); c.stroke(); } c.restore(); }, openPause); }
 function speedBtn(x, y) { button(x, y, 16, speed > 2 ? '#f2622a' : speed > 1 ? '#ff9a2a' : '#ffcf3a', (bx, by) => A.hdText(c, '×' + speed, bx, by + 1, 13, '#fff', { stroke: '#8a5a00', sw: 3.5 }), () => { speed = speed % 3 + 1; sfx.tap(); }); }
+// Frost and rain: a tap uses one (frost only while a wave is on); used up, the button shows the price of another
+// and a tap buys it.
 function powerBtns([fx0, fy0], [rx, ry]) {
-  button(fx0, fy0, 16, '#8fd6ff', (x, y) => { c.save(); c.translate(x, y); c.scale(.85, .85); A.iconFrost(0, 0, c); c.restore(); }, () => usePower(game, 'frost'), !game.powers.frost || game.phase !== 'wave');
-  badge(fx0, fy0, 16, game.powers.frost);
-  button(rx, ry, 16, '#4aa8ee', (x, y) => { c.save(); c.translate(x, y); c.scale(.85, .85); A.iconRain(0, 0, c); c.restore(); }, () => usePower(game, 'rain'), !game.powers.rain);
-  badge(rx, ry, 16, game.powers.rain);
+  const one = (kind, x, y, col, icon) => {
+    const n = game.powers[kind], over = game.phase === 'won' || game.phase === 'lost', draw = (bx, by) => { c.save(); c.translate(bx, by); c.scale(.85, .85); icon(0, 0, c); c.restore(); };
+    if (n) { button(x, y, 16, col, draw, () => usePower(game, kind), kind === 'frost' && game.phase !== 'wave'); badge(x, y, 16, n); return; }
+    const price = powerPrice(game, kind), can = price != null && !over && game.dew >= price;
+    c.save(); c.globalAlpha = can ? .75 : 1; button(x, y, 16, col, draw, () => { if (!buyPower(game, kind)) sfx.cant(); }, !can); c.restore();
+    if (price != null) pricePill(x, y + 15, price, can); // all bought: a plain grey button
+    if (can && game.dew >= price * 2) hintOnce('buyPower', T.buyHint, 7);
+  };
+  one('frost', fx0, fy0, '#8fd6ff', A.iconFrost);
+  one('rain', rx, ry, '#4aa8ee', A.iconRain);
+}
+function pricePill(x, y, price, can) {
+  const label = String(price); c.save(); c.font = '900 9.5px Nunito'; const w = c.measureText(label).width + 15; c.restore();
+  c.save(); c.beginPath(); A.rrect(c, x - w / 2, y - 6.5, w, 13, 6.5); c.fillStyle = can ? '#2a6fa8' : '#8a7a6a'; c.fill(); c.lineWidth = 1.5; c.strokeStyle = '#fff'; c.stroke(); c.restore();
+  A.hdDrop(c, x - w / 2 + 6, y + .5, 3); A.hdText(c, label, x + 3.5, y + .5, 9.5, '#fff', { stroke: null });
 }
 function badge(x, y, r, n) { if (!n) return; c.save(); c.beginPath(); c.arc(x + r * .72, y - r * .68, 8, 0, A.TAU); c.fillStyle = '#ff4646'; c.fill(); c.lineWidth = 2; c.strokeStyle = '#fff'; c.stroke(); c.restore(); A.hdText(c, String(n), x + r * .72, y - r * .68 + .5, 10, '#fff', { stroke: null }); }
 function waveBar(x, y, w, h, text, ts) {
