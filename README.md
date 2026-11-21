@@ -92,7 +92,8 @@ and in portrait (turned there).
     what the native side leaves out). When the copies part, it says where: the party, the step, and the numbers of
     the state that differ ("bug 539 caterpillar chewCd: 5 in game.js, 4 in game.rs"); `fruit-sim replay <party>
     --dump-at K` and `node sim/js/replay.mjs <party> --dump-at K` print the whole state after any action.
-    `verify.mjs full` replays every scenario of the full matrix (minutes; CI runs it on every push): rare
+    `verify.mjs full` replays every scenario of the full matrix (minutes; the `Parity` workflow runs it once a
+    night and by hand, never in the way of a push or a release): rare
     coincidences of numbers — a bug exactly on the edge of a plant's reach — take that many parties to come up.
   - For the two to agree, distances on the JS side are `Math.sqrt(dx*dx + dy*dy)`, never `Math.hypot` (rounded
     differently from engine to engine), and the bot has `exp` and `log` of its own (`src/jsmath.rs`), the same on

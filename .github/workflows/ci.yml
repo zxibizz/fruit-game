@@ -17,14 +17,3 @@ jobs:
       - uses: actions/setup-node@v6
         with: {node-version: 22}
       - run: node --test test/*.test.js
-
-  # the native copy of the simulation, which the balance matrix runs on, against public/game.js: every scenario of
-  # the matrix, state for state (the tests above do a short part of this)
-  sim:
-    if: "!startsWith(github.ref, 'refs/tags/')" # not a gate of the release: nothing of sim/ is in the image
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
-        with: {node-version: 22}
-      - run: node sim/js/verify.mjs full --jobs 4

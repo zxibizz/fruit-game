@@ -1,0 +1,21 @@
+name: Parity
+
+# The native copy of the simulation, which the balance matrix runs on, against public/game.js: every scenario of the
+# matrix, state for state. It takes minutes, so it stands in nobody's way: once a night and by hand. The tests in CI
+# do a ten-second part of it on every push and before every release.
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sim:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with: {node-version: 22}
+      - run: node sim/js/verify.mjs full --jobs 4
