@@ -16,7 +16,9 @@ export const PLANTS = {
   pumpkin: { cost: 10, up: [30, 60], hp: [120, 200, 300], thorns: [0, 0, .08] },
   // multi: how many bugs it shoots at once
   rose: { cost: 25, up: [70, 140], hp: [60, 80, 100], range: [1.5, 1.5, 1.6], rate: [1.25, 1.45, 1.65], dmg: [7, 10, 8], multi: [1, 1, 2], air: true, shot: 'thorn', speed: 9 },
-  corn: { cost: 35, up: [90, 180], hp: [60, 80, 100], range: [1.8, 1.9, 1.95], rate: [.6, .65, .7], dmg: [12, 18, 26], splash: [.8, .8, 1.15], shot: 'kernel', speed: 5 },
+  // hits: how many bugs the kernels of one cob can hit (the closest to where it lands): against a tight pack a
+  // splash with no such limit was worth as much as the pack was big
+  corn: { cost: 35, up: [90, 180], hp: [60, 80, 100], range: [1.8, 1.9, 1.95], rate: [.6, .65, .7], dmg: [12, 18, 26], splash: [.8, .8, 1.15], hits: [3, 4, 6], shot: 'kernel', speed: 5 },
   // heals the plants around and grows the eaten ones back (regrow: seconds for one); guard: plants around take that much less damage
   aloe: { cost: 30, up: [70, 130], hp: [70, 90, 110], range: [2.2, 2.6, 3], heal: [3, 5, 8], regrow: [6, 4, 2.5], guard: [0, 0, .3] },
   // chill: every so many seconds the bugs around freeze for a second
@@ -43,11 +45,14 @@ export const REFUND = .5;
 export const CHEW_GROWTH = .04;
 // Flyers cross the field in a straight line, past far fewer plants than a walker on a winding trail, so their health
 // grows with the waves only by this share.
-export const FLY_HP = .45;
+export const FLY_HP = .4;
 // What the matrix may turn (balance/run.mjs --set TUNE.hpGrowth=1.2). hpGrowth: the health of every bug, bosses too,
-// is its own health times 1 + hpGrowth * (wave - 1), on every level alike: with 1.5, a bug of wave 7 has 10 times the
-// health in the table. bossEscort: the share of a wave's budget that comes along with a boss.
-export const TUNE = { hpGrowth: 1.5, bossEscort: .4, gap: 1 };
+// is its own health times 1 + hpGrowth * (wave - 1), on every level alike: with 2, a bug of wave 7 has 13 times the
+// health in the table. bossEscort: the share of a wave's budget that comes along with a boss. gap: how tight the
+// bugs of a group walk (a multiplier of the seconds between them): they come in packs, not in an even stream. Against
+// a stream every plant always has a bug to shoot and a garden is worth the sum of its plants wherever they stand;
+// a pack has to be worn down while it walks, and that takes a long trail with many cells beside it.
+export const TUNE = { hpGrowth: 2, bossEscort: .4, gap: .4 };
 // Frost and rain come back (up to POWER_MAX of each) after every POWER_EVERY-th wave.
 export const POWER_EVERY = 10, POWER_MAX = 2;
 // Most of the dew of a level is the pay for every wave got through: it grows evenly from pay[0] after the first wave
@@ -95,24 +100,25 @@ export const BUGS = {
   beetle: { hp: 44, armor: 2, speed: .7, bite: 2, reward: 5, w: 5 },
   caterpillar: { hp: 34, speed: .65, bite: 2, reward: 5, chew: 8, w: 4 },
   grasshopper: { hp: 18, speed: 1.7, bite: 1, reward: 3, w: 1.6 },
-  snail: { hp: 65, speed: .42, bite: 2, reward: 8, noSlow: true, w: 8 },
+  snail: { hp: 50, speed: .42, bite: 2, reward: 8, noSlow: true, w: 8 },
   pillbug: { hp: 32, armor: 5, speed: .6, bite: 2, reward: 7, w: 6 },
   butterfly: { hp: 14, speed: 1.05, bite: 1, reward: 3, fly: true, w: 2 },
   wasp: { hp: 26, speed: 1.35, bite: 1, reward: 4, fly: true, w: 3.2 },
   firefly: { hp: 30, speed: .8, bite: 1, reward: 6, mend: .06, w: 5.5 },
   cricket: { hp: 45, armor: 1, speed: .6, bite: 2, reward: 8, dig: 5, w: 8 },
-  rhino: { hp: 75, armor: 3, speed: .4, bite: 5, reward: 40, boss: true, w: 60, charge: [9, 2.2, 2.6] },
+  rhino: { hp: 50, armor: 3, speed: .4, bite: 5, reward: 40, boss: true, w: 60, charge: [9, 2.2, 2.6] },
   queen: { hp: 70, armor: 1, speed: .38, bite: 5, reward: 40, boss: true, w: 60, brood: ['ant', 2, 5] },
   slugking: { hp: 65, speed: .36, bite: 6, reward: 40, boss: true, noSlow: true, w: 60, split: ['snail', 2] },
   hornet: { hp: 55, speed: .5, bite: 6, reward: 45, boss: true, fly: true, w: 60, brood: ['wasp', 1, 7] },
-  spider: { hp: 60, armor: 1, speed: .5, bite: 5, reward: 45, boss: true, w: 60, web: [7, 2.4, 3, 4] },
+  spider: { hp: 50, armor: 1, speed: .5, bite: 5, reward: 45, boss: true, w: 60, web: [7, 2.4, 3, 4] },
 };
 // Bugs a boss lets out pay this share of their usual dew.
 export const BROOD_REWARD = .34;
 
 // Levels are long, and the balance stands on these things:
 // - plants that hit walkers reach only the cells next to them, so a trail left as it is has room for some 30 of them;
-// - a winding trail has twice as many cells beside it, and leads the bugs past the same plants again and again;
+// - bugs come in tight packs, and a winding trail has twice as many cells beside it and keeps a pack under the
+//   plants several times longer;
 // - the first level of a plant is cheap and the upgrades are dear: the field fills fast, and the dew of a level
 //   (pay sets most of it) grows most plants, never all of them at once;
 // - a hole in a wall lets the whole wave through, so holes are to be closed: by dew at once, by an aloe, or by time.
@@ -140,7 +146,7 @@ export const LEVELS = [
       '....R.........',
       '..LL..........',
     ],
-    dew: 370, pay: [160, 290],
+    dew: 370, pay: [210, 375],
     plants: ['pumpkin', 'rose', 'corn', 'aloe'],
     count: 20, budget: [8, 5.2], roster: [['ant', 1], ['beetle', 3], ['grasshopper', 6], ['caterpillar', 9], ['cricket', 13]], boss: [[10, 'rhino', 1], [20, 'rhino', 1]],
   },
@@ -156,9 +162,9 @@ export const LEVELS = [
       '.........R.R..',
       '.....f..S.....',
     ],
-    dew: 380, pay: [230, 365],
+    dew: 380, pay: [230, 420],
     plants: ['pumpkin', 'rose', 'corn', 'aloe', 'mint'],
-    count: 22, budget: [13, 6.5], roster: [['ant', 1], ['aphid', 2], ['grasshopper', 3], ['caterpillar', 5], ['beetle', 7], ['cricket', 10], ['snail', 14]], boss: [[11, 'queen', 1], [22, 'queen', 2]],
+    count: 22, budget: [13, 6.5], roster: [['ant', 1], ['aphid', 2], ['grasshopper', 3], ['beetle', 4], ['snail', 6], ['caterpillar', 8], ['cricket', 11]], boss: [[11, 'queen', 1], [22, 'queen', 2]],
   },
   {
     name: 'Старый сад', theme: 'orchard', feature: 'mud',
@@ -172,7 +178,7 @@ export const LEVELS = [
       '...S......S...',
       '.....m........',
     ],
-    dew: 400, pay: [375, 670],
+    dew: 400, pay: [260, 460],
     plants: ['pumpkin', 'rose', 'corn', 'aloe', 'mint', 'pepper'],
     count: 24, budget: [14, 7], roster: [['ant', 1], ['snail', 2], ['aphid', 3], ['pillbug', 5], ['caterpillar', 7], ['cricket', 9], ['grasshopper', 12], ['beetle', 15]], boss: [[12, 'slugking', 1], [24, 'slugking', 1]],
   },
@@ -188,9 +194,9 @@ export const LEVELS = [
       '..S......WW...',
       '.........W....',
     ],
-    dew: 410, pay: [335, 750],
+    dew: 410, pay: [460, 1030],
     plants: ['pumpkin', 'rose', 'corn', 'aloe', 'mint', 'pepper', 'dandelion'],
-    count: 24, budget: [12, 5.6], roster: [['ant', 1], ['butterfly', 3], ['beetle', 4], ['caterpillar', 6], ['cricket', 10], ['snail', 13], ['aphid', 16]], boss: [[12, 'hornet', 1], [24, 'hornet', 2]],
+    count: 24, budget: [10.5, 4.9], roster: [['ant', 1], ['butterfly', 3], ['beetle', 4], ['caterpillar', 6], ['cricket', 10], ['snail', 13], ['aphid', 16]], boss: [[12, 'hornet', 1], [24, 'hornet', 2]],
   },
   {
     name: 'Крапивный лог', theme: 'forest', feature: 'nettle',
@@ -204,7 +210,7 @@ export const LEVELS = [
       '..LL.......S..',
       '......n.......',
     ],
-    dew: 420, pay: [235, 375],
+    dew: 420, pay: [350, 560],
     plants: ['pumpkin', 'rose', 'corn', 'aloe', 'mint', 'pepper', 'dandelion', 'flytrap'],
     count: 25, budget: [12, 5.8], roster: [['ant', 1], ['pillbug', 2], ['firefly', 4], ['grasshopper', 6], ['caterpillar', 8], ['butterfly', 10], ['cricket', 12], ['snail', 15]], boss: [[12, 'spider', 1], [25, 'spider', 2]],
   },
@@ -220,7 +226,7 @@ export const LEVELS = [
       '...........R..',
       '...S.........E',
     ],
-    dew: 440, pay: [460, 820],
+    dew: 440, pay: [505, 900],
     plants: ['pumpkin', 'rose', 'corn', 'aloe', 'mint', 'pepper', 'dandelion', 'flytrap', 'bell'],
     count: 26, budget: [13, 6], roster: [['ant', 1], ['aphid', 2], ['beetle', 3], ['wasp', 5], ['caterpillar', 7], ['firefly', 9], ['cricket', 11], ['pillbug', 14], ['snail', 17]], boss: [[13, 'queen', 1], [26, 'rhino', 2]],
   },
@@ -236,9 +242,9 @@ export const LEVELS = [
       '.....X..X.....',
       '.X.........R..',
     ],
-    dew: 440, pay: [460, 845],
+    dew: 440, pay: [460, 840],
     plants: ['pumpkin', 'rose', 'corn', 'aloe', 'mint', 'pepper', 'dandelion', 'flytrap', 'bell'],
-    count: 28, budget: [13, 6], roster: [['ant', 1], ['grasshopper', 2], ['pillbug', 3], ['caterpillar', 5], ['butterfly', 7], ['cricket', 9], ['firefly', 11], ['snail', 13], ['wasp', 16], ['aphid', 19]], boss: [[9, 'rhino', 1], [18, 'slugking', 1], [28, 'spider', 2]],
+    count: 28, budget: [11.5, 5.2], roster: [['ant', 1], ['grasshopper', 2], ['pillbug', 3], ['caterpillar', 5], ['butterfly', 7], ['cricket', 9], ['firefly', 11], ['snail', 13], ['wasp', 16], ['aphid', 19]], boss: [[9, 'rhino', 1], [18, 'slugking', 1], [28, 'spider', 2]],
   },
   {
     name: 'Болото', theme: 'marsh', feature: 'mud',
@@ -252,9 +258,9 @@ export const LEVELS = [
       '......WW......',
       '..m...W.......',
     ],
-    dew: 450, pay: [330, 710],
+    dew: 450, pay: [395, 850],
     plants: ['pumpkin', 'rose', 'corn', 'aloe', 'mint', 'pepper', 'dandelion', 'flytrap', 'bell'],
-    count: 28, budget: [17, 7.4], roster: [['ant', 1], ['snail', 2], ['wasp', 3], ['aphid', 5], ['pillbug', 6], ['caterpillar', 8], ['firefly', 10], ['cricket', 12], ['beetle', 15], ['butterfly', 18]], boss: [[9, 'hornet', 1], [18, 'spider', 1], [28, 'slugking', 2]],
+    count: 28, budget: [15, 6.5], roster: [['ant', 1], ['snail', 2], ['wasp', 3], ['aphid', 5], ['pillbug', 6], ['caterpillar', 8], ['firefly', 10], ['cricket', 12], ['beetle', 15], ['butterfly', 18]], boss: [[9, 'hornet', 1], [18, 'spider', 1], [28, 'slugking', 2]],
   },
   {
     name: 'Закат', theme: 'sunset', feature: 'twin',
@@ -268,9 +274,9 @@ export const LEVELS = [
       '.....S.......E',
       '..f.....LL....',
     ],
-    dew: 460, pay: [350, 770],
+    dew: 460, pay: [380, 830],
     plants: ['pumpkin', 'rose', 'corn', 'aloe', 'mint', 'pepper', 'dandelion', 'flytrap', 'bell'],
-    count: 30, budget: [14, 6.4], roster: [['ant', 1], ['beetle', 2], ['butterfly', 3], ['pillbug', 4], ['caterpillar', 6], ['cricket', 8], ['firefly', 10], ['snail', 12], ['wasp', 14], ['grasshopper', 17], ['aphid', 20]], boss: [[10, 'queen', 1], [20, 'hornet', 1], [30, 'rhino', 2]],
+    count: 30, budget: [9.5, 4], roster: [['ant', 1], ['beetle', 2], ['butterfly', 3], ['pillbug', 4], ['caterpillar', 6], ['cricket', 8], ['firefly', 10], ['snail', 12], ['wasp', 14], ['grasshopper', 17], ['aphid', 20]], boss: [[10, 'queen', 1], [20, 'hornet', 1], [30, 'rhino', 2]],
   },
 ];
 
@@ -287,7 +293,7 @@ function readMap(L) {
 
 function rng(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 
-// A wave is a list of groups: [bug, count, seconds between bugs, delay before the group].
+// A wave is a list of groups: [bug, count, seconds between bugs (TUNE.gap makes them packs), delay before the group].
 // Every fifth wave is a big one and the wave after it is a breather; a bug new to the level first comes as a small group.
 export const FLY_SHARE = .18; // the most of a wave's budget that flyers take (before a new bug's quarter)
 export function makeWaves(L, seed, { flyShare = FLY_SHARE } = {}) {

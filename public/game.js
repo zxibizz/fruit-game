@@ -1,7 +1,7 @@
 // Simulation: no DOM, plain data. The view reads the state and the events, and calls the actions below.
 import { COLS, ROWS, FRUIT_HP, PLANTS, BUGS, LEVELS, PERKS, BREAK, EARLY_DEW, REPAIR, REGROW, REFUND, CHEW_GROWTH, POWER_EVERY, POWER_MAX, wavePay, FERTILE, FERTILE_ADD, MUD, NETTLE, NETTLE_BOSS, WEED_COST, BROOD_REWARD, FLY_HP, TUNE } from './data.js';
 
-export const VERSION = '0.20.0';
+export const VERSION = '0.21.0';
 export { COLS, ROWS, BREAK };
 
 const DIRS = [[-1, 0], [0, -1], [0, 1], [1, 0]]; // tie order: towards the fruit side first
@@ -470,7 +470,7 @@ function updatePlant(g, p, dt) {
   for (const [, best] of seen.slice(0, multi)) {
     const weak = P.ground && !best.fly, dmg = pstat(g, p, 'dmg') * (weak ? P.ground : 1);
     const est = splash ? 0 : Math.max(1, dmg - best.armor); best.coming = (best.coming || 0) + est; // what it will take
-    g.shots.push({ id: g.nextId++, kind: P.shot, from: p.type, x: px, y: py - .25, sx: px, sy: py - .25, target: best, tx: best.x, ty: best.y, speed: P.speed, dmg, est, splash: pstat(g, p, 'splash') || 0, stun: weak ? 0 : pstat(g, p, 'stun') || 0, air: !!P.air });
+    g.shots.push({ id: g.nextId++, kind: P.shot, from: p.type, x: px, y: py - .25, sx: px, sy: py - .25, target: best, tx: best.x, ty: best.y, speed: P.speed, dmg, est, splash: pstat(g, p, 'splash') || 0, hits: P.hits ? P.hits[p.lvl - 1] : 0, stun: weak ? 0 : pstat(g, p, 'stun') || 0, air: !!P.air });
     g.events.push({ t: 'shoot', p, target: best });
   }
 }
@@ -479,7 +479,9 @@ function updateShot(g, s, dt) {
   const dx = s.tx - s.x, dy = s.ty - s.y, d = Math.hypot(dx, dy), v = s.speed * dt;
   if (d <= v) {
     s.done = true; if (s.target && s.est) s.target.coming -= s.est;
-    if (s.splash) { for (const b of g.bugs.slice()) if (!b.fly && b.hp > 0 && within(b.x - s.tx, b.y - s.ty, s.splash)) damage(g, b, s.dmg, s.from); g.events.push({ t: 'splash', x: s.tx, y: s.ty, kind: s.kind, r: s.splash }); }
+    if (s.splash) { // the kernels hit the bugs closest to where the cob lands, s.hits of them at most
+      const near = g.bugs.filter((b) => !b.fly && b.hp > 0 && within(b.x - s.tx, b.y - s.ty, s.splash)).sort((a, b) => Math.hypot(a.x - s.tx, a.y - s.ty) - Math.hypot(b.x - s.tx, b.y - s.ty));
+      for (const b of near.slice(0, s.hits || Infinity)) damage(g, b, s.dmg, s.from); g.events.push({ t: 'splash', x: s.tx, y: s.ty, kind: s.kind, r: s.splash }); }
     else if (s.target && s.target.hp > 0 && !s.target.gone) {
       damage(g, s.target, s.dmg, s.from);
       if (s.stun && s.target.hp > 0) freeze(s.target, s.stun * (BUGS[s.target.kind].boss ? .3 : 1));

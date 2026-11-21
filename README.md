@@ -19,8 +19,8 @@ and in portrait (turned there).
   the end of every level: the rhino beetle runs, the queen lets ants out, the slug king splits into snails, the
   hornet flies over the maze, the spider webs the plants.
 - **Balance**: a level is meant to be hard and to be won by thought. Plants that hit walkers reach only the cells
-  next to them, so a long winding trail, with twice the cells beside it and the same plants passed again and again,
-  does far more than the same plants by a straight road. The health of every bug, bosses too, grows by one rule on
+  next to them, and bugs come in tight packs: a long winding trail has twice the cells beside it and keeps a pack
+  under the plants several times longer than a straight road. The health of every bug, bosses too, grows by one rule on
   every level (`TUNE.hpGrowth` of its own health a wave). The first level of a
   plant is cheap — a trail is quick to shape — and the upgrades are dear: there is never dew for all of them. Most of
   the dew is the pay for every wave got through, growing evenly over a level (`pay` of the level); a bug gives its own
