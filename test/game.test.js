@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, step, place, placeProblem, trail, trails, startWave, removePlant, upgrade, usePower, earlyBonus, regrow, regrowCost, stubAt, heal, healCost, refund, pstat, clearWeed, snapshot, restore, bugHp, COLS, ROWS, BREAK } from '../public/game.js';
+import { createGame, step, place, placeProblem, plantOn, plantProblem, trail, trails, startWave, removePlant, upgrade, usePower, earlyBonus, regrow, regrowCost, stubAt, heal, healCost, refund, pstat, clearWeed, snapshot, restore, bugHp, COLS, ROWS, BREAK } from '../public/game.js';
 import { LEVELS, PLANTS, BUGS, PLANT_ORDER, PERKS, PERK_ORDER, REGROW, WEED_COST, FERTILE, FATIGUE } from '../public/data.js';
 import { playLevel, expectedMeta, fullMeta } from './bot.mjs';
 
@@ -34,6 +34,32 @@ test('planting makes the trail longer; a plant sells for all its dew before the 
   assert.equal(g.dew, dew + PLANTS.pumpkin.cost);
   startWave(g); const q = g.plants[0], dew2 = g.dew; removePlant(g, q);
   assert.equal(g.dew, dew2 + Math.floor(PLANTS.pumpkin.cost / 2));
+});
+
+test('a new plant over an old one of another kind sells the old one first', () => {
+  const g = createGame(2); g.dew = 100;
+  place(g, 'rose', 12, 6); const trail0 = trail(g).length;
+  assert.equal(plantProblem(g, 'rose', 12, 6), 'same');
+  g.dew = PLANTS.corn.cost - PLANTS.rose.cost - 1; assert.equal(plantProblem(g, 'corn', 12, 6), 'poor');
+  g.dew = PLANTS.corn.cost - PLANTS.rose.cost; assert.ok(plantOn(g, 'corn', 12, 6)); // fresh: the rose gives all its dew back
+  assert.equal(g.dew, 0); assert.equal(g.grid[6][12].type, 'corn'); assert.equal(g.plants.length, 1); assert.equal(trail(g).length, trail0);
+  startWave(g); g.dew = 0; const spent = g.grid[6][12].spent; // later only half comes back
+  assert.equal(plantProblem(g, 'pumpkin', 12, 6), null); assert.ok(plantOn(g, 'pumpkin', 12, 6));
+  assert.equal(g.dew, Math.floor(spent / 2) - PLANTS.pumpkin.cost); assert.equal(g.grid[6][12].type, 'pumpkin');
+});
+
+test('a dandelion hits walkers too, weaker, and takes the flyers first', () => {
+  const n = LEVELS.findIndex((L) => L.plants.includes('dandelion'));
+  const shoot = (kinds) => {
+    const g = createGame(n); g.dew = 1000; const [ei, ej] = g.entries[0];
+    for (const [di, dj] of [[-1, 1], [-1, -1], [-2, 1], [-2, -1], [-1, 2], [-1, -2]]) if (place(g, 'dandelion', ei + di, ej + dj)) break;
+    assert.equal(g.plants.length, 1); startWave(g); g.queue = kinds.map((kind) => ({ kind, at: 0, e: 0 }));
+    for (let k = 0; k < 60 * 20; k++) { step(g, 1 / 60); const s = g.shots.find((q) => q.from === 'dandelion'); if (s) return [g, s]; }
+    return [g, null];
+  };
+  const [, s1] = shoot(['ant', 'butterfly']); assert.ok(s1 && s1.target.fly, 'the flyer first');
+  const [g2, s2] = shoot(['ant']); assert.ok(s2 && !s2.target.fly, 'walkers too');
+  assert.equal(s2.dmg, pstat(g2, g2.plants[0], 'dmg') * PLANTS.dandelion.ground); assert.equal(s2.stun, 0);
 });
 
 test('bugs that reach the fruit bite it and the level can be lost', () => {

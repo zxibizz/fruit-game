@@ -73,9 +73,10 @@ function worth(g, tr, o) {
     if (!dps) continue;
     let buff = 0; for (const q of plants) if (PLANTS[q.type].buff && q !== p && Math.hypot(q.i - p.i, q.j - p.j) <= st(q, 'range')) buff = Math.max(buff, st(q, 'buff'));
     const r = st(p, 'range'); let n = 0;
-    if (!P.airOnly) for (let k = 0; k < tr.length; k++) if (Math.hypot(tr[k][0] - p.i, tr[k][1] - p.j) <= r) n += time[k];
+    const rg = P.groundRange ? Math.min(r, P.groundRange) : r; // the dandelion: walkers only next to it, and weaker
+    for (let k = 0; k < tr.length; k++) if (Math.hypot(tr[k][0] - p.i, tr[k][1] - p.j) <= rg) n += time[k] * (P.ground ?? 1);
     // flyers come over the field straight to the fruit: what reaches the fruit sees them all
-    if (o.flyers && P.air) n += Math.hypot(g.fruit[0] - p.i, g.fruit[1] - p.j) <= r ? (P.airOnly ? 5 : 3) : P.airOnly && p.i > g.fruit[0] ? 1 : 0;
+    if (o.flyers && P.air) n += Math.hypot(g.fruit[0] - p.i, g.fruit[1] - p.j) <= r ? (P.ground ? 5 : 3) : P.ground && p.i > g.fruit[0] ? 1 : 0;
     sum += dps * (1 + buff) * n;
   }
   return sum;

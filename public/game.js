@@ -1,7 +1,7 @@
 // Simulation: no DOM, plain data. The view reads the state and the events, and calls the actions below.
 import { COLS, ROWS, FRUIT_HP, PLANTS, BUGS, LEVELS, PERKS, BREAK, EARLY_DEW, REPAIR, REGROW, REFUND, CHEW_GROWTH, POWER_EVERY, POWER_MAX, FERTILE, FERTILE_ADD, MUD, NETTLE, NETTLE_BOSS, WEED_COST, BROOD_REWARD, FATIGUE, FLY_HP } from './data.js';
 
-export const VERSION = '0.15.0';
+export const VERSION = '0.16.0';
 export { COLS, ROWS, BREAK };
 
 const DIRS = [[-1, 0], [0, -1], [0, 1], [1, 0]]; // tie order: towards the fruit side first
@@ -172,6 +172,24 @@ export function place(g, type, i, j) {
   const p = grow(g, type, i, j, 1, P.cost); if (g.phase === 'build') p.born = g.wave; // sold before the wave starts, it gives all its dew back
   g.events.push({ t: 'place', p });
   return true;
+}
+// A new plant may go over an old one of another kind: the old one is sold first (as by the sell button) and its dew
+// counts towards the new one. Why it cannot: null when it can.
+export function plantProblem(g, type, i, j) {
+  const old = g.grid[j]?.[i], P = PLANTS[type];
+  if (!old?.type) return placeProblem(g, i, j) || (g.dew < P.cost ? 'poor' : null);
+  if (old.type === type) return 'same';
+  return over(g) ? 'busy' : g.dew + refund(g, old) < P.cost ? 'poor' : null;
+}
+export function plantOn(g, type, i, j) {
+  const old = g.grid[j]?.[i];
+  if (!old?.type) return place(g, type, i, j);
+  if (plantProblem(g, type, i, j) || !g.L.plants.includes(type)) return false;
+  const dew = g.dew, n = g.events.length; removePlant(g, old);
+  if (place(g, type, i, j)) return true;
+  // could not grow there after all: put the old plant back as it was
+  g.events.length = n; g.dew = dew; g.grid[j][i] = old; g.plants.push(old); refresh(g);
+  return false;
 }
 // Repairs. The roots of an eaten plant grow back into the same plant of the same level for a part of its price
 // (for nothing when an aloe or the rain does it); a bitten plant is healed for the same part of the missing health.
@@ -393,7 +411,7 @@ function updatePlant(g, p, dt) {
     }
     return;
   }
-  const inRange = (b, air = P.air) => b.hp > 0 && (air || !b.fly) && (!P.airOnly || b.fly) && b.x < COLS + .2 && Math.hypot(b.x - px, b.y - py) <= range;
+  const inRange = (b, air = P.air) => b.hp > 0 && (air || !b.fly) && b.x < COLS + .2 && Math.hypot(b.x - px, b.y - py) <= (P.groundRange && !b.fly ? Math.min(range, P.groundRange) : range);
   if (P.slow) {
     const s = 1 - pstat(g, p, 'slow'); let any = false;
     for (const b of g.bugs) if (inRange(b)) { b.slow = Math.min(b.slow, s); any = true; }
@@ -425,13 +443,14 @@ function updatePlant(g, p, dt) {
   }
   // the bugs nearest to the fruit first; a grown rose shoots at two of them
   const multi = pstat(g, p, 'multi') || 1, seen = [];
-  for (const b of g.bugs) if (inRange(b)) seen.push([progress(g, b), b]);
+  // a plant that is weak against walkers (the dandelion) takes the flyers first
+  for (const b of g.bugs) if (inRange(b)) seen.push([progress(g, b) + (P.ground && !b.fly ? 1e3 : 0), b]);
   if (!seen.length) return;
   seen.sort((a, b) => a[0] - b[0]);
   p.cd = 1 / (pstat(g, p, 'rate') * quick);
   for (const [, best] of seen.slice(0, multi)) {
-    const dmg = pstat(g, p, 'dmg');
-    g.shots.push({ id: g.nextId++, kind: P.shot, from: p.type, x: px, y: py - .25, sx: px, sy: py - .25, target: best, tx: best.x, ty: best.y, speed: P.speed, dmg, splash: pstat(g, p, 'splash') || 0, stun: pstat(g, p, 'stun') || 0, air: !!P.air });
+    const weak = P.ground && !best.fly, dmg = pstat(g, p, 'dmg') * (weak ? P.ground : 1);
+    g.shots.push({ id: g.nextId++, kind: P.shot, from: p.type, x: px, y: py - .25, sx: px, sy: py - .25, target: best, tx: best.x, ty: best.y, speed: P.speed, dmg, splash: pstat(g, p, 'splash') || 0, stun: weak ? 0 : pstat(g, p, 'stun') || 0, air: !!P.air });
     g.events.push({ t: 'shoot', p, target: best });
   }
 }

@@ -22,8 +22,9 @@ export const PLANTS = {
   // chill: every so many seconds the bugs around freeze for a second
   mint: { cost: 30, up: [80, 150], hp: [60, 80, 100], range: [1.5, 1.6, 1.7], slow: [.3, .4, .5], chill: [0, 0, 6], air: true },
   pepper: { cost: 50, up: [120, 220], hp: [60, 80, 100], range: [1.5, 1.6, 1.7], rate: [.4, .45, .5], dmg: [9, 14, 20], burn: [3, 4.5, 6.5], burnT: [2, 2, 3] },
-  // shoots only at flyers, far; stun: the bug it hits hangs still that long
-  dandelion: { cost: 55, up: [130, 240], hp: [50, 65, 80], range: [3, 3.5, 4], rate: [.5, .55, .6], dmg: [26, 40, 60], stun: [0, 0, .5], airOnly: true, air: true, shot: 'fluff', speed: 11 },
+  // shoots far at flyers and takes them first; walkers, like every plant, only on the cells next to it (groundRange)
+  // and for the `ground` share of the damage, never stunned; stun: the flyer it hits hangs still that long
+  dandelion: { cost: 55, up: [130, 240], hp: [50, 65, 80], range: [3, 3.5, 4], rate: [.5, .55, .6], dmg: [26, 40, 60], stun: [0, 0, .5], ground: .25, groundRange: 1.5, air: true, shot: 'fluff', speed: 11 },
   // bites one bug every `eat` seconds for `chomp`, whatever its armor; a bug with less health than that is swallowed
   // whole; eatAir: the third level catches flyers too
   flytrap: { cost: 60, up: [140, 250], hp: [70, 90, 110], range: [1.5, 1.5, 1.6], eat: [6, 5, 4], chomp: [90, 170, 280], eatAir: [0, 0, 1] },

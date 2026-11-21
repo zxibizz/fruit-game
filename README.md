@@ -7,7 +7,9 @@ and in portrait (turned there).
 
 - **Planting**: the plants of the level lie on a shelf (a row under the field or a column beside it, whichever leaves
   the bigger cells). Drag one onto a cell — the new trail and the reach are shown under the finger — or tap it and
-  then tap cells. Until the wave starts, a fresh plant sells for its full price, so a slip costs nothing.
+  then tap a cell (one plant per pick: the shelf lets go once it is planted). A plant of another kind can go right over
+  an old one: the old one is sold first and its dew counts. Until the wave starts, a fresh plant sells for its full
+  price, so a slip costs nothing.
 - **Plants**: nine of them, three levels each. A level is seen at a glance (one, two, three blooms or cobs, bigger,
   gold on the third); the panel of a plant shows every number now and after the upgrade, and the third level adds a
   trick of its own (a rose shoots two bugs, a pumpkin grows thorns, mint freezes…). Hold a plant or a bug to read
@@ -22,7 +24,8 @@ and in portrait (turned there).
   plant is cheap — a trail is quick to shape — and the upgrades are dear: there is never dew for all of them. No
   plant makes dew (it comes from beaten bugs, finished waves and waves called early). Caterpillars bite plants, mole
   crickets eat through walls; eaten plants leave roots that grow back by themselves, faster by an aloe, or at once
-  for dew. Freezes do not chain; dandelions shoot only at flyers, which cross the maze in a straight line.
+  for dew. Freezes do not chain; dandelions shoot far and take the flyers first (they cross the maze in a straight line),
+  walkers only next to them and weaker.
 - **Stars and perks**: up to three stars a level; they buy permanent perks (more dew at the start, a sturdier apple,
   a stronger plant…), which can be taken back and dealt again for free.
 - A level in progress is kept between waves and can be continued from the home screen.
