@@ -44,12 +44,25 @@ and in portrait (turned there).
   `?dev&insets=top,right,bottom,left` fakes the safe areas (e.g. `0,59,21,59` for an iPhone on its side).
 - `server/` — Node 22, no dependencies: static files and `/healthz`.
 - `node --test test/*.test.js` — pathing and placement rules, economy, repairs, bosses, the ground, perks, saving, server, offline
-  cache list, and the balance: the smart bot of `test/bot.mjs` (a maze through mud and nettles, plants where bugs are
-  slowest and most tired, mended holes, frost and rain, the perks of two stars a level) must win every level; a
-  garden beside the untouched trail must lose every level (on the first levels it must leak by the middle), on most
-  levels even with every perk; half a garden, no powers, no perks or no eye for the ground must do worse. The suite
-  takes a few minutes.
+  cache list, no sudden walls of flyers in the waves, and the balance on one seed: the smart bot of `test/bot.mjs`
+  (a maze through mud and nettles; it values a garden by the bugs it stops — walkers and flyers apart, a crowd sharing
+  a single shooter while corn and pepper hit many; mended holes, frost and rain, the perks of two stars a level) must
+  win every level; a garden beside the untouched trail must lose every level, on most levels even with every perk and
+  planted any of four ways; half a garden or no powers must do worse. The suite takes a minute or two; the full
+  picture is the balance matrix below.
   `node test/bot.mjs [levels...]` prints how the bot did, wave by wave.
+- `balance/` — the balance matrix (dev only, not in the image): `node balance/run.mjs [quick|full] [--levels 5,6-8]
+  [--set L5.hpGrowth=1.9,FLY_SHARE=.2] [--grid 'L5.hpGrowth=1.6|1.9;L5.rich=1.4|1.6']`. For every level it plays many
+  scenarios in parallel (a worker per scenario on a snapshot of the code, as many as there are cores; results cached
+  per level, so tuning one level reruns only it): the smart bot on several seeds and on other draws of the waves; lazy
+  gardens beside the untouched trail with real dew and every perk, planted best, by the end, by the start or at
+  random (they must lose); "exploits" — the same with all the dew of the level at once (an upper bound, a warning
+  only); the smart bot with one skill off (ground, frost and rain, early calls, repairs, upgrades), with fewer or more
+  perks, with part of the maze, without one kind of plant. `rules.mjs` reads the results (the smart bot wins on every
+  seed and draw, lazy gardens lose, skills and perks pay, a longer route pays, no wave does most of the damage),
+  `lint.mjs` looks at the waves alone for sudden walls of bugs (also in the tests). It prints the findings and writes
+  `report.html` (level × scenario, coloured by how much fruit was left or how early it was lost) and `results.json`.
+  `--grid` compares variants of the data side by side — the way to tune a level.
 - [docs/research.md](docs/research.md) — the genre study the design started from (in Russian).
 
 When anything in `public/` changes, bump `VERSION` in both `public/game.js` and `public/sw.js`.

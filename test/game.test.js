@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createGame, step, place, placeProblem, plantOn, plantProblem, trail, trails, startWave, removePlant, upgrade, usePower, earlyBonus, regrow, regrowCost, stubAt, heal, healCost, refund, pstat, clearWeed, snapshot, restore, bugHp, COLS, ROWS, BREAK } from '../public/game.js';
 import { LEVELS, PLANTS, BUGS, PLANT_ORDER, PERKS, PERK_ORDER, REGROW, WEED_COST, FERTILE, FATIGUE } from '../public/data.js';
 import { playLevel, expectedMeta, fullMeta } from './bot.mjs';
+import { waveLint } from '../balance/lint.mjs';
 
 test('every level has a way from the entrance to the fruit', () => {
   LEVELS.forEach((L, n) => {
@@ -62,6 +63,23 @@ test('a dandelion hits walkers too, weaker, and takes the flyers first', () => {
   assert.equal(s2.dmg, pstat(g2, g2.plants[0], 'dmg') * PLANTS.dandelion.ground); assert.equal(s2.stun, 0);
 });
 
+test('no wave is a sudden wall of bugs the player cannot see coming', () => {
+  assert.deepEqual(waveLint(LEVELS).filter((x) => x.severity === 'fail').map((x) => `L${x.level} w${x.wave}: ${x.issue}`), []);
+});
+
+test('flyers stay a side threat: never most of a wave, and shooters do not waste shots on a doomed bug', () => {
+  LEVELS.forEach((L, n) => { const g = createGame(n); L.waves.forEach((spec, w) => {
+    let fly = 0, all = 0; for (const [k, c] of spec) { const hp = c * bugHp(g, k, w + 1); all += hp; if (BUGS[k].fly && !BUGS[k].boss) fly += hp; }
+    assert.ok(fly <= all * .45, `level ${n + 1} wave ${w + 1}: flyers ${Math.round(fly / all * 100)}% of the wave`);
+  }); });
+  const g = createGame(0); g.dew = 5000; const [ei, ej] = g.entries[0];
+  let k = 0; for (const [di, dj] of [[-1, 1], [-1, -1], [-2, 1], [-2, -1], [-1, 2], [-1, -2]]) if (place(g, 'rose', ei + di, ej + dj)) k++;
+  send(g, 'ant'); g.queue[0].e = 0; const shots = new Set();
+  for (let t = 0; t < 60 * 20 && (g.queue.length || g.bugs.length); t++) { step(g, 1 / 60); for (const s of g.shots) shots.add(s.id); }
+  assert.ok(k >= 4, 'roses planted'); assert.equal(g.stats.kills ?? 1, 1);
+  assert.equal(shots.size, Math.ceil(BUGS.ant.hp / PLANTS.rose.dmg[0]), 'no shot wasted on a doomed ant');
+});
+
 test('bugs that reach the fruit bite it and the level can be lost', () => {
   const g = createGame(0); startWave(g);
   for (let n = 0; n < 60 * 120 && g.phase === 'wave'; n++) step(g, 1 / 60);
@@ -98,23 +116,23 @@ test('played with thought, every level is won', () => {
   smart.forEach((r, n) => { assert.ok(r.won, `level ${n + 1} lost at wave ${r.wave}`); assert.ok(r.plants >= 40, `level ${n + 1}: ${r.plants} plants`); });
 });
 
-test('a garden beside the untouched trail loses every level; on most of them even with every perk there is', () => {
-  const soft = [6, 8]; // «Заросли» and «Закат»: every perk at once still carries a lazy garden through
+// The full picture — many seeds, other draws of the waves, exploits, every skill and perk switched off — is the balance
+// matrix (node balance/run.mjs full); these are its hard rules on one seed, quick enough for every run of the tests.
+test('a garden beside the untouched trail loses every level, however it is planted and even with every perk', () => {
+  const soft = [6, 8]; // «Заросли» and «Закат»: every perk at once may still carry a lazy garden through
   for (let n = 0; n < LEVELS.length; n++) {
-    const r = playLevel(n, { maze: false, meta: expectedMeta(n) });
+    const r = playLevel(n, { route: 0, meta: expectedMeta(n) });
     assert.equal(r.won, false, `level ${n + 1}`);
     if (n < 3) assert.ok(Math.min(...Object.keys(r.bites).map((k) => parseInt(k, 10))) <= LEVELS[n].count * .55, `level ${n + 1}: it leaks by the middle`);
-    if (!soft.includes(n)) assert.equal(playLevel(n, { maze: false, meta: fullMeta() }).won, false, `level ${n + 1}, every perk`);
+    if (!soft.includes(n)) for (const place of ['best', 'end', 'start', 'spread']) assert.equal(playLevel(n, { route: 0, meta: fullMeta(), place }).won, false, `level ${n + 1}, every perk, planted ${place}`);
   }
 });
 
-test('half a garden loses; without frost and rain, without the perks or blind to the ground the levels go worse', () => {
+test('half a garden loses; without frost and rain the levels go worse', () => {
   const score = (list) => list.reduce((s, r) => s + (r.won ? r.hp / r.maxHp : -1), 0), some = [1, 2, 4, 6, 7];
   const base = score(some.map((n) => smart[n]));
   for (const n of some) assert.equal(playLevel(n, { maxPlants: 30, meta: expectedMeta(n) }).won, false, `half a garden, level ${n + 1}`);
   assert.ok(score(some.map((n) => playLevel(n, { powers: false, meta: expectedMeta(n) }))) < base, 'no powers');
-  assert.ok(score(some.map((n) => playLevel(n))) < base, 'no perks');
-  assert.ok(score(some.map((n) => playLevel(n, { terrain: false, meta: expectedMeta(n) }))) <= base, 'blind to the ground');
 });
 
 test('bugs tire on the way: the same hit hurts more after a long walk, and flyers do not tire', () => {
@@ -264,7 +282,11 @@ test('bosses: the queen lets ants out, the slug king splits, the spider webs pla
   g = run('rhino'); let fast = false;
   for (let k = 0; k < 60 * 12; k++) { step(g, 1 / 60); if (g.bugs[0]?.rush > 0) fast = true; }
   assert.ok(fast, 'charge');
-  assert.ok(bugHp(createGame(0), 'rhino', 10) < BUGS.rhino.hp * 5, 'a mid-level boss is weaker than its wave');
+  { // a mid-level boss is a part of its wave, not the whole of it
+    const L = LEVELS[0], [at, kind, cnt] = L.boss[0], g0 = createGame(0);
+    const rest = L.waves[at - 1].filter(([k]) => !BUGS[k].boss).reduce((t, [k, c]) => t + c * bugHp(g0, k, at), 0);
+    assert.ok(cnt * bugHp(g0, kind, at) < rest, 'a mid-level boss is weaker than its wave');
+  }
 });
 
 test('new plants: a flytrap bites hard and swallows small bugs, a bell makes its neighbours shoot more often, level 3 tricks', () => {

@@ -132,7 +132,7 @@ export const LEVELS = [
       '....R.........',
       '..LL..........',
     ],
-    dew: 370, hpGrowth: 1.4, hpLate: .03, rich: 1.2, waveBonus: 20,
+    dew: 370, hpGrowth: 2.66, hpLate: .03, rich: 1.2, waveBonus: 20,
     plants: ['pumpkin', 'rose', 'corn', 'aloe'],
     count: 20, budget: [8, 5.2], roster: [['ant', 1], ['beetle', 3], ['grasshopper', 6], ['caterpillar', 9], ['cricket', 13]], boss: [[10, 'rhino', 1, .3], [20, 'rhino', 1, .35]],
   },
@@ -148,7 +148,7 @@ export const LEVELS = [
       '.........R.R..',
       '.....f..S.....',
     ],
-    dew: 380, hpGrowth: 1.4, hpLate: .03, rich: 1.3, waveBonus: 25,
+    dew: 380, hpGrowth: 3.5, hpLate: .03, rich: 1.3, waveBonus: 25,
     plants: ['pumpkin', 'rose', 'corn', 'aloe', 'mint'],
     count: 22, budget: [10, 5], roster: [['ant', 1], ['aphid', 2], ['grasshopper', 3], ['caterpillar', 5], ['beetle', 7], ['cricket', 10], ['snail', 14]], boss: [[11, 'queen', 1, .3], [22, 'queen', 2, .4]],
   },
@@ -164,7 +164,7 @@ export const LEVELS = [
       '...S......S...',
       '.....m........',
     ],
-    dew: 400, hpGrowth: 1, hpLate: .03, rich: 1.5, waveBonus: 28,
+    dew: 400, hpGrowth: 3, hpLate: .03, rich: 2.4, waveBonus: 28,
     plants: ['pumpkin', 'rose', 'corn', 'aloe', 'mint', 'pepper'],
     count: 24, budget: [11, 5.4], roster: [['ant', 1], ['snail', 2], ['aphid', 3], ['pillbug', 5], ['caterpillar', 7], ['cricket', 9], ['grasshopper', 12], ['beetle', 15]], boss: [[12, 'slugking', 1, .4], [24, 'slugking', 1, .6]],
   },
@@ -180,7 +180,7 @@ export const LEVELS = [
       '..S......WW...',
       '.........W....',
     ],
-    dew: 410, hpGrowth: 0.7, hpLate: .03, rich: 1.3, waveBonus: 28,
+    dew: 410, hpGrowth: 1.9, hpLate: .03, rich: 2.1, waveBonus: 28,
     plants: ['pumpkin', 'rose', 'corn', 'aloe', 'mint', 'pepper', 'dandelion'],
     count: 24, budget: [12, 5.6], roster: [['ant', 1], ['butterfly', 3], ['beetle', 4], ['caterpillar', 6], ['cricket', 10], ['snail', 13], ['aphid', 16]], boss: [[12, 'hornet', 1, .3], [24, 'hornet', 2, .4]],
   },
@@ -203,16 +203,16 @@ export const LEVELS = [
   {
     name: 'Два муравейника', theme: 'sunset', feature: 'twin',
     map: [
-      '......S.......',
+      '......S......E',
       '...........R..',
-      '...R.....f...E',
+      '...R.....f....',
       '.A......R.....',
-      '....f........E',
+      '....f.........',
       '.......LL.....',
       '...........R..',
-      '...S..........',
+      '...S.........E',
     ],
-    dew: 440, hpGrowth: 1, hpLate: .03, rich: 1.6, waveBonus: 30,
+    dew: 440, hpGrowth: 1.9, hpLate: .03, rich: 2.2, waveBonus: 30,
     plants: ['pumpkin', 'rose', 'corn', 'aloe', 'mint', 'pepper', 'dandelion', 'flytrap', 'bell'],
     count: 26, budget: [13, 6], roster: [['ant', 1], ['aphid', 2], ['beetle', 3], ['wasp', 5], ['caterpillar', 7], ['firefly', 9], ['cricket', 11], ['pillbug', 14], ['snail', 17]], boss: [[13, 'queen', 1, .4], [26, 'rhino', 2, .6]],
   },
@@ -228,7 +228,7 @@ export const LEVELS = [
       '.....X..X.....',
       '.X.........R..',
     ],
-    dew: 440, hpGrowth: .6, hpLate: .03, rich: 1.6, waveBonus: 32,
+    dew: 440, hpGrowth: 0.84, hpLate: .03, rich: 1.6, waveBonus: 32,
     plants: ['pumpkin', 'rose', 'corn', 'aloe', 'mint', 'pepper', 'dandelion', 'flytrap', 'bell'],
     count: 28, budget: [13, 6], roster: [['ant', 1], ['grasshopper', 2], ['pillbug', 3], ['caterpillar', 5], ['butterfly', 7], ['cricket', 9], ['firefly', 11], ['snail', 13], ['wasp', 16], ['aphid', 19]], boss: [[9, 'rhino', 1, .4], [18, 'slugking', 1, .4], [28, 'spider', 2, .6]],
   },
@@ -244,7 +244,7 @@ export const LEVELS = [
       '......WW......',
       '..m...W.......',
     ],
-    dew: 450, hpGrowth: 0.7, hpLate: .03, rich: 1.6, waveBonus: 32,
+    dew: 450, hpGrowth: 1.75, hpLate: .03, rich: 2.2, waveBonus: 32,
     plants: ['pumpkin', 'rose', 'corn', 'aloe', 'mint', 'pepper', 'dandelion', 'flytrap', 'bell'],
     count: 28, budget: [14, 6.2], roster: [['ant', 1], ['snail', 2], ['wasp', 3], ['aphid', 5], ['pillbug', 6], ['caterpillar', 8], ['firefly', 10], ['cricket', 12], ['beetle', 15], ['butterfly', 18]], boss: [[9, 'hornet', 1, .4], [18, 'spider', 1, .4], [28, 'slugking', 2, .6]],
   },
@@ -260,7 +260,7 @@ export const LEVELS = [
       '.....S.......E',
       '..f.....LL....',
     ],
-    dew: 460, hpGrowth: 1, hpLate: .025, rich: 1.45, waveBonus: 34,
+    dew: 460, hpGrowth: 1.2, hpLate: .025, rich: 2.05, waveBonus: 34,
     plants: ['pumpkin', 'rose', 'corn', 'aloe', 'mint', 'pepper', 'dandelion', 'flytrap', 'bell'],
     count: 30, budget: [14, 6.4], roster: [['ant', 1], ['beetle', 2], ['butterfly', 3], ['pillbug', 4], ['caterpillar', 6], ['cricket', 8], ['firefly', 10], ['snail', 12], ['wasp', 14], ['grasshopper', 17], ['aphid', 20]], boss: [[10, 'queen', 1, .4], [20, 'hornet', 1, .4], [30, 'rhino', 2, .5]],
   },
@@ -281,7 +281,8 @@ function rng(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.im
 
 // A wave is a list of groups: [bug, count, seconds between bugs, delay before the group].
 // Every fifth wave is a big one and the wave after it is a breather; a bug new to the level first comes as a small group.
-export function makeWaves(L, seed) {
+export const FLY_SHARE = .18; // the most of a wave's budget that flyers take (before a new bug's quarter)
+export function makeWaves(L, seed, { flyShare = FLY_SHARE } = {}) {
   const R = rng(seed), out = [];
   for (let w = 1; w <= L.count; w++) {
     let budget = (L.budget[0] + L.budget[1] * (w - 1)) * (w % 5 === 0 ? 1.35 : w % 5 === 1 && w > 1 ? .8 : 1);
@@ -292,6 +293,11 @@ export function makeWaves(L, seed) {
     const picks = [], n = w < 3 ? 1 : w < 8 ? 2 : 3;
     while (picks.length < n && pool.length) picks.push(pool.splice(Math.floor(R() * pool.length), 1)[0]);
     const rest = 1 - .25 * fresh.length, shares = [[1], [.6, .4], [.45, .33, .22]][picks.length - 1].map((v) => v * rest);
+    // flyers cross the maze in a straight line: they stay a side threat, never most of a wave (a wall of them out of
+    // nowhere was a loss whatever the maze); what they would have taken goes to the walkers of the wave
+    // (with no walker among the picks the wave is just smaller)
+    const walker = picks.findIndex((k) => !BUGS[k].fly);
+    picks.forEach((k, idx) => { if (BUGS[k].fly && shares[idx] > flyShare * rest) { if (walker >= 0) shares[walker] += shares[idx] - flyShare * rest; shares[idx] = flyShare * rest; } });
     picks.unshift(...fresh); shares.unshift(...fresh.map(() => .25));
     picks.forEach((k, idx) => {
       let count = Math.max(fresh.includes(k) ? 2 : 1, Math.round(budget * shares[idx] / BUGS[k].w));
