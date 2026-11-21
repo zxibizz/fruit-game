@@ -53,7 +53,8 @@ and in portrait (turned there).
   `node test/bot.mjs [levels...]` prints how the bot did, wave by wave.
 - `balance/` — the balance matrix (dev only, not in the image): `node balance/run.mjs [quick|full] [--levels 5,6-8]
   [--set L5.hpGrowth=1.9,FLY_SHARE=.2] [--grid 'L5.hpGrowth=1.6|1.9;L5.rich=1.4|1.6']`. For every level it plays many
-  scenarios in parallel (a worker per scenario on a snapshot of the code, as many as there are cores; results cached
+  scenarios in parallel (a worker per scenario on a snapshot of the code, half the cores by default at the lowest
+  priority — `--jobs N` for more; results cached
   per level, so tuning one level reruns only it): the smart bot on several seeds and on other draws of the waves; lazy
   gardens beside the untouched trail with real dew and every perk, planted best, by the end, by the start or at
   random (they must lose); "exploits" — the same with all the dew of the level at once (an upper bound, a warning

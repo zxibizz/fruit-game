@@ -8,7 +8,7 @@
 import { Worker } from 'node:worker_threads';
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, existsSync, cpSync } from 'node:fs';
-import { availableParallelism, homedir } from 'node:os';
+import { availableParallelism, homedir, setPriority } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as DATA from '../public/data.js';
@@ -31,7 +31,10 @@ const base = parseSet(opt('--set'));
 let variants = [{}];
 for (const axis of (opt('--grid') || '').split(';').filter(Boolean)) { const [k, vs] = axis.split('='); variants = variants.flatMap((v) => vs.split('|').map((x) => ({ ...v, [k.trim()]: num(x.trim()) }))); }
 variants = variants.map((v) => ({ ...base, ...v }));
-const jobs = Number(opt('--jobs', availableParallelism())), useCache = !args.includes('--no-cache');
+// Half the cores by default and at the lowest priority: claude-vm shares one power-capped host (pve3) whose fan
+// roars when all its threads run flat out for long (2026-11-21); --jobs N for more when that does not matter.
+const jobs = Number(opt('--jobs', Math.max(1, Math.floor(availableParallelism() / 2)))), useCache = !args.includes('--no-cache');
+try { setPriority(19); } catch { /* not allowed: run as is */ } // workers started after this inherit it
 const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-'), out = opt('--out', join(homedir(), 'tmp', 'balance', stamp));
 const cacheDir = join(homedir(), 'tmp', 'balance-cache'); mkdirSync(cacheDir, { recursive: true }); mkdirSync(out, { recursive: true });
 const code = createHash('sha1'); for (const f of ['public/game.js', 'public/data.js', 'test/bot.mjs', 'balance/scenario.mjs', 'balance/worker.mjs']) code.update(readFileSync(join(root, f))); const codeHash = code.digest('hex');
