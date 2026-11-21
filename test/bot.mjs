@@ -205,7 +205,7 @@ export function playLevel(level, { seed = 7, verbose = false, maxPlants = Infini
     if (aloe) {
       const cover = (q) => g.plants.some((p) => p.type === 'aloe' && within(p.i - q[0], p.j - q[1], pstat(g, p, 'range')));
       const bare = eatenAt.filter((q) => !cover(q)), r0 = PLANTS.aloe.range[0];
-      if (bare.length >= 2 && g.plants.filter((p) => p.type === 'aloe').length < 6 && g.dew >= PLANTS.aloe.cost) {
+      if (bare.length >= 2 && room() && g.plants.filter((p) => p.type === 'aloe').length < 6 && g.dew >= PLANTS.aloe.cost + 50) { // with a hole's worth of dew kept
         let top = null, topN = 1;
         for (let i = 0; i < COLS; i++) for (let j = 0; j < ROWS; j++) {
           if (g.grid[j][i] || stubAt(g, i, j) || keep.has(kOf(i, j)) || tr.has(kOf(i, j)) || planned.some(([a, b]) => a === i && b === j)) continue;
@@ -255,7 +255,7 @@ export function playLevel(level, { seed = 7, verbose = false, maxPlants = Infini
     if (verbose && g.events.some((e) => e.t === 'waveDone')) console.log(`  after wave ${g.wave}: hp ${g.hp} dew ${g.dew} plants ${g.plants.length} (${g.plants.filter((p) => p.lvl > 1).length} grown) eaten ${eaten} t ${Math.round(t)}s`);
     g.events.length = 0; tryBuild();
   }
-  const res = { worth: o.nG ? Math.round(worth(g, trailOf(g), o) * 100) / 100 : 0, trail: trailOf(g).length, level, won: g.phase === 'won', hp: g.hp, maxHp: g.maxHp, wave: g.wave, waves: g.waves, plants: g.plants.length, grown: g.plants.filter((p) => p.lvl > 1).length, maxed: g.plants.filter((p) => p.lvl === 3).length, dew: g.dew, eaten, income, kinds: g.plants.reduce((c, p) => { c[p.type] = (c[p.type] || 0) + 1; return c; }, {}), log, bites, powersUsed, time: Math.round(t) };
+  const res = { worth: o.nG ? Math.round(worth(g, trailOf(g), o) * 100) / 100 : 0, trail: trailOf(g).length, level, won: g.phase === 'won', hp: g.hp, maxHp: g.maxHp, wave: g.wave, waves: g.waves, plants: g.plants.length, grown: g.plants.filter((p) => p.lvl > 1).length, maxed: g.plants.filter((p) => p.lvl === 3).length, dew: g.dew, eaten, income, kinds: [...g.plants, ...g.stubs].reduce((c, p) => { c[p.type] = (c[p.type] || 0) + 1; return c; }, {}), log, bites, powersUsed, time: Math.round(t) };
   if (show) show(g);
   if (verbose) console.log(`level ${level + 1} ${L.name}: ${res.won ? 'won' : 'LOST'} hp ${res.hp}/${g.maxHp} wave ${res.wave}/${g.waves} plants ${res.plants} (${res.grown} grown) dew left ${g.dew} eaten ${eaten} income ${income} time ${res.time}s bites ${JSON.stringify(bites)}`);
   return res;

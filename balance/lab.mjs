@@ -1,7 +1,7 @@
 // The plant lab: node balance/lab.mjs [--wave 14] [--dew 4000] [--weight 100] [--level 8] [--set K=V,...]
 //   [--plants rose,corn] [--mix rose,mint] [--bugs ant,snail] [--no-mix]
 // What each plant is for, measured apart from the levels: a fixed maze of pumpkins, beside its trail a garden of one
-// kind of plant bought for --dew (planted from the fruit end, grown level by level), and one pack of one kind of bug
+// kind of plant bought for --dew (on the free cells beside the trail from the fruit end, grown level by level), and one pack of one kind of bug
 // with the health of --wave and of --weight (as in the wave budgets). The number is the share of the pack's health
 // the garden takes, in percent: 100 is a pack killed to the last bug. Supports (rose marks, mint, bell, flytrap, aloe) are also
 // measured as a fifth of the dew of a corn garden: the number there is that garden over an all-corn one.
@@ -22,8 +22,7 @@ function garden(mix) {
   for (const [col, gap] of walls) for (let j = 0; j < ROWS; j++) if (j !== gap && !g.grid[j][col] && !placeProblem(g, col, j)) place(g, 'pumpkin', col, j);
   const tr = trailOf(g), on = new Set(tr.map(([i, j]) => i + ',' + j)), cells = [];
   for (let i = 0; i < COLS; i++) for (let j = 0; j < ROWS; j++) {
-    if (on.has(i + ',' + j) || placeProblem(g, i, j)) continue; const at = g.grid[j][i];
-    if (at && at.type !== 'pumpkin') continue; // rocks and the like
+    if (on.has(i + ',' + j) || placeProblem(g, i, j)) continue; // the free cells: the walls stay pumpkins
     let near = -1; tr.forEach(([a, b], k) => { if (within(a - i, b - j, 1.5)) near = k; }); if (near >= 0) cells.push([i, j, near]);
   }
   cells.sort((a, b) => b[2] - a[2]);
@@ -35,8 +34,7 @@ function garden(mix) {
   deal.sort((a, b) => a[0] - b[0]);
   cells.slice(0, total).forEach(([i, j], q) => {
     const k = deal[q][1]; if (left[k] < PLANTS[k].cost) return;
-    const old = g.grid[j][i]; if (old) { const p = g.plants.find((x) => x.i === i && x.j === j); g.plants.splice(g.plants.indexOf(p), 1); g.grid[j][i] = null; }
-    if (place(g, k, i, j)) { left[k] -= PLANTS[k].cost; mine[k].push(g.plants[g.plants.length - 1]); } else if (old) { g.grid[j][i] = null; place(g, 'pumpkin', i, j); }
+    if (place(g, k, i, j)) { left[k] -= PLANTS[k].cost; mine[k].push(g.plants[g.plants.length - 1]); }
   });
   for (const [k] of mix) for (let lvl = 1; lvl < 3; lvl++) for (const p of mine[k]) { const c = upgradeCost(p); if (p.lvl === lvl && c != null && left[k] >= c) { upgrade(g, p); left[k] -= c; } }
   return g;
@@ -44,7 +42,7 @@ function garden(mix) {
 // the health a garden takes off a pack too big for it (--weight, as in the wave budgets), in thousands
 function dealt(mix, kind, weight = WEIGHT) {
   const g = garden(mix), B = BUGS[kind], count = Math.max(1, Math.round(weight / B.w));
-  g.wave = wave - 1; startWave(g);
+  g.wave = wave - 1; if (!startWave(g)) throw new Error(`level ${level + 1} has no wave ${wave}`);
   const gap = Math.max(.05, Math.round(Math.min(2.6, Math.max(.4, 14 / count)) * TUNE.gap * 20) / 20);
   g.queue = Array.from({ length: count }, (_, n) => ({ kind, at: n * gap, e: 0 })); g.hp = g.maxHp = 1e9;
   let left = 0; const full = count * bugHp(g, kind, wave);

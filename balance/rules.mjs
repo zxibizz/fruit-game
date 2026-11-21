@@ -5,6 +5,7 @@ const med = (a) => { const s = [...a].sort((x, y) => x - y); return s.length ? (
 const fmt = (r) => (r.won ? `W ${r.hp}/${r.maxHp}` : `L w${r.wave}`);
 export const SOFT = [7, 9]; // levels (1-based) where the most perks of their time may still carry a lazy garden through
 export const PLACE = .12; // how much of the fruit (or of the level, when lost) a plant must be worth where it has its place
+export const LEAK = .75; // a lazy garden on the first levels lets the first bug through by this share of the waves
 export const IDLE = 400; // dew left at the end of a level with nothing more to buy: a couple of upgrades at most
 
 export function check(results, { soft = SOFT } = {}) {
@@ -35,7 +36,7 @@ export function check(results, { soft = SOFT } = {}) {
     for (const r of g('lazy')) {
       // every perk at once is a replay after the whole game; the soft levels may give in to the most perks of their time
       if (r.res.won) add('lazy loses', r.opts.meta === 'full' || (soft.includes(L) && r.opts.meta === 'exp3') ? 'warn' : 'fail', `${r.name} ${fmt(r.res)}`);
-      else if (L <= 3 && r.res.firstBite > r.res.waves * .55) add('lazy leaks early', 'warn', `${r.name}: first bite at wave ${r.res.firstBite}/${r.res.waves}`);
+      else if (L <= 3 && r.res.firstBite > r.res.waves * LEAK) add('lazy leaks early', 'warn', `${r.name}: first bite at wave ${r.res.firstBite}/${r.res.waves}`);
     }
     // a skill taken away must not help; alternatives that beat the bot's own way are worth knowing
     for (const r of g('skill')) {

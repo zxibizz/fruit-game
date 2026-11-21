@@ -3,8 +3,9 @@ import { COLS, ROWS, FRUIT_HP, PLANTS, BUGS, LEVELS, PERKS, BREAK, EARLY_DEW, RE
 
 export const VERSION = '0.22.0';
 // The version of a saved level: raised when the balance changes so much that a garden grown under the old rules does
-// not belong in the new level (2: no fatigue, tight packs, one health rule; such a save is dropped).
-const SAVE_V = 2;
+// not belong in the new level (2: no fatigue, tight packs, one health rule; 3: the plants given their places and
+// every level retuned; an older save is dropped).
+const SAVE_V = 3;
 export { COLS, ROWS, BREAK };
 
 const DIRS = [[-1, 0], [0, -1], [0, 1], [1, 0]]; // tie order: towards the fruit side first
@@ -474,7 +475,7 @@ function updatePlant(g, p, dt) {
   p.cd = 1 / (pstat(g, p, 'rate') * quick);
   for (const [, best] of seen.slice(0, multi)) {
     const weak = P.ground && !best.fly, dmg = pstat(g, p, 'dmg') * (weak ? P.ground : 1);
-    const est = splash ? 0 : Math.max(1, dmg - best.armor); best.coming = (best.coming || 0) + est; // what it will take
+    const est = splash ? 0 : Math.max(1, dmg - best.armor) * marked(best); best.coming = (best.coming || 0) + est; // what it will take
     g.shots.push({ id: g.nextId++, kind: P.shot, from: p.type, x: px, y: py - .25, sx: px, sy: py - .25, target: best, tx: best.x, ty: best.y, speed: P.speed, dmg, est, splash: pstat(g, p, 'splash') || 0, hits: P.hits ? P.hits[p.lvl - 1] : 0, mark, stun: weak ? 0 : pstat(g, p, 'stun') || 0, air: !!P.air });
     g.events.push({ t: 'shoot', p, target: best });
   }
@@ -489,7 +490,7 @@ function updateShot(g, s, dt) {
       for (const b of near.slice(0, s.hits || Infinity)) damage(g, b, s.dmg, s.from); g.events.push({ t: 'splash', x: s.tx, y: s.ty, kind: s.kind, r: s.splash }); }
     else if (s.target && s.target.hp > 0 && !s.target.gone) {
       damage(g, s.target, s.dmg, s.from);
-      if (s.mark && s.target.hp > 0) { s.target.mark = MARK_T; s.target.markV = Math.max(s.mark, s.target.mark > 0 ? s.target.markV || 0 : 0); }
+      if (s.mark && s.target.hp > 0) { const t = s.target, old = t.mark > 0 ? t.markV || 0 : 0; t.mark = MARK_T; t.markV = Math.max(s.mark, old); } // a mark run out leaves nothing
       if (s.stun && s.target.hp > 0) freeze(s.target, s.stun * (BUGS[s.target.kind].boss ? .3 : 1));
     }
     return;

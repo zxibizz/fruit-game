@@ -4,6 +4,7 @@ import { createGame, step, place, placeProblem, plantOn, plantProblem, trail, tr
 import { LEVELS, PLANTS, BUGS, PLANT_ORDER, PERKS, PERK_ORDER, REGROW, WEED_COST, FERTILE, MARK_T, wavePay } from '../public/data.js';
 import { playLevel, expectedMeta, fullMeta } from './bot.mjs';
 import { waveLint } from '../balance/lint.mjs';
+import { LEAK } from '../balance/rules.mjs';
 
 test('every level has a way from the entrance to the fruit', () => {
   LEVELS.forEach((L, n) => {
@@ -124,7 +125,7 @@ test('a garden beside the untouched trail loses every level, however it is plant
     const r = playLevel(n, { route: 0, meta: expectedMeta(n) });
     assert.equal(r.won, false, `level ${n + 1}`);
     // («Опушка» is the exception: a row of corn with mint holds there until the last waves, and loses in them)
-    if (n < 3 && n !== 1) assert.ok(Math.min(...Object.keys(r.bites).map((k) => parseInt(k, 10))) <= LEVELS[n].count * .75, `level ${n + 1}: it leaks well before the end`);
+    if (n < 3 && n !== 1) assert.ok(Math.min(...Object.keys(r.bites).map((k) => parseInt(k, 10))) <= LEVELS[n].count * LEAK, `level ${n + 1}: it leaks well before the end`);
     if (!soft.includes(n)) for (const place of ['best', 'end', 'start', 'spread']) assert.equal(playLevel(n, { route: 0, meta: expectedMeta(n, 3), place }).won, false, `level ${n + 1}, three stars a level, planted ${place}`);
   }
 });
