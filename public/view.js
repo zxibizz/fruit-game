@@ -1095,7 +1095,7 @@ function drawTip() {
 
 // ---------- input ----------
 // Taps act on release. One finger drags the field when it is zoomed in; two fingers (or the mouse wheel) zoom.
-let press = null, pinch = null;
+let press = null, pinch = null, lastTouchEnd = -1e9;
 const ptrs = new Map();
 const hit = (list, x, y) => { for (let k = list.length - 1; k >= 0; k--) { const u = list[k]; if (x >= u.x && y >= u.y && x <= u.x + u.w && y <= u.y + u.h) return u; } return null; };
 function tap(px, py) {
@@ -1157,6 +1157,10 @@ const release = (e) => {
 };
 cv.addEventListener('pointerup', release);
 cv.addEventListener('contextmenu', (e) => e.preventDefault()); // a long press is ours, not the browser's menu
+// iOS takes two quick taps for its double-tap gesture and shifts the page (seen 2026-11-21, 0.16.0): a second tap
+// soon after the first is not the browser's (the game reads pointer events, so nothing of ours is lost)
+cv.addEventListener('touchend', (e) => { const t = performance.now(); if (t - lastTouchEnd < 400) e.preventDefault(); lastTouchEnd = t; }, { passive: false });
+cv.addEventListener('dblclick', (e) => e.preventDefault());
 cv.addEventListener('pointercancel', release);
 // Safari would zoom the whole page on a pinch: keep that gesture for the field
 cv.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
@@ -1168,7 +1172,10 @@ addEventListener('resize', resize);
 visualViewport?.addEventListener('resize', resize);
 addEventListener('pageshow', () => resize());
 document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(resize, 300); });
-addEventListener('scroll', () => { if (document.documentElement.classList.contains('tall') && (scrollX || scrollY)) scrollTo(0, 0); }); // a page taller than its window must not move
+// the page never moves: neither when it is taller than its window nor after a gesture iOS took for itself
+const unscroll = () => { if (scrollX || scrollY) scrollTo(0, 0); };
+addEventListener('scroll', unscroll); visualViewport?.addEventListener('scroll', unscroll);
+document.addEventListener('dblclick', (e) => e.preventDefault());
 document.addEventListener('visibilitychange', () => { if (document.hidden && game && $('home').hidden) saveLevel(); });
 document.addEventListener('visibilitychange', () => { if (document.hidden && game && !paused && game.phase !== 'won' && game.phase !== 'lost') openPause(); });
 
