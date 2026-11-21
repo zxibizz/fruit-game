@@ -128,7 +128,7 @@ export const BROOD_REWARD = .34;
 // - a hole in a wall lets the whole wave through, so holes are to be closed: by dew at once, by an aloe, or by time.
 // The health of the bugs grows with every wave (TUNE.hpGrowth, the same on every level), so a garden beside the
 // untouched trail starts to let bugs through by the middle of a level and is lost well before its end, while a
-// thought-out maze with the perks of two stars a level gets through (test/bot.mjs). The dew at the start is enough to
+// thought-out maze with the perks of two stars a level gets through (sim/src/bot.rs). The dew at the start is enough to
 // lay the first walls at once.
 // A level's field is a picture of 8 rows of 14 cells: . free, A the fruit, E an anthill (last column only),
 // R rock, S stump, L log, W water, X weeds (can be cleared), f fertile soil, m mud, n nettles.

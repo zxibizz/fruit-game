@@ -1,13 +1,15 @@
 // The balance matrix: node balance/run.mjs [quick|full] [--levels 1,5-7] [--set K=V,...] [--grid K=a|b|c;K2=x|y]
 //   [--jobs N] [--out DIR] [--no-cache]
-// Runs every scenario of the plan for every variant of the data in parallel (one worker per scenario, as many at a
-// time as there are cores), caches results by the code and the scenario, prints the findings per variant and writes
-// report.html and results.json to --out (default ~/tmp/balance/<time>).
+// Runs every scenario of the plan for every variant of the data in parallel, caches results by the code and the
+// scenario, prints the findings per variant and writes report.html and results.json to --out (default
+// ~/tmp/balance/<time>). The parties are played by the native bot on the native simulation (sim/, built here by
+// cargo): a batch per variant of the data, on --jobs threads.
 //   --set  overrides for every variant: L5.dew=500, TUNE.hpGrowth=1.2, PLANTS.dandelion.ground=.3, FLY_SHARE=.2
 //   --grid variants to compare: every combination of the listed values is one variant
 import { Worker } from 'node:worker_threads';
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync, mkdirSync, existsSync, cpSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, cpSync, readdirSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { availableParallelism, homedir, setPriority } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -37,35 +39,44 @@ const jobs = Number(opt('--jobs', Math.max(1, Math.floor(availableParallelism() 
 try { setPriority(19); } catch { /* not allowed: run as is */ } // workers started after this inherit it
 const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-'), out = opt('--out', join(homedir(), 'tmp', 'balance', stamp));
 const cacheDir = join(homedir(), 'tmp', 'balance-cache'); mkdirSync(cacheDir, { recursive: true }); mkdirSync(out, { recursive: true });
-const code = createHash('sha1'); for (const f of ['public/game.js', 'public/data.js', 'test/bot.mjs', 'balance/scenario.mjs', 'balance/worker.mjs']) code.update(readFileSync(join(root, f))); const codeHash = code.digest('hex');
+const RS = readdirSync(join(root, 'sim', 'src')).sort().map((f) => `sim/src/${f}`);
+execFileSync('cargo', ['build', '--release', '--quiet'], { cwd: join(root, 'sim'), stdio: 'inherit' });
+const JS = ['public/data.js', 'balance/scenario.mjs', 'balance/native.mjs', 'sim/js/export.mjs', 'sim/js/play.mjs'];
+const code = createHash('sha1'); for (const f of [...JS, ...RS]) code.update(readFileSync(join(root, f))); const codeHash = code.digest('hex');
 // the workers run a snapshot of the code taken now: edits made while the plan runs must not mix into its results
-const snap = join(cacheDir, 'code', codeHash);
-if (!existsSync(join(snap, 'balance', 'worker.mjs'))) for (const f of ['public/game.js', 'public/data.js', 'test/bot.mjs', 'balance/scenario.mjs', 'balance/worker.mjs']) cpSync(join(root, f), join(snap, f));
+const snap = join(cacheDir, 'code', codeHash), bin = join(snap, 'fruit-sim');
+if (!existsSync(bin)) { for (const f of JS) cpSync(join(root, f), join(snap, f)); cpSync(join(root, 'sim', 'target', 'release', 'fruit-sim'), bin); }
 
 const tasks = variants.flatMap((set, vi) => plan(kind, levels).map((sc) => ({ ...sc, set, vi })));
-// A result depends on the code of the game and the bot, the shared data (plants, bugs, perks, constants, the wave
+// A result depends on the code of the simulation and the bot, the shared data (plants, bugs, perks, constants, the wave
 // builder) and its own level only: tuning one level reruns that level alone.
-const logic = createHash('sha1'); for (const f of ['public/game.js', 'test/bot.mjs', 'balance/scenario.mjs']) logic.update(readFileSync(join(root, f)));
+const logic = createHash('sha1'); for (const f of ['balance/scenario.mjs', ...RS]) logic.update(readFileSync(join(root, f)));
 logic.update(JSON.stringify(Object.fromEntries(Object.entries(DATA).filter(([k]) => k !== 'LEVELS'))) + DATA.makeWaves.toString()); const logicHash = logic.digest('hex');
 const levelHash = LEVELS.map((L) => createHash('sha1').update(JSON.stringify(L)).digest('hex'));
 const setFor = (set, n) => Object.fromEntries(Object.entries(set).filter(([k]) => !/^L\d+\./.test(k) || k.startsWith(`L${n + 1}.`))); // another level's override changes nothing here
 const keyOf = (t) => createHash('sha1').update(logicHash + levelHash[t.level] + JSON.stringify({ l: t.level, o: t.opts, w: t.waveSeed ?? null, s: setFor(t.set, t.level) })).digest('hex');
-let done = 0, cached = 0; const t0 = Date.now();
-const runOne = (t) => new Promise((res) => {
-  const file = join(cacheDir, keyOf(t) + '.json');
-  if (useCache && existsSync(file)) { cached++; return res(JSON.parse(readFileSync(file, 'utf8'))); }
-  const w = new Worker(join(snap, 'balance', 'worker.mjs'), { workerData: t });
-  w.once('message', (m) => { if (!m.ok) { console.error(`\n${t.name} L${t.level + 1}: ${m.err}`); return res(null); } writeFileSync(file, JSON.stringify(m.res)); res(m.res); });
-  w.once('error', (e) => { console.error(`\n${t.name} L${t.level + 1}: ${e}`); res(null); });
+let done = 0, cached = 0; const t0 = Date.now(), results = [];
+const tick = () => process.stderr.write(`\r${done}/${tasks.length} (${cached} cached) ${Math.round((Date.now() - t0) / 1000)}s   `);
+const fileOf = (t) => join(cacheDir, keyOf(t) + '.json');
+const fresh = tasks.filter((t) => { if (!useCache || !existsSync(fileOf(t))) return true; cached++; done++; results.push({ ...t, at: tasks.indexOf(t), res: JSON.parse(readFileSync(fileOf(t), 'utf8')) }); return false; });
+const keep = (t, r) => { done++; if (r) { writeFileSync(fileOf(t), JSON.stringify(r)); results.push({ ...t, at: tasks.indexOf(t), res: r }); } tick(); };
+const work = (file, workerData) => new Promise((res) => {
+  const w = new Worker(join(snap, 'balance', file), { workerData });
+  w.once('message', res); w.once('error', (e) => res({ ok: false, err: String(e) }));
 });
-const queue = tasks.slice(), results = [];
-await Promise.all(Array.from({ length: jobs }, async () => { while (queue.length) { const t = queue.shift(), r = await runOne(t); done++; if (r) results.push({ ...t, res: r });
-  process.stderr.write(`\r${done}/${tasks.length} (${cached} cached) ${Math.round((Date.now() - t0) / 1000)}s   `); } }));
+// one batch per variant of the data and draw of the waves; the binary plays a batch on `jobs` threads
+const groups = new Map(); for (const t of fresh) { const k = JSON.stringify([t.set, t.waveSeed ?? null]); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(t); }
+for (const list of groups.values()) {
+  const m = await work('native.mjs', { bin, jobs, tasks: list });
+  if (!m.ok) console.error(`\n${list.length} scenarios (${JSON.stringify(list[0].set)}, waves ${list[0].waveSeed ?? '-'}): ${m.err}`);
+  list.forEach((t, k) => keep(t, m.ok ? m.res[k] : null));
+}
+tick();
 process.stderr.write('\n');
 
 const label = (v) => (Object.keys(v).length ? Object.entries(v).map(([k, x]) => `${k}=${x}`).join(', ') : 'as in data.js');
 const report = variants.map((set, vi) => {
-  const rs = results.filter((r) => r.vi === vi).sort((a, b) => tasks.indexOf(a) - tasks.indexOf(b));
+  const rs = results.filter((r) => r.vi === vi).sort((a, b) => a.at - b.at); // in the order of the plan
   return { label: label(set), set, results: rs, findings: check(rs) };
 });
 // the lint of the waves as the first variant has them

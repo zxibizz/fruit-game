@@ -53,17 +53,18 @@ and in portrait (turned there).
   `?dev&insets=top,right,bottom,left` fakes the safe areas (e.g. `0,59,21,59` for an iPhone on its side).
 - `server/` — Node 22, no dependencies: static files and `/healthz`.
 - `node --test test/*.test.js` — pathing and placement rules, economy, repairs, bosses, the ground, perks, saving, server, offline
-  cache list, no sudden walls of flyers in the waves, and the balance on one seed: the smart bot of `test/bot.mjs`
-  (a maze through mud and nettles; it values a garden by the bugs it stops — walkers and flyers apart, a crowd sharing
-  a single shooter while corn and pepper hit many; mended holes, frost and rain, the perks of two stars a level) must
-  win every level; a garden beside the untouched trail must lose every level with the most perks there can be by then
-  (three stars on every level before), planted any of four ways; half a garden or no powers must do worse. The suite takes a minute or two; the full
-  picture is the balance matrix below.
-  `node test/bot.mjs [levels...]` prints how the bot did, wave by wave.
+  cache list, no sudden walls of flyers in the waves, the two copies of the simulation against each other (see `sim/`
+  below), and the balance on one seed: the smart bot (`sim/src/bot.rs`: a maze through mud and nettles; it values a
+  garden by the bugs it stops — walkers and flyers apart, a crowd sharing a single shooter while corn and pepper hit
+  many; mended holes, frost and rain, the perks of two stars a level) must win every level; a garden beside the
+  untouched trail must lose every level with the most perks there can be by then (three stars on every level before),
+  planted any of four ways; half a garden or no powers must do worse. The suite takes half a minute and needs `cargo`
+  (the bot is native); the full picture is the balance matrix below.
 - `balance/` — the balance matrix (dev only, not in the image): `node balance/run.mjs [quick|full] [--levels 5,6-8]
   [--set L5.dew=500,FLY_SHARE=.2] [--grid 'L5.budget=12/5.8|12/6.4;L5.pay=150/270|170/300']`. For every level it plays many
-  scenarios in parallel (a worker per scenario on a snapshot of the code, half the cores by default at the lowest
-  priority — `--jobs N` for more; results cached
+  scenarios in parallel (the native bot of `sim/` on a snapshot of the code, a batch per variant of the data; half the
+  cores by default at the lowest priority — `--jobs N` for more; the full matrix, some 370 parties, takes half a
+  minute; results cached
   per level, so tuning one level reruns only it): the smart bot on several seeds and on other draws of the waves; lazy
   gardens beside the untouched trail with real dew and the most perks of their time, planted best, by the end, by the
   start or at random (they must lose; with every perk at once — a replay — only a warning); "exploits" — the same with all the dew of the level at once (an upper bound, a warning
@@ -74,6 +75,28 @@ and in portrait (turned there).
   `lint.mjs` looks at the waves alone for sudden walls of bugs (also in the tests). It prints the findings and writes
   `report.html` (level × scenario, coloured by how much fruit was left or how early it was lost) and `results.json`.
   `--grid` compares variants of the data side by side — the way to tune a level.
+- `sim/` — the simulation once more, in Rust, and the bot that plays it (dev only, not in the image; `cargo` builds
+  it, no dependencies). The balance matrix and the balance tests run on it: a party takes a tenth of a second where
+  the JS simulation with a JS bot took three.
+  - `src/game.rs` is `public/game.js` rule for rule, and **a rule changed in one is changed in the other** — the
+    only thing kept twice. The numbers of the game stay in `public/data.js` alone: `sim/js/export.mjs` hands them
+    over as JSON with the overrides of a scenario applied and the waves put together, and a key the native side does
+    not know is an error. The bot (`src/bot.rs`) lives here only. What the native side leaves out: what only the
+    screen needs, saving, and the player's actions the bot never takes (weeding, healing a plant, planting over
+    another).
+  - The two copies must agree to the last bit, or a tuned level means nothing. `node sim/js/verify.mjs` (also
+    `npm run parity`, and one of the tests) checks it in ten seconds: the native bot plays parts of five levels four
+    different ways, players with no plan at all (random actions, often impossible ones) play every level, each
+    party is written down with every action and the hash of the state after every step, and `public/game.js` replays
+    it: every hash must be the same. `--coverage` lists the lines of `game.js` the parties never ran (today: only
+    what the native side leaves out). When the copies part, it says where: the party, the step, and the numbers of
+    the state that differ ("bug 539 caterpillar chewCd: 5 in game.js, 4 in game.rs"); `fruit-sim replay <party>
+    --dump-at K` and `node sim/js/replay.mjs <party> --dump-at K` print the whole state after any action.
+    `verify.mjs full` replays every scenario of the full matrix (minutes; CI runs it on every push): rare
+    coincidences of numbers — a bug exactly on the edge of a plant's reach — take that many parties to come up.
+  - For the two to agree, distances on the JS side are `Math.sqrt(dx*dx + dy*dy)`, never `Math.hypot` (rounded
+    differently from engine to engine), and the bot has `exp` and `log` of its own (`src/jsmath.rs`), the same on
+    every machine.
 - [docs/research.md](docs/research.md) — the genre study the design started from (in Russian).
 
 When anything in `public/` changes, bump `VERSION` in both `public/game.js` and `public/sw.js`.

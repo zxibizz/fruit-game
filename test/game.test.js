@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame, step, place, placeProblem, plantOn, plantProblem, trail, trails, startWave, removePlant, upgrade, usePower, earlyBonus, regrow, regrowCost, stubAt, heal, healCost, refund, pstat, clearWeed, snapshot, restore, bugHp, COLS, ROWS, BREAK } from '../public/game.js';
 import { LEVELS, PLANTS, BUGS, PLANT_ORDER, PERKS, PERK_ORDER, REGROW, WEED_COST, FERTILE, MARK_T, wavePay } from '../public/data.js';
-import { playLevel, expectedMeta, fullMeta } from './bot.mjs';
+import { expectedMeta, fullMeta } from '../balance/scenario.mjs';
+import { play } from '../sim/js/play.mjs';
 import { waveLint } from '../balance/lint.mjs';
 import { LEAK } from '../balance/rules.mjs';
 
@@ -109,10 +110,13 @@ test('bugs never walk into plants; a plant put on a cell with bugs lets them out
   assert.ok(fresh.size > 0); assert.equal(g.phase, 'build');
 });
 
-// Balance. The smart bot (test/bot.mjs) plays as the level asks: a maze over the whole field led through mud and
+// Balance. The smart bot (sim/src/bot.rs, on the native copy of the simulation: sim.test.js checks that the two
+// copies agree) plays as the level asks: a maze over the whole field led through mud and
 // nettles, the best plants where bugs are slowest, upgrades where they pay, holes mended, frost and
 // rain used. It has the perks of a player who took two stars on every earlier level.
-const smart = LEVELS.map((_, n) => playLevel(n, { meta: expectedMeta(n) }));
+// playLevels: [[level, options], ...] played in one go, the bot's reports back in the same order
+const playLevels = (list) => play(list.map(([level, opts]) => ({ level, opts }))).map((x) => x.res);
+const smart = playLevels(LEVELS.map((_, n) => [n, { meta: expectedMeta(n) }]));
 test('played with thought, every level is won', () => {
   smart.forEach((r, n) => { assert.ok(r.won, `level ${n + 1} lost at wave ${r.wave}`); assert.ok(r.plants >= 40, `level ${n + 1}: ${r.plants} plants`); });
 });
@@ -120,21 +124,23 @@ test('played with thought, every level is won', () => {
 // The full picture — many seeds, other draws of the waves, exploits, every skill and perk switched off — is the balance
 // matrix (node balance/run.mjs full); these are its hard rules on one seed, quick enough for every run of the tests.
 test('a garden beside the untouched trail loses every level, however it is planted, with the most perks there can be by then', () => {
-  const soft = [6, 8]; // «Заросли» and «Закат»: a lazy garden with every perk may still get through
+  const soft = [6, 8], PLACES = ['best', 'end', 'start', 'spread']; // «Заросли» and «Закат»: a lazy garden with every perk may still get through
+  const usual = playLevels(LEVELS.map((_, n) => [n, { route: 0, meta: expectedMeta(n) }]));
+  const hard = LEVELS.map((_, n) => n).filter((n) => !soft.includes(n)), most = playLevels(hard.flatMap((n) => PLACES.map((place) => [n, { route: 0, meta: expectedMeta(n, 3), place }])));
   for (let n = 0; n < LEVELS.length; n++) {
-    const r = playLevel(n, { route: 0, meta: expectedMeta(n) });
+    const r = usual[n];
     assert.equal(r.won, false, `level ${n + 1}`);
     // («Опушка» is the exception: a row of corn with mint holds there until the last waves, and loses in them)
     if (n < 3 && n !== 1) assert.ok(Math.min(...Object.keys(r.bites).map((k) => parseInt(k, 10))) <= LEVELS[n].count * LEAK, `level ${n + 1}: it leaks well before the end`);
-    if (!soft.includes(n)) for (const place of ['best', 'end', 'start', 'spread']) assert.equal(playLevel(n, { route: 0, meta: expectedMeta(n, 3), place }).won, false, `level ${n + 1}, three stars a level, planted ${place}`);
   }
+  hard.forEach((n, a) => PLACES.forEach((place, b) => assert.equal(most[a * PLACES.length + b].won, false, `level ${n + 1}, three stars a level, planted ${place}`)));
 });
 
 test('half a garden or no frost and rain: the levels go worse', () => {
   const score = (list) => list.reduce((s, r) => s + (r.won ? r.hp / r.maxHp : -(1 - (r.wave - 1) / r.waves)), 0), some = [1, 2, 4, 6, 7];
   const base = score(some.map((n) => smart[n]));
-  assert.ok(score(some.map((n) => playLevel(n, { maxPlants: 30, meta: expectedMeta(n) }))) < base, 'half a garden');
-  assert.ok(score(some.map((n) => playLevel(n, { powers: false, meta: expectedMeta(n) }))) < base, 'no powers');
+  assert.ok(score(playLevels(some.map((n) => [n, { maxPlants: 30, meta: expectedMeta(n) }]))) < base, 'half a garden');
+  assert.ok(score(playLevels(some.map((n) => [n, { powers: false, meta: expectedMeta(n) }]))) < base, 'no powers');
 });
 
 test('a hit hurts the same wherever on the trail it lands', () => {

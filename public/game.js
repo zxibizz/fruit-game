@@ -1,7 +1,7 @@
 // Simulation: no DOM, plain data. The view reads the state and the events, and calls the actions below.
 import { COLS, ROWS, FRUIT_HP, PLANTS, BUGS, LEVELS, PERKS, BREAK, EARLY_DEW, REPAIR, REGROW, REFUND, CHEW_GROWTH, POWER_EVERY, POWER_MAX, wavePay, FERTILE, FERTILE_ADD, MUD, NETTLE, NETTLE_BOSS, WEED_COST, BROOD_REWARD, FLY_HP, TUNE, MARK_T } from './data.js';
 
-export const VERSION = '0.22.0';
+export const VERSION = '0.22.1';
 // The version of a saved level: raised when the balance changes so much that a garden grown under the old rules does
 // not belong in the new level (2: no fatigue, tight packs, one health rule; 3: the plants given their places and
 // every level retuned; an older save is dropped).
@@ -84,9 +84,12 @@ function nextDig(g, i, j, dir) {
   return best;
 }
 // Call after any change of the plants on the field.
-// a point (dx, dy) away is within r: the same as Math.hypot(dx, dy) <= r, several times cheaper (plants check every bug
+// a point (dx, dy) away is within r: the same as hyp(dx, dy) <= r, several times cheaper (plants check every bug
 // every step)
 const within = (dx, dy, r) => dx * dx + dy * dy <= r * r;
+// The length of (dx, dy). Not Math.hypot: that one is rounded differently from engine to engine, while a square root
+// is the same everywhere, and the native copy of this simulation (sim/) has to walk the same way to the last bit.
+const hyp = (dx, dy) => Math.sqrt(dx * dx + dy * dy);
 function refresh(g) { g.dist = computeDist(g); g.dig = computeDig(g); auras(g); }
 // What the plants give to the plants around them: a bell makes them shoot more often, a grown aloe guards them.
 function auras(g) {
@@ -273,7 +276,9 @@ function sortBugs(g) {
 const nearOut = [];
 function near(g, px, py, r) {
   nearOut.length = 0; const bk = BK;
-  const x0 = Math.max(0, Math.floor(px - r) + 1), x1 = Math.min(BW - 1, Math.floor(px + r) + 1), y0 = Math.max(0, Math.floor(py - r) + 1), y1 = Math.min(ROWS + 1, Math.floor(py + r) + 1);
+  // one cell more on the low side: a bug a hair below the edge of the reach (y = 0.9999999999999999 with the edge at
+  // 1) is in another cell, yet its distance rounds to the reach itself and a plain loop takes it
+  const x0 = Math.max(0, Math.floor(px - r)), x1 = Math.min(BW - 1, Math.floor(px + r) + 1), y0 = Math.max(0, Math.floor(py - r)), y1 = Math.min(ROWS + 1, Math.floor(py + r) + 1);
   for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) for (const b of bk[x + y * BW]) nearOut.push(b);
   if (nearOut.length > 1) nearOut.sort((a, b) => a.k - b.k);
   return nearOut;
@@ -331,9 +336,9 @@ function hurtPlant(g, p, amount, b, k = 1) {
 const THAW = 2.5;
 function freeze(b, t, force = false) { if (!force && (b.thaw > 0 || b.frozen > 0)) return; b.frozen = Math.max(b.frozen, t); }
 function progress(g, b) {
-  if (b.fly) return Math.hypot(b.x - g.fruit[0] - .5, b.y - g.fruit[1] - .5);
+  if (b.fly) return hyp(b.x - g.fruit[0] - .5, b.y - g.fruit[1] - .5);
   if (b.ti == null || !inside(b.ti, b.tj)) return 100;
-  return (BUGS[b.kind].dig ? g.dig : g.dist)[key(b.ti, b.tj)] + Math.hypot(b.x - b.ti - .5, b.y - b.tj - .5);
+  return (BUGS[b.kind].dig ? g.dig : g.dist)[key(b.ti, b.tj)] + hyp(b.x - b.ti - .5, b.y - b.tj - .5);
 }
 
 // What a boss does on its way.
@@ -348,7 +353,7 @@ function bossSkill(g, b, B, dt) {
   else if (B.web) {
     const [every, r, n, life] = B.web; b.skill = every;
     const near = g.plants.filter((p) => !p.web && PLANTS[p.type].range && within(p.i + .5 - b.x, p.j + .5 - b.y, r))
-      .sort((p, q) => Math.hypot(p.i + .5 - b.x, p.j + .5 - b.y) - Math.hypot(q.i + .5 - b.x, q.j + .5 - b.y)).slice(0, n);
+      .sort((p, q) => hyp(p.i + .5 - b.x, p.j + .5 - b.y) - hyp(q.i + .5 - b.x, q.j + .5 - b.y)).slice(0, n);
     if (!near.length) { b.skill = 1; return; }
     for (const p of near) p.web = life;
     auras(g);
@@ -390,11 +395,11 @@ function updateBug(g, b, dt) {
   const rush = b.rush > 0 ? B.charge[2] : 1;
   const v = b.speed * (B.noSlow || rush > 1 ? 1 : b.slow) * (tile === 'mud' ? MUD : 1) * rush * dt;
   if (b.fly) {
-    const tx = g.fruit[0] + .5, ty = g.fruit[1] + .5, dx = tx - b.x, dy = ty - b.y, d = Math.hypot(dx, dy);
+    const tx = g.fruit[0] + .5, ty = g.fruit[1] + .5, dx = tx - b.x, dy = ty - b.y, d = hyp(dx, dy);
     if (d < .45) { bite(g, b); return; }
     b.vx = dx / d; b.vy = dy / d; b.x += b.vx * v; b.y += b.vy * v; return;
   }
-  const tx = b.ti + .5, ty = b.tj + .5, dx = tx - b.x, dy = ty - b.y, d = Math.hypot(dx, dy);
+  const tx = b.ti + .5, ty = b.tj + .5, dx = tx - b.x, dy = ty - b.y, d = hyp(dx, dy);
   if (d <= Math.max(v, .1)) {
     if (b.ti === g.fruit[0] && b.tj === g.fruit[1]) { bite(g, b); return; }
     if (B.chew && b.chewCd <= 0) {
@@ -482,11 +487,11 @@ function updatePlant(g, p, dt) {
 }
 function updateShot(g, s, dt) {
   if (s.target && s.target.hp > 0 && !s.target.gone) { s.tx = s.target.x; s.ty = s.target.y; }
-  const dx = s.tx - s.x, dy = s.ty - s.y, d = Math.hypot(dx, dy), v = s.speed * dt;
+  const dx = s.tx - s.x, dy = s.ty - s.y, d = hyp(dx, dy), v = s.speed * dt;
   if (d <= v) {
     s.done = true; if (s.target && s.est) s.target.coming -= s.est;
     if (s.splash) { // the kernels hit the bugs closest to where the cob lands, s.hits of them at most
-      const near = g.bugs.filter((b) => !b.fly && b.hp > 0 && within(b.x - s.tx, b.y - s.ty, s.splash)).sort((a, b) => Math.hypot(a.x - s.tx, a.y - s.ty) - Math.hypot(b.x - s.tx, b.y - s.ty));
+      const near = g.bugs.filter((b) => !b.fly && b.hp > 0 && within(b.x - s.tx, b.y - s.ty, s.splash)).sort((a, b) => hyp(a.x - s.tx, a.y - s.ty) - hyp(b.x - s.tx, b.y - s.ty));
       for (const b of near.slice(0, s.hits || Infinity)) damage(g, b, s.dmg, s.from); g.events.push({ t: 'splash', x: s.tx, y: s.ty, kind: s.kind, r: s.splash }); }
     else if (s.target && s.target.hp > 0 && !s.target.gone) {
       damage(g, s.target, s.dmg, s.from);

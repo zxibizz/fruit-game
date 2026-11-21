@@ -5,6 +5,7 @@
   "scripts": {
     "start": "node server/server.js",
     "test": "node --test test/*.test.js",
-    "bot": "node test/bot.mjs"
+    "balance": "node balance/run.mjs",
+    "parity": "node sim/js/verify.mjs"
   }
 }

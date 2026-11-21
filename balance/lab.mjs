@@ -6,14 +6,16 @@
 // the garden takes, in percent: 100 is a pack killed to the last bug. Supports (rose marks, mint, bell, flytrap, aloe) are also
 // measured as a fifth of the dew of a corn garden: the number there is that garden over an all-corn one.
 import { LEVELS, BUGS, PLANTS, PLANT_ORDER, TUNE } from '../public/data.js';
-import { createGame, step, place, upgrade, upgradeCost, startWave, placeProblem, bugHp, COLS, ROWS } from '../public/game.js';
-import { layout, trailOf } from '../test/bot.mjs';
+import { createGame, step, place, upgrade, upgradeCost, startWave, placeProblem, bugHp, trails, COLS, ROWS } from '../public/game.js';
+import { layout } from '../sim/js/play.mjs';
 import { applyOverrides } from './scenario.mjs';
 
 const args = process.argv.slice(2), opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const wave = Number(opt('--wave', 14)), dew = Number(opt('--dew', 4000)), level = Number(opt('--level', 8)) - 1, WEIGHT = Number(opt('--weight', 100));
 const num = (v) => (Number.isNaN(Number(v)) ? v : Number(v));
 applyOverrides(Object.fromEntries((opt('--set', '') || '').split(',').filter(Boolean).map((kv) => { const [k, v] = kv.split('='); return [k.trim(), num(v.trim())]; })));
+// every cell some trail runs over, each once
+const trailOf = (g) => { const seen = new Set(), out = []; for (const tr of trails(g)) for (const c of tr) { const k = c[0] + ',' + c[1]; if (!seen.has(k)) { seen.add(k); out.push(c); } } return out; };
 const walls = layout(level, true), within = (dx, dy, r) => dx * dx + dy * dy <= r * r + 1e-9;
 
 // a garden: [[kind, share of the dew]], each kind planted in turn along the trail from the fruit end, then grown
