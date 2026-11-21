@@ -2,6 +2,9 @@
 import { COLS, ROWS, FRUIT_HP, PLANTS, BUGS, LEVELS, PERKS, BREAK, EARLY_DEW, REPAIR, REGROW, REFUND, CHEW_GROWTH, POWER_EVERY, POWER_MAX, wavePay, FERTILE, FERTILE_ADD, MUD, NETTLE, NETTLE_BOSS, WEED_COST, BROOD_REWARD, FLY_HP, TUNE } from './data.js';
 
 export const VERSION = '0.21.0';
+// The version of a saved level: raised when the balance changes so much that a garden grown under the old rules does
+// not belong in the new level (2: no fatigue, tight packs, one health rule; such a save is dropped).
+const SAVE_V = 2;
 export { COLS, ROWS, BREAK };
 
 const DIRS = [[-1, 0], [0, -1], [0, 1], [1, 0]]; // tie order: towards the fruit side first
@@ -305,7 +308,6 @@ function kill(g, b, how) {
   if (B.split && !b.fly) for (let n = 0; n < B.split[1]; n++) spawn(g, B.split[0], b.e, b);
 }
 // Health lost for any reason other than a hit (fire, nettles, thorns): no armor, no floor.
-// how much more damage a bug takes for the way it has walked
 function lose(g, b, amount, how) { if (b.hp <= 0) return; b.hp -= amount; if (b.hp <= 0) kill(g, b, how); }
 function damage(g, b, amount, src) {
   if (b.hp <= 0) return;
@@ -526,13 +528,13 @@ export const stars = (g) => (g.hp >= g.maxHp * .8 ? 3 : g.hp >= g.maxHp * .4 ? 2
 export function snapshot(g) {
   const cleared = g.L.obstacles.filter(([i, j, t]) => t === 'weed' && g.grid[j][i]?.obstacle !== 'weed').map(([i, j]) => [i, j]);
   return {
-    v: 1, level: g.level, seed: g.seed, wave: g.wave, dew: g.dew, hp: g.hp, powers: { ...g.powers }, stats: { ...g.stats }, time: g.time, cleared,
+    v: SAVE_V, level: g.level, seed: g.seed, wave: g.wave, dew: g.dew, hp: g.hp, powers: { ...g.powers }, stats: { ...g.stats }, time: g.time, cleared,
     plants: g.plants.map((p) => ({ type: p.type, lvl: p.lvl, i: p.i, j: p.j, hp: p.hp, spent: p.spent })),
     stubs: g.stubs.map((s) => ({ type: s.type, lvl: s.lvl, i: s.i, j: s.j, spent: s.spent, grow: s.grow })),
   };
 }
 export function restore(snap, meta = {}) {
-  if (!snap || snap.v !== 1 || !LEVELS[snap.level] || !Array.isArray(snap.plants)) return null;
+  if (!snap || snap.v !== SAVE_V || !LEVELS[snap.level] || !Array.isArray(snap.plants)) return null;
   const g = createGame(snap.level, snap.seed, meta);
   if (snap.wave >= g.waves) return null;
   for (const [i, j] of snap.cleared || []) if (g.grid[j]?.[i]?.obstacle === 'weed') g.grid[j][i] = null;

@@ -40,7 +40,9 @@ export function applyOverrides(set = {}, waveSeed = null) {
     if (key === 'FLY_SHARE') { flyShare = v; LEVELS.forEach((_, n) => regen.add(n)); continue; }
     const [root, ...path] = key.split('.'), obj = { PLANTS, BUGS, PERKS, TUNE }[root];
     if (key === 'TUNE.bossEscort' || key === 'TUNE.gap') LEVELS.forEach((_, n) => regen.add(n)); if (!obj) throw new Error(`unknown override ${key}`);
-    let o = obj; for (const p of path.slice(0, -1)) o = o[p]; o[path.at(-1)] = v;
+    let o = obj; for (const p of path.slice(0, -1)) o = o?.[p];
+    if (o == null || (root === 'TUNE' && !(path.at(-1) in o))) throw new Error(`unknown override ${key}`);
+    o[path.at(-1)] = v;
   }
   if (waveSeed != null) LEVELS.forEach((_, n) => regen.add(n));
   for (const n of regen) LEVELS[n].waves = makeWaves(LEVELS[n], waveSeed != null ? waveSeed * 1000 + n : 101 + n, flyShare != null ? { flyShare } : {});

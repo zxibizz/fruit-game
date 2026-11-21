@@ -83,7 +83,7 @@ const T = {
   holdHint: 'Зажми растение или жука — узнаешь, кто это',
   dragHint: 'Сначала выбери растение на полке — или просто перетащи его на поле',
   hint2: 'Роса приходит за каждую пройденную волну. Дальше волны придут сами. Нажмёшь ▶ раньше — получишь ещё',
-  tiredHint: 'Чем длиннее и извилистее тропинка, тем дольше жуки ползут мимо твоих растений. Ставь стрелков там, где тропинка проходит рядом несколько раз',
+  trailHint: 'Чем длиннее и извилистее тропинка, тем дольше жуки ползут мимо твоих растений. Ставь стрелков там, где тропинка проходит рядом несколько раз',
   upHint: 'Улучшения дорогие — копи росу и усиливай те растения, мимо которых жуки ползут дольше всего',
   growNote: `Жуки крепнут: каждая волна добавляет им ${Math.round(TUNE.hpGrowth * 100)}% начального здоровья (летающим — ${Math.round(TUNE.hpGrowth * FLY_HP * 100)}%), на всех уровнях одинаково.`,
   zoomHint: 'Поле можно приблизить двумя пальцами',
@@ -504,7 +504,7 @@ function handleEvents() {
       case 'sell': case 'plantDead': dust(e.p); terrainDirty = true; if (pop === e.p) pop = null; if (e.t === 'sell') sfx.sell(); else { sfx.eaten(); banner(`${T.plant[e.p.type]} ${T.eaten[e.p.type]}!`, 1.4); if (!localStorage.getItem('fruit.rootsHint')) { banner(T.rootsHint, 8, true); localStorage.setItem('fruit.rootsHint', '1'); } } break;
       case 'chew': { const [x, y] = cellCenter(e.p.i, e.p.j); for (let n = 0; n < 6; n++) fx.push({ k: 'crumb', x, y: y - 6, vx: (Math.random() - .5) * 50, vy: -20 - Math.random() * 30, t: 0, life: .5, col: e.p.type === 'pumpkin' ? '#f7a23a' : '#6cc04a' }); bump(e.p, .2); sfx.chew(); break; }
       case 'wave': banner(T.wave(e.n, game.waves), 1.4); sfx.waveStart(); { const nb = newBugs(e.n).filter((k) => !isBoss(k)); if (nb.length && !(levelIdx === 0 && e.n === 1)) banner(T.freshBug(nb.map((k) => T.bug[k].toLowerCase())), 7, true); } if (AP.mood === 'happy') appleMood('idle', 0); break;
-      case 'waveDone': appleMood('happy', 2.6); appleCheer(); banner(T.waveDone(e.bonus), 1.8); sfx.waveDone(); if (e.powers) hintOnce('powers', T.powersBack, 4); if (levelIdx === 0 && e.n === 1) { hintOnce('early', T.hint2, 6); hintOnce('tired', T.tiredHint, 10); } if (levelIdx === 0 && e.n === 3) hintOnce('up', T.upHint, 9); break;
+      case 'waveDone': appleMood('happy', 2.6); appleCheer(); banner(T.waveDone(e.bonus), 1.8); sfx.waveDone(); if (e.powers) hintOnce('powers', T.powersBack, 4); if (levelIdx === 0 && e.n === 1) { hintOnce('early', T.hint2, 6); hintOnce('trail', T.trailHint, 10); } if (levelIdx === 0 && e.n === 3) hintOnce('up', T.upHint, 9); break;
       case 'early': ufx.push({ k: 'gain', x: GO[0] + 30, y: GO[1] + 26, t: 0, life: 1.2, txt: T.early(e.bonus) }); sfx.early(e.bonus); break;
       case 'power': if (e.kind === 'frost') { ufx.push({ k: 'flash', t: 0, life: .6, col: 'rgba(190,240,255,' }); sfx.frost(); } else { for (let n = 0; n < 70; n++) ufx.push({ k: 'rain', x: Math.random() * UW, y: -Math.random() * UH, t: 0, life: 1.2 }); sfx.rain(); terrainDirty = true; } break;
       case 'won': case 'lost': { dropSave(); if (e.t === 'won') appleCheer(); const g = game; setTimeout(() => { if (game === g) endScreen(e.t === 'won'); }, 900); break; }

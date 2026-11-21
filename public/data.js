@@ -317,7 +317,7 @@ export function makeWaves(L, seed, { flyShare = FLY_SHARE } = {}) {
       let count = Math.max(fresh.includes(k) ? 2 : 1, Math.round(budget * shares[idx] / BUGS[k].w));
       if (BUGS[k].dig) count = Math.min(count, 1 + Math.floor(w / 5));
       if (BUGS[k].mend) count = Math.min(count, 1 + Math.floor(w / 6));
-      const gap = Math.round(Math.min(2.6, Math.max(.4, 14 / count)) * TUNE.gap * 20) / 20;
+      const gap = Math.max(.05, Math.round(Math.min(2.6, Math.max(.4, 14 / count)) * TUNE.gap * 20) / 20);
       groups.push([k, count, gap, groups.length ? 3 : 0]);
     });
     out.push(groups);
