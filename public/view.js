@@ -606,7 +606,8 @@ function drawPlant(p, t) {
   if (p.busy > 0) { const q = Math.sin(t * 16) * .05; sx += q; sy -= q; }
   const sway = p.web > 0 ? 0 : Math.sin(t * 1.7 + p.id * 1.3) * .035;
   if (p.buff > 0) { c.save(); c.globalAlpha = .5 + Math.sin(t * 5 + p.id) * .2; A.fxStar(c, x + 13, y - 26 + Math.sin(t * 3 + p.id) * 2, 4, '#ffe680'); c.restore(); }
-  c.save(); c.translate(x, base); c.transform(sx, 0, sway, sy, 0, 0); if (p.web > 0) c.globalAlpha = .8; blit(s, -PBX, -PBY); c.restore();
+  const pk = plantK(p.type, p.lvl);
+  c.save(); c.translate(x, base); c.transform(sx * pk, 0, sway * pk, sy * pk, 0, 0); if (p.web > 0) c.globalAlpha = .8; blit(s, -PBX, -PBY); c.restore();
   if (p.web > 0) A.hdWeb(c, x, y, 19);
   if (p.lvl === 3) { const q = (t * .8 + p.id * .37) % 1; c.save(); c.globalAlpha = Math.sin(q * Math.PI) * .9; A.fxStar(c, x - 12 + ((p.id * 7) % 24), y - 30 + q * 14, 3.2, '#fff6b0'); c.restore(); }
 }
@@ -751,7 +752,7 @@ function drawDrag() {
   if (ok && drag.trails) drag.trails.forEach((tr, e) => { const pts = tr.map(([a, b]) => cellCenter(a, b)); pts.unshift(hillPos(e)); c.save(); c.shadowColor = 'rgba(255,200,40,.9)'; c.shadowBlur = 8; A.strokePts(c, A.chaikin(pts, 3), 4, '#ffd23a', { dash: [10, 7] }); c.restore(); });
   c.save(); c.beginPath(); A.rrect(c, x - 19, y - 19, 38, 38, 10); c.fillStyle = ok ? 'rgba(140,255,120,.35)' : 'rgba(255,80,70,.4)'; c.fill(); c.lineWidth = 3; c.strokeStyle = ok ? '#ffffff' : '#ff4a3a'; c.stroke(); c.restore();
   if (PLANTS[drag.type].range) { const r = pstat(game, { type: drag.type, lvl: 1, i, j }, 'range'); ring(x, y, r * CELL); groundRing(drag.type, x, y, r); }
-  c.save(); c.globalAlpha = ok ? .9 : .45; blit(plantSprite(drag.type, 1), x - PBX, y + 14 - PBY); c.restore();
+  const pk = plantK(drag.type, 1); c.save(); c.globalAlpha = ok ? .9 : .45; c.translate(x, y + 14); c.scale(pk, pk); blit(plantSprite(drag.type, 1), -PBX, -PBY); c.restore();
   if (game.tiles[j][i] === 'fertile' && ok) A.hdText(c, '+30%', x, y + 26, 11 * Math.max(1, .8 / ws), '#eaffd8', { stroke: '#2a6a1a', sw: 3.5 });
 }
 // the dragged plant under the finger while it is not over a cell, in UI space
@@ -763,14 +764,23 @@ function drawDragFree() {
 // ---------- the shelf of plants ----------
 // The drawn part of a plant's picture inside its box (x0, y0, x1, y1), for fitting it on a card. Measured once.
 const boxes = new Map();
-function plantBox(type) {
-  if (!boxes.has(type)) {
-    const cv = document.createElement('canvas'); cv.width = PW; cv.height = PH; const x = cv.getContext('2d'); A.hdPlant(x, type, PBX, PBY, 1, { noShadow: true, lvl: 1 });
+function plantBox(type, lvl = 1) {
+  const key = type + lvl;
+  if (!boxes.has(key)) {
+    const cv = document.createElement('canvas'); cv.width = PW; cv.height = PH; const x = cv.getContext('2d'); A.hdPlant(x, type, PBX, PBY, 1, { noShadow: true, lvl });
     const d = x.getImageData(0, 0, PW, PH).data; let x0 = PW, y0 = PH, x1 = 0, y1 = 0;
     for (let j = 0; j < PH; j++) for (let i = 0; i < PW; i++) if (d[(j * PW + i) * 4 + 3] > 40) { x0 = Math.min(x0, i); x1 = Math.max(x1, i + 1); y0 = Math.min(y0, j); y1 = Math.max(y1, j + 1); }
-    boxes.set(type, x1 > x0 ? [x0, y0, x1, y1] : [0, 0, PW, PH]); free(cv);
+    boxes.set(key, x1 > x0 ? [x0, y0, x1, y1] : [0, 0, PW, PH]); free(cv);
   }
-  return boxes.get(type);
+  return boxes.get(key);
+}
+// How much a plant is shrunk on the field, so a grown one does not hide its neighbours: it stays within about a cell
+// (a little more at every level, so the level still shows in the size).
+const fieldK = new Map();
+function plantK(type, lvl) {
+  const key = type + lvl;
+  if (!fieldK.has(key)) { const [x0, y0, x1] = plantBox(type, lvl), mw = CELL * (.85 + .1 * (lvl - 1)), mh = CELL * (1 + .15 * (lvl - 1)); fieldK.set(key, Math.min(1, mw / (x1 - x0), mh / (PBY - y0))); }
+  return fieldK.get(key);
 }
 function plantCard(type, x, y, w, h, on, poor) {
   c.save(); if (on) { c.shadowColor = 'rgba(255,220,60,.95)'; c.shadowBlur = 12; }
