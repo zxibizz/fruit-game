@@ -29,6 +29,13 @@ export function applyOverrides(set = {}, waveSeed = null) {
       if (!L || xs.length !== L.boss.length || xs.some((x) => !(x > 0))) throw new Error(`${key}=${v}: level ${m[1]} has ${L ? L.boss.length : 'no'} bosses`);
       xs.forEach((x, k) => { L.boss[k][3] = x; }); continue;
     }
+    // L3.pay=300/700: the dew for a wave got through, after the first wave / after the last but one
+    if (m && m[2] === 'pay') {
+      const L = LEVELS[Number(m[1]) - 1], parts = String(v).split('/'), xs = parts.map(Number);
+      if (!L || parts.length !== 2 || parts.some((p) => !p.trim()) || xs.some((x) => !(x >= 0))) throw new Error(`${key}=${v}: ${L ? 'first/last' : `no level ${m[1]}`}`);
+      L.pay = xs; continue;
+    }
+    if (m && !(m[2] in (LEVELS[Number(m[1]) - 1] || {}))) throw new Error(`unknown override ${key}`);
     if (m) { const n = Number(m[1]) - 1; LEVELS[n][m[2]] = v; if (WAVE_KEYS.has(m[2])) regen.add(n); continue; }
     if (key === 'FLY_SHARE') { flyShare = v; LEVELS.forEach((_, n) => regen.add(n)); continue; }
     const [root, ...path] = key.split('.'), obj = { PLANTS, BUGS, PERKS }[root]; if (!obj) throw new Error(`unknown override ${key}`);

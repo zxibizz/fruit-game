@@ -21,10 +21,10 @@ and in portrait (turned there).
 - **Balance**: a level is meant to be hard and to be won by thought. Plants that hit walkers reach only the cells
   next to them; bugs tire as they walk (every cell adds 5% to the damage they take), so a long winding trail with the
   best plants near its end does several times more than the same plants by a straight road. The first level of a
-  plant is cheap — a trail is quick to shape — and the upgrades are dear: there is never dew for all of them. The dew a
-  bug gives fades over a level (half of it in the last wave): plenty while the maze is being built, none piling up
-  once the garden is grown. Bosses are strong but a grown garden kills them. No
-  plant makes dew (it comes from beaten bugs, finished waves and waves called early). Caterpillars bite plants, mole
+  plant is cheap — a trail is quick to shape — and the upgrades are dear: there is never dew for all of them. Most of
+  the dew is the pay for every wave got through, growing evenly over a level (`pay` of the level); a bug gives its own
+  small reward, the same everywhere. Bosses are strong but a grown garden kills them. No
+  plant makes dew (it comes from finished waves, beaten bugs and waves called early). Caterpillars bite plants, mole
   crickets eat through walls; eaten plants leave roots that grow back by themselves, faster by an aloe, or at once
   for dew. Freezes do not chain; dandelions shoot far and take the flyers first (they cross the maze in a straight line),
   walkers only next to them and weaker.
@@ -54,7 +54,7 @@ and in portrait (turned there).
   picture is the balance matrix below.
   `node test/bot.mjs [levels...]` prints how the bot did, wave by wave.
 - `balance/` — the balance matrix (dev only, not in the image): `node balance/run.mjs [quick|full] [--levels 5,6-8]
-  [--set L5.hpGrowth=1.9,FLY_SHARE=.2] [--grid 'L5.hpGrowth=1.6|1.9;L5.rich=1.4|1.6']`. For every level it plays many
+  [--set L5.hpGrowth=1.9,FLY_SHARE=.2] [--grid 'L5.hpGrowth=1.6|1.9;L5.pay=150/270|170/300']`. For every level it plays many
   scenarios in parallel (a worker per scenario on a snapshot of the code, half the cores by default at the lowest
   priority — `--jobs N` for more; results cached
   per level, so tuning one level reruns only it): the smart bot on several seeds and on other draws of the waves; lazy

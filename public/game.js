@@ -1,7 +1,7 @@
 // Simulation: no DOM, plain data. The view reads the state and the events, and calls the actions below.
-import { COLS, ROWS, FRUIT_HP, PLANTS, BUGS, LEVELS, PERKS, BREAK, EARLY_DEW, REPAIR, REGROW, REFUND, CHEW_GROWTH, POWER_EVERY, POWER_MAX, rewardMul, FERTILE, FERTILE_ADD, MUD, NETTLE, NETTLE_BOSS, WEED_COST, BROOD_REWARD, FATIGUE, FLY_HP } from './data.js';
+import { COLS, ROWS, FRUIT_HP, PLANTS, BUGS, LEVELS, PERKS, BREAK, EARLY_DEW, REPAIR, REGROW, REFUND, CHEW_GROWTH, POWER_EVERY, POWER_MAX, wavePay, FERTILE, FERTILE_ADD, MUD, NETTLE, NETTLE_BOSS, WEED_COST, BROOD_REWARD, FATIGUE, FLY_HP } from './data.js';
 
-export const VERSION = '0.19.0';
+export const VERSION = '0.20.0';
 export { COLS, ROWS, BREAK };
 
 const DIRS = [[-1, 0], [0, -1], [0, 1], [1, 0]]; // tie order: towards the fruit side first
@@ -297,10 +297,9 @@ export function usePower(g, kind) {
   g.events.push({ t: 'power', kind });
   return true;
 }
-export const bugReward = (g, kind, wave = Math.max(1, g.wave)) => Math.max(1, Math.round(BUGS[kind].reward * rewardMul(g.L, wave)));
-const rewardOf = (b, g) => Math.max(1, Math.round(bugReward(g, b.kind) * (b.brood ? BROOD_REWARD : 1)));
+export const rewardOf = (b) => Math.max(1, Math.round(BUGS[b.kind].reward * (b.brood ? BROOD_REWARD : 1)));
 function kill(g, b, how) {
-  const B = BUGS[b.kind], reward = rewardOf(b, g);
+  const B = BUGS[b.kind], reward = rewardOf(b);
   b.hp = 0; gain(g, reward); g.stats.kills++;
   g.events.push({ t: 'kill', b, reward, how });
   if (B.boss) g.events.push({ t: 'bossDead', b });
@@ -512,10 +511,10 @@ export function step(g, dt) {
   if (g.phase === 'wave' && !g.queue.length && !g.bugs.length) {
     if (g.wave >= g.waves) { g.phase = 'won'; g.events.push({ t: 'won' }); }
     else {
-      g.phase = 'build'; g.nextIn = BREAK; gain(g, g.L.waveBonus);
+      const bonus = wavePay(g.L, g.wave); g.phase = 'build'; g.nextIn = BREAK; gain(g, bonus);
       const powers = g.wave % POWER_EVERY === 0;
       if (powers) for (const k in g.powers) g.powers[k] = Math.min(g.powerMax, g.powers[k] + 1);
-      g.events.push({ t: 'waveDone', n: g.wave, bonus: g.L.waveBonus, powers });
+      g.events.push({ t: 'waveDone', n: g.wave, bonus, powers });
     }
   }
 }

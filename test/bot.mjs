@@ -13,7 +13,7 @@
 //   closes holes for dew at once.
 // Run directly to see how it did: node test/bot.mjs [level ...]
 import { createGame, bugHp, computeDist, step, place, upgrade, upgradeCost, startWave, placeProblem, trails, regrow, regrowCost, removePlant, refund, stubAt, usePower, pstat, COLS, ROWS } from '../public/game.js';
-import { LEVELS, BUGS, PLANTS, PERKS, PERK_ORDER, MUD, EARLY_DEW, BREAK, FATIGUE, rewardMul } from '../public/data.js';
+import { LEVELS, BUGS, PLANTS, PERKS, PERK_ORDER, MUD, EARLY_DEW, BREAK, FATIGUE, wavePay } from '../public/data.js';
 const rng = (s) => () => ((s = (Math.imul(s, 1103515245) + 12345) & 0x7fffffff) / 0x7fffffff);
 const show = process.env.MAP ? (await import(process.env.MAP)).show : null;
 const kOf = (i, j) => i + ',' + j, within = (dx, dy, r) => dx * dx + dy * dy <= r * r;
@@ -31,8 +31,8 @@ export function expectedMeta(level, perLevel = 2) {
 export const fullMeta = () => Object.fromEntries(PERK_ORDER.map((k) => [k, PERKS[k].cost.length]));
 // All the dew a level gives: at the start, for every bug, for every wave, and for calling every wave at once.
 export function levelDew(level, meta = {}) {
-  const L = LEVELS[level]; let sum = L.dew + (meta.dew ? PERKS.dew.v[meta.dew - 1] : 0) + (L.count - 1) * (L.waveBonus + BREAK * EARLY_DEW);
-  L.waves.forEach((w, k) => { for (const [kind, n] of w) sum += n * Math.max(1, Math.round(BUGS[kind].reward * rewardMul(L, k + 1))); });
+  const L = LEVELS[level]; let sum = L.dew + (meta.dew ? PERKS.dew.v[meta.dew - 1] : 0) + (L.count - 1) * BREAK * EARLY_DEW;
+  L.waves.forEach((w, k) => { if (k < L.count - 1) sum += wavePay(L, k + 1); for (const [kind, n] of w) sum += n * BUGS[kind].reward; });
   return sum;
 }
 
@@ -125,7 +125,9 @@ function worth(g, tr, o) { const [G, A] = sums(study(g, tr, o)); return value(o,
 // plants that change the others' share: their worth is counted over the whole garden
 const wide = (type) => !!(PLANTS[type].slow || PLANTS[type].buff);
 
-export function playLevel(level, { seed = 7, verbose = false, maxPlants = Infinity, maze = true, route = maze ? 1 : 0, terrain = true, powers = true, bank = false, meta = {}, place: where = 'best', plants: allowed = null, upgrades = 'greedy', early = true, repair = true, watch = null } = {}) {
+// The share of the pay for a wave that the bot keeps for repairs once the diggers come.
+export const RESERVE = .6;
+export function playLevel(level, { seed = 7, verbose = false, maxPlants = Infinity, maze = true, route = maze ? 1 : 0, terrain = true, powers = true, bank = false, meta = {}, place: where = 'best', plants: allowed = null, upgrades = 'greedy', early = true, repair = true, reserve = RESERVE, watch = null } = {}) {
   const g = createGame(level, seed, meta), L = LEVELS[level], all = route > 0 ? layout(level, terrain) : [], walls = all.slice(0, Math.round(all.length * route));
   const R = rng(seed * 7919 + 13);
   const o = { terrain };
@@ -199,7 +201,9 @@ export function playLevel(level, { seed = 7, verbose = false, maxPlants = Infini
       if (!place(g, 'pumpkin', col, j)) return;
     }
     // from the first diggers on, some dew is always kept to close a hole at once
-    const keepDew = walls.length && g.wave >= firstDigger - 1 ? 50 : 0;
+    // (a share of the pay for the last wave: little dew comes in while a wave is on, and the upgrades are the dear part;
+    // in the last wave only a hole's worth: what is kept there is left over, and the matrix reads it as idle dew)
+    const keepDew = walls.length && g.wave >= firstDigger - 1 ? (g.wave >= g.waves ? 50 : Math.max(50, Math.round(reserve * wavePay(L, g.wave)))) : 0;
     // the best step is looked for again only when the field changed or the dew for the last one found is there
     for (let n = 0; n < 60; n++) {
       const sig = `${g.wave},${g.phase},${g.stubs.length},${g.plants.reduce((t, p) => t + p.id * 7 + p.lvl, 0)}`;

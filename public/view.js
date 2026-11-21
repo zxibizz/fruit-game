@@ -2,7 +2,7 @@
 import * as A from './art.js';
 import {
   createGame, step, plantOn, plantProblem, placeProblem, blockingCells, previewTrails, trails, upgrade, upgradeCost, removePlant, refund, isFresh,
-  startWave, earlyBonus, wavePreview, usePower, stars, regrow, regrowCost, clearStub, stubAt, heal, healCost, bugHp, bugReward, pstat, clearWeed, tired,
+  startWave, earlyBonus, wavePreview, usePower, stars, regrow, regrowCost, clearStub, stubAt, heal, healCost, bugHp, rewardOf, pstat, clearWeed, tired,
   snapshot, restore, COLS, ROWS, BREAK,
 } from './game.js';
 import { PLANTS, BUGS, LEVELS, PERKS, PERK_ORDER, PLANT_ORDER, WEED_COST, FERTILE } from './data.js';
@@ -75,14 +75,14 @@ const T = {
   },
   fresh: (list) => `Новое: ${list.join(', ')}. Зажми, чтобы узнать подробнее`, freshBug: (list) => `Новый жук: ${list.join(', ')}. Зажми его, чтобы узнать подробнее`,
   boss: (name) => `Босс: ${name}!`,
-  roots: (name) => `${name}: корни`, rootsHint: 'Корни отрастут сами. Тапни по ним — отрастут сразу, за росу', powersBack: 'Мороз и дождь снова с тобой', regrown: 'Отросло!', lvl: (n) => `уровень ${n}`,
+  roots: (name) => `${name}: корни`, rootsHint: 'Корни отрастут сами. Тапни по ним — отрастут сразу, за росу. Держи немного росы про запас', powersBack: 'Мороз и дождь снова с тобой', regrown: 'Отросло!', lvl: (n) => `уровень ${n}`,
   problem: { same: 'Здесь уже такое растение', busy: 'Здесь занято', blocks: 'Нельзя закрыть жукам путь', poor: 'Не хватает росы', nettle: 'На крапиве ничего не растёт', outside: '' },
   swap: (n, lvl) => (lvl > 1 ? `замена ур. ${lvl}, вернётся ${n}` : `замена, вернётся ${n}`), swapAgain: 'Тапни ещё раз — заменить',
   gain: (n) => (n > 0 ? `путь +${n}` : n < 0 ? `путь ${n}` : 'путь тот же'),
   hint1: 'Перетащи растение с полки на поле. Первый уровень растения дешёвый — строй из них длинную петляющую тропинку. Готов — жми ▶',
   holdHint: 'Зажми растение или жука — узнаешь, кто это',
   dragHint: 'Сначала выбери растение на полке — или просто перетащи его на поле',
-  hint2: 'Дальше волны придут сами. Нажмёшь ▶ раньше — получишь росу',
+  hint2: 'Роса приходит за каждую пройденную волну. Дальше волны придут сами. Нажмёшь ▶ раньше — получишь ещё',
   tiredHint: 'Жуки устают в пути: чем дольше ползут, тем больнее им достаётся. Делай тропинку длиннее, а лучшие растения ставь ближе к её концу',
   upHint: 'Улучшения дорогие — копи росу и усиливай те растения, мимо которых жуки ползут дольше всего',
   tiredNote: 'Жуки устают: каждая пройденная клетка добавляет 5% к урону по ним. Летающие не устают.',
@@ -397,7 +397,7 @@ function bugStats(kind, b) {
   if (B.chew) out.push('кусает растения');
   if (B.mend) out.push('лечит жуков');
   if (b && tired(b) >= 1.1) out.push(`устал: урон +${Math.round((tired(b) - 1) * 100)}%`);
-  out.push(`кусает яблоко на ${B.bite}`, `+${game && $('home').hidden ? bugReward(game, kind, game.phase === 'wave' ? game.wave : Math.min(game.waves, game.wave + 1)) : B.reward} росы`);
+  out.push(`кусает яблоко на ${B.bite}`, `+${b ? rewardOf(b) : B.reward} росы`);
   return out;
 }
 // The numbers of a plant: [label, value at this level, value at the next one or null]. On the field (p given) they

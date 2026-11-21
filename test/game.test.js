@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame, step, place, placeProblem, plantOn, plantProblem, trail, trails, startWave, removePlant, upgrade, usePower, earlyBonus, regrow, regrowCost, stubAt, heal, healCost, refund, pstat, clearWeed, snapshot, restore, bugHp, COLS, ROWS, BREAK } from '../public/game.js';
-import { LEVELS, PLANTS, BUGS, PLANT_ORDER, PERKS, PERK_ORDER, REGROW, WEED_COST, FERTILE, FATIGUE } from '../public/data.js';
+import { LEVELS, PLANTS, BUGS, PLANT_ORDER, PERKS, PERK_ORDER, REGROW, WEED_COST, FERTILE, FATIGUE, wavePay } from '../public/data.js';
 import { playLevel, expectedMeta, fullMeta } from './bot.mjs';
 import { waveLint } from '../balance/lint.mjs';
 
@@ -309,4 +309,23 @@ test('a level in progress is saved between waves and comes back as it was', () =
   assert.equal(r.grid[4][8].type, 'rose'); assert.equal(r.grid[4][8].lvl, 2); assert.ok(stubAt(r, 8, 5)); assert.equal(r.grid[wj][wi], null);
   assert.equal(r.grid[vj][vi].type, 'corn');
   assert.equal(restore({ v: 0 }), null); assert.equal(restore({ v: 1, level: 0, plants: 'x' }), null);
+});
+
+test('a wave got through pays by the level, a bug gives its own reward whatever the level and the wave', () => {
+  for (const L of LEVELS) {
+    assert.equal(wavePay(L, 1), L.pay[0]); assert.equal(wavePay(L, L.count - 1), L.pay[1]);
+    for (let w = 2; w < L.count; w++) assert.ok(wavePay(L, w) >= wavePay(L, w - 1));
+  }
+  for (const level of [0, 4]) {
+    const g = createGame(level); g.dew = 5000;
+    for (let j = 0; j < ROWS; j++) for (const i of [9, 11]) place(g, 'corn', i, j);
+    for (const p of g.plants.slice()) { upgrade(g, p); upgrade(g, p); }
+    startWave(g); let kills = 0, paid = null;
+    for (let n = 0; n < 60 * 200 && paid == null; n++) {
+      step(g, 1 / 60);
+      for (const e of g.events) { if (e.t === 'kill') { assert.equal(e.reward, BUGS[e.b.kind].reward); kills++; } if (e.t === 'waveDone') paid = e.bonus; }
+      g.events.length = 0;
+    }
+    assert.ok(kills > 0); assert.equal(paid, LEVELS[level].pay[0]);
+  }
 });
