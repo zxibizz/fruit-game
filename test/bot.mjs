@@ -13,7 +13,7 @@
 //   closes holes for dew at once.
 // Run directly to see how it did: node test/bot.mjs [level ...]
 import { createGame, bugHp, computeDist, step, place, upgrade, upgradeCost, startWave, placeProblem, trails, regrow, regrowCost, removePlant, refund, stubAt, usePower, pstat, COLS, ROWS } from '../public/game.js';
-import { LEVELS, BUGS, PLANTS, PERKS, PERK_ORDER, MUD, EARLY_DEW, BREAK, FATIGUE, wavePay } from '../public/data.js';
+import { LEVELS, BUGS, PLANTS, PERKS, PERK_ORDER, MUD, EARLY_DEW, BREAK, wavePay } from '../public/data.js';
 const rng = (s) => () => ((s = (Math.imul(s, 1103515245) + 12345) & 0x7fffffff) / 0x7fffffff);
 const show = process.env.MAP ? (await import(process.env.MAP)).show : null;
 const kOf = (i, j) => i + ',' + j, within = (dx, dy, r) => dx * dx + dy * dy <= r * r;
@@ -73,7 +73,7 @@ function study(g, tr, o) {
   const bells = plants.filter((p) => PLANTS[p.type].buff).map((p) => [p, st(p, 'range'), st(p, 'buff')]);
   const time = tr.map(([a, b], k) => {
     let slow = 0; for (const [i, j, r, v] of mints) if (within(a - i, b - j, r)) slow = Math.max(slow, v);
-    return (1 + FATIGUE * tr[k][2]) / ((1 - slow) * (o.terrain && g.tiles[b][a] === 'mud' && !g.grid[b][a] ? MUD : 1));
+    return 1 / ((1 - slow) * (o.terrain && g.tiles[b][a] === 'mud' && !g.grid[b][a] ? MUD : 1));
   });
   return { g, tr, o, armor, st, plants, time, bells };
 }
@@ -93,7 +93,7 @@ function term(S, p) {
   for (let k = 0; k < tr.length; k++) if (within(tr[k][0] - p.i, tr[k][1] - p.j, rg)) { n += time[k]; cells++; }
   const crowd = o.crowd ?? 1, inReach = Math.max(1, crowd * cells); // walkers in its reach at once
   const per = p.type === 'pepper' ? 1 // fire hits all of them
-    : Math.min(1, ((st(p, 'multi') || 1) * (P.splash ? 1 + 2 * st(p, 'splash') * crowd : 1)) / inReach); // a shot's bugs over the bugs to share
+    : Math.min(1, ((st(p, 'multi') || 1) * (P.splash ? Math.min(st(p, 'hits') || Infinity, 1 + 2 * st(p, 'splash') * crowd) : 1)) / inReach); // a shot's bugs (a cob hits so many at most) over the bugs to share
   const k = dps * (1 + buff), gr = k * n * per * (P.ground ?? 1);
   const air = P.air || (P.eat && st(p, 'eatAir')) ? k * flyTime(g, p, r) * (P.ground ? 1 : .6) : 0; // a ground plant has other targets too
   S.air = air; return gr; // the walkers' part is returned, the flyers' part left in S.air (no array per call)
@@ -194,7 +194,7 @@ export function playLevel(level, { seed = 7, verbose = false, maxPlants = Infini
     // repairs first: a hole the bugs run through is closed at once for dew; other roots grow back by themselves
     const tr = new Set(trailOf(g).map(([i, j]) => kOf(i, j))), on = (s) => tr.has(kOf(s.i, s.j));
     if (repair) for (const s of g.stubs.slice()) if (g.phase === 'wave' && on(s) && g.dew >= regrowCost(s)) regrow(g, s);
-    // the maze grows with the level: two walls at once and one more every wave: first-level pumpkins are cheap, and a long trail tires the bugs, with pumpkins where nothing stands yet
+    // the maze grows with the level: two walls at once and one more every wave: first-level pumpkins are cheap, and a long trail keeps a pack under the plants longer, with pumpkins where nothing stands yet
     const due = Math.min(walls.length, 2 + g.wave);
     for (const [col, gap] of walls.slice(0, due)) for (let j = 0; j < ROWS; j++) {
       if (j === gap || g.grid[j][col] || stubAt(g, col, j) || !room() || placeProblem(g, col, j)) continue;

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame, step, place, placeProblem, plantOn, plantProblem, trail, trails, startWave, removePlant, upgrade, usePower, earlyBonus, regrow, regrowCost, stubAt, heal, healCost, refund, pstat, clearWeed, snapshot, restore, bugHp, COLS, ROWS, BREAK } from '../public/game.js';
-import { LEVELS, PLANTS, BUGS, PLANT_ORDER, PERKS, PERK_ORDER, REGROW, WEED_COST, FERTILE, FATIGUE, wavePay } from '../public/data.js';
+import { LEVELS, PLANTS, BUGS, PLANT_ORDER, PERKS, PERK_ORDER, REGROW, WEED_COST, FERTILE, wavePay } from '../public/data.js';
 import { playLevel, expectedMeta, fullMeta } from './bot.mjs';
 import { waveLint } from '../balance/lint.mjs';
 
@@ -102,14 +102,14 @@ test('bugs never walk into plants; a plant put on a cell with bugs lets them out
   const fresh = new Map(); // bugs that stood on a cell when a plant grew there may still be walking out of it
   for (let n = 0; n < 60 * 60 && g.phase === 'wave'; n++) {
     step(g, 1 / 60);
-    if (n === 60 * 12) for (const b of g.bugs) { const i = Math.floor(b.x), j = Math.floor(b.y); if (i < COLS && !g.grid[j][i] && place(g, 'pumpkin', i, j)) fresh.set(b.id, n); }
+    if (n === 60 * 12) for (const b of g.bugs) { const i = Math.floor(b.x), j = Math.floor(b.y); if (i < COLS && !g.grid[j][i] && place(g, 'pumpkin', i, j)) for (const q of g.bugs) if (Math.abs(q.x - i - .5) < 1.5 && Math.abs(q.y - j - .5) < 1.5) fresh.set(q.id, n); } // bugs walk in packs: all on the cell, and those already stepping onto it
     for (const b of g.bugs) if (!b.fly && !(n - fresh.get(b.id) < 60 * 3)) { const i = Math.floor(b.x), j = Math.floor(b.y); if (i < COLS) assert.ok(!g.grid[j]?.[i]?.type, `bug in a plant at ${i},${j}`); }
   }
   assert.ok(fresh.size > 0); assert.equal(g.phase, 'build');
 });
 
 // Balance. The smart bot (test/bot.mjs) plays as the level asks: a maze over the whole field led through mud and
-// nettles, the best plants where bugs are slowest and most tired, upgrades where they pay, holes mended, frost and
+// nettles, the best plants where bugs are slowest, upgrades where they pay, holes mended, frost and
 // rain used. It has the perks of a player who took two stars on every earlier level.
 const smart = LEVELS.map((_, n) => playLevel(n, { meta: expectedMeta(n) }));
 test('played with thought, every level is won', () => {
@@ -123,7 +123,8 @@ test('a garden beside the untouched trail loses every level, however it is plant
   for (let n = 0; n < LEVELS.length; n++) {
     const r = playLevel(n, { route: 0, meta: expectedMeta(n) });
     assert.equal(r.won, false, `level ${n + 1}`);
-    if (n < 3) assert.ok(Math.min(...Object.keys(r.bites).map((k) => parseInt(k, 10))) <= LEVELS[n].count * .55, `level ${n + 1}: it leaks by the middle`);
+    // («Опушка» is the exception: a row of corn with mint holds there until the last waves, and loses in them)
+    if (n < 3 && n !== 1) assert.ok(Math.min(...Object.keys(r.bites).map((k) => parseInt(k, 10))) <= LEVELS[n].count * .55, `level ${n + 1}: it leaks by the middle`);
     if (!soft.includes(n)) for (const place of ['best', 'end', 'start', 'spread']) assert.equal(playLevel(n, { route: 0, meta: expectedMeta(n, 3), place }).won, false, `level ${n + 1}, three stars a level, planted ${place}`);
   }
 });
@@ -135,12 +136,12 @@ test('half a garden or no frost and rain: the levels go worse', () => {
   assert.ok(score(some.map((n) => playLevel(n, { powers: false, meta: expectedMeta(n) }))) < base, 'no powers');
 });
 
-test('bugs tire on the way: the same hit hurts more after a long walk, and flyers do not tire', () => {
+test('a hit hurts the same wherever on the trail it lands', () => {
   const g = createGame(0); g.dew = 1000; send(g, 'snail');
   for (let k = 0; k < 60 * 12; k++) step(g, 1 / 60);
-  const b = g.bugs[0]; assert.ok(b.walk > 3);
+  const b = g.bugs[0];
   place(g, 'rose', Math.floor(b.x) - 1, Math.floor(b.y) + 1); const hit = () => { for (let k = 0; k < 600; k++) { step(g, 1 / 60); const e = g.events.find((q) => q.t === 'hit'); g.events.length = 0; if (e) return e; } };
-  const e = hit(); assert.ok(Math.abs(e.dmg - PLANTS.rose.dmg[0] * (1 + FATIGUE * e.b.walk)) < .5, `${e.dmg}`);
+  const e = hit(); assert.equal(e.dmg, PLANTS.rose.dmg[0]);
 });
 
 test('levels are long and their waves grow', () => {
