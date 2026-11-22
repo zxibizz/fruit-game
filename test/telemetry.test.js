@@ -35,3 +35,15 @@ test('a party left in the middle is marked; disabled, nothing is kept', () => {
   assert.equal(tm.pending, 3); // start, the wave left open, quit
   const off = createTelemetry({ storage: memory(), enabled: false }); off.start(g); off.quit(g); assert.equal(off.pending, 0);
 });
+
+test('sending: batches cut by size, a batch the server refuses as junk does not block the rest, records dropped by id', async () => {
+  const bodies = []; let answer = 200;
+  const tm = createTelemetry({ storage: memory(), post: async (body) => { bodies.push(body); return answer; } });
+  const g = createGame(2, 1, {}); tm.start(g); await tm.flush(); bodies.length = 0;
+  answer = 503; for (let k = 0; k < 150; k++) { g.wave = 0; startWave(g); tm.observe(g); g.events.length = 0; tm.closeWave(g, 0); g.phase = 'build'; }
+  await tm.flush(); assert.ok(tm.pending >= 150, 'kept while the server is down');
+  answer = 413; await tm.flush(); const n0 = bodies.length;
+  answer = 200; await tm.flush();
+  assert.equal(tm.pending, 0, 'all gone: the refused batch dropped, the rest sent');
+  for (const b of bodies.slice(n0)) assert.ok(b.length <= 200 * 1024 && JSON.parse(b).length <= 100, 'a request stays under the server limits');
+});

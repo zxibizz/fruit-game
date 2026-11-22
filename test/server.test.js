@@ -62,3 +62,15 @@ test('telemetry: records are kept and read back with the token only; junk is ref
   } finally { s.close(); rmSync(dir, { recursive: true }); }
   assert.equal((await fetch(base + '/api/telemetry', { method: 'POST', body: '[]' })).status, 404, 'off without a folder');
 });
+
+test('telemetry: the rate limit keys on the address the proxy saw, not on what the sender puts first', async () => {
+  const { mkdtempSync, rmSync } = await import('node:fs'), { tmpdir } = await import('node:os'), { join } = await import('node:path');
+  const dir = mkdtempSync(join(tmpdir(), 'fruit-t-')), s = createServer({ telemetryDir: dir, token: 't' });
+  await new Promise((ok) => s.listen(0, '127.0.0.1', ok)); const b = `http://127.0.0.1:${s.address().port}/api/telemetry`;
+  const list = JSON.stringify(Array.from({ length: 100 }, (_, k) => ({ v: 1, type: 'wave', id: `p${k}`, dev: 'd', level: 0 })));
+  try {
+    const codes = [];
+    for (let k = 0; k < 8; k++) codes.push((await fetch(b, { method: 'POST', headers: { 'content-type': 'application/json', 'x-forwarded-for': `9.9.9.${k}, 1.2.3.4` }, body: list })).status);
+    assert.deepEqual(codes, [200, 200, 200, 200, 200, 200, 429, 429]);
+  } finally { s.close(); rmSync(dir, { recursive: true }); }
+});

@@ -10,7 +10,7 @@ import { initAudio, applyVolume, sfx, muffleMusic } from './audio.js';
 import { createTelemetry } from './telemetry.js';
 // party analytics (telemetry.js), not from a dev page or a copy run at home: their parties are not players' (?t=1
 // records them all the same, to check the recording itself)
-const tm = createTelemetry({ enabled: new URLSearchParams(location.search).has('t') || (!new URLSearchParams(location.search).has('dev') && !/^(localhost|127\.|192\.168\.)/.test(location.hostname)) });
+const tm = createTelemetry({ enabled: new URLSearchParams(location.search).has('t') || (!new URLSearchParams(location.search).has('dev') && /[a-z]\.[a-z]{2,}$/i.test(location.hostname) && !location.hostname.endsWith('.local')) }); // a name, not an address
 
 const T = {
   wave: (n, m) => `Волна ${n} / ${m}`, go: 'В бой!', soon: (n, s) => `Волна ${n} через ${s} с`,
@@ -1330,7 +1330,10 @@ async function boot() {
   try { await document.fonts.load('900 16px Nunito'); } catch { /* font is optional */ }
   initAudio(audio);
   // the page goes to the background or away: what waits is sent while it still can be
-  addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') tm.flush(true); }); addEventListener('pagehide', () => tm.flush(true)); tm.flush();
+  // closed or reloaded in the middle of a level: the party is left (and taken up again when the page comes back from the
+  // browser's cache as it was)
+  addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') tm.flush(true); });
+  addEventListener('pagehide', () => { if (game) tm.quit(game); tm.flush(true); }); addEventListener('pageshow', (e) => { if (e.persisted && game && !['won', 'lost'].includes(game.phase)) tm.start(game, true); }); tm.flush();
   resize(); drawLogo(); showHome(true);
   game = createGame(0); paused = true; // a field behind the menu
   $('bPerks').onclick = () => { sfx.tap(); openPerks(); }; $('bGuide').onclick = () => { sfx.tap(); guideTab = 'plants'; openGuide(); }; $('bSet').onclick = () => { sfx.tap(); openSound(); };

@@ -26,12 +26,12 @@ const okRecord = (r) => r && typeof r === 'object' && !Array.isArray(r) && r.v =
 function body(req, max) {
   // past max the rest is read and dropped (so that the 413 reaches the sender), and past ten times max cut off
   return new Promise((ok, fail) => { let n = 0; const parts = [];
-    req.on('data', (c) => { n += c.length; if (n <= max) parts.push(c); else if (n > max * 10) req.destroy(); });
+    req.on('data', (c) => { n += c.length; if (n <= max) parts.push(c); else if (n > max * 10) { req.destroy(); fail(Object.assign(new Error('too big'), { code: 413 })); } });
     req.on('end', () => (n > max ? fail(Object.assign(new Error('too big'), { code: 413 })) : ok(Buffer.concat(parts).toString('utf8')))); req.on('error', fail); });
 }
 
 export function createServer({ telemetryDir = process.env.TELEMETRY_DIR, token = process.env.TELEMETRY_TOKEN } = {}) {
-  const seen = new Map(); // address → [minute, records]
+  const seen = new Map(), sizes = new Map(); // address → [minute, records]; day → bytes written
   const reply = (res, code, obj) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(obj ? JSON.stringify(obj) : ''); };
   async function telemetry(req, res, url) {
     if (!telemetryDir) return reply(res, 404);
@@ -39,14 +39,17 @@ export function createServer({ telemetryDir = process.env.TELEMETRY_DIR, token =
       let list;
       try { list = JSON.parse(await body(req, BODY)); } catch (e) { return reply(res, e.code === 413 ? 413 : 400); }
       if (!Array.isArray(list) || list.length > BATCH || !list.every(okRecord)) return reply(res, 400);
-      const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim(), minute = Math.floor(Date.now() / 60000);
+      // the address the proxy in front saw (the last one it added; a sender can put anything before it)
+      const ip = String(req.headers['x-forwarded-for'] || '').split(',').map((x) => x.trim()).filter(Boolean).at(-1) || req.socket.remoteAddress || '', minute = Math.floor(Date.now() / 60000);
       const s = seen.get(ip); const n = s && s[0] === minute ? s[1] + list.length : list.length;
-      if (n > PER_MIN) return reply(res, 429); seen.set(ip, [minute, n]); if (seen.size > 5000) seen.clear();
-      const file = path.join(telemetryDir, `${day()}.jsonl`);
-      try { if ((await fs.stat(file)).size > DAY_CAP) return reply(res, 507); } catch { /* a new day */ }
-      const got = Date.now();
+      if (n > PER_MIN) return reply(res, 429); seen.set(ip, [minute, n]);
+      if (seen.size > 5000) for (const [k, v] of seen) if (v[0] !== minute) seen.delete(k); // old minutes go, this one's counts stay
+      const d = day(), file = path.join(telemetryDir, `${d}.jsonl`), got = Date.now(), text = list.map((r) => JSON.stringify({ ...r, got })).join('\n') + '\n';
+      if (!sizes.has(d)) { sizes.clear(); let was = 0; try { was = (await fs.stat(file)).size; } catch { /* a new day */ } if (!sizes.has(d)) sizes.set(d, was); }
+      // counted before the write, in one step with the check: requests at the same time cannot all slip under the cap
+      if (sizes.get(d) + text.length > DAY_CAP) return reply(res, 507); sizes.set(d, sizes.get(d) + text.length);
       await fs.mkdir(telemetryDir, { recursive: true });
-      await fs.appendFile(file, list.map((r) => JSON.stringify({ ...r, got })).join('\n') + '\n');
+      await fs.appendFile(file, text);
       return reply(res, 200, { ok: true, n: list.length });
     }
     if (req.method !== 'GET') return reply(res, 405);
