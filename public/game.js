@@ -483,7 +483,7 @@ function updatePlant(g, p, dt) {
     const whole = !!meal; if (whole) best = meal; // the biggest bug it can swallow, else a bite of the strongest
     p.cd = pstat(g, p, 'eat') / quick; p.busy = 1.2;
     g.events.push({ t: 'eat', p, b: best, whole });
-    damage(g, best, (whole ? Math.max(chomp, best.hp) : chomp) + best.armor, whole ? 'eat' : p.type);
+    damage(g, best, (whole ? Math.max(chomp, best.hp) : chomp * (BUGS[best.kind].boss ? TUNE.bossBite : 1)) + best.armor, whole ? 'eat' : p.type);
     return;
   }
   if (p.type === 'pepper') {

@@ -505,7 +505,7 @@ impl<'a> Game<'a> {
             let Some(mut best) = best else { return };
             let whole = meal.is_some(); if let Some(m) = meal { best = m; } // the biggest bug it can swallow, else a bite of the strongest
             self.plants[pi].cd = st(self, Stat::Eat) / quick;
-            let b = &self.bugs[best]; let a = (if whole { chomp.max(b.hp) } else { chomp }) + b.armor;
+            let b = &self.bugs[best]; let a = (if whole { chomp.max(b.hp) } else { chomp * (if d.bugs[b.kind].boss { d.boss_bite } else { 1.0 }) }) + b.armor;
             self.damage(best, a);
             return;
         }

@@ -56,7 +56,9 @@ export const FLY_HP = .4;
 // bugs of a group walk (a multiplier of the seconds between them): they come in packs, not in an even stream. Against
 // a stream every plant always has a bug to shoot and a garden is worth the sum of its plants wherever they stand;
 // a pack has to be worn down while it walks, and that takes a long trail with many cells beside it.
-export const TUNE = { hpGrowth: 3, bossEscort: .4, gap: .4 };
+// bossBite: the share of its bite a flytrap gets into a boss (bosses shrug off the special tricks of the plants:
+// thorns, stuns and frost work on them by a part too; a row of grown flytraps ate any boss in its first steps).
+export const TUNE = { hpGrowth: 3, bossEscort: .4, gap: .4, bossBite: .4 };
 // Frost and rain come back (up to POWER_MAX of each) after every POWER_EVERY-th wave.
 export const POWER_EVERY = 10, POWER_MAX = 2;
 // Most of the dew of a level is the pay for every wave got through: it grows evenly from pay[0] after the first wave
