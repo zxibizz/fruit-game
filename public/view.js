@@ -88,6 +88,8 @@ const T = {
   dragHint: 'Сначала выбери растение на полке — или просто перетащи его на поле',
   hint2: 'Роса приходит за каждую пройденную волну. Дальше волны придут сами. Нажмёшь ▶ раньше — получишь ещё',
   digHint: 'Сверчки прогрызают растения насквозь. «!» над растением — здесь они пройдут. Нажми на сверчка в волне — покажу их путь. Выращенную тыкву грызть долго, и она колется',
+  belled: (v) => `Звенит колокольчик: на ${Math.round(v * 100)}% чаще`,
+  guarded: (v) => `Алоэ рядом: урона на ${Math.round(v * 100)}% меньше`,
   trailHint: 'Чем длиннее и извилистее тропинка, тем дольше жуки ползут мимо твоих растений. Ставь стрелков там, где тропинка проходит рядом несколько раз',
   upHint: 'Улучшения дорогие — копи росу и усиливай те растения, мимо которых жуки ползут дольше всего',
   growNote: `Жуки крепнут: каждая волна добавляет им ${Math.round(TUNE.hpGrowth * 100)}% начального здоровья (летающим — ${Math.round(TUNE.hpGrowth * FLY_HP * 100)}%), на всех уровнях одинаково.`,
@@ -409,8 +411,9 @@ function bugStats(kind, b) {
 const num = (v) => String(Math.round(v * 10) / 10);
 function statRows(type, lvl, p = null) {
   const P = PLANTS[type], g = game || { meta: metaNow(), tiles: [] }, at = (l) => ({ type, lvl: l, i: p ? p.i : -1, j: p ? p.j : -1 });
-  const v = (name, l) => pstat(g, at(l), name), rows = [], nx = lvl < 3 ? lvl + 1 : null;
-  const add = (label, name, f = num) => { if (P[name] == null) return; const a = v(name, lvl), b = nx ? v(name, nx) : null; if (!a && !b) return; rows.push([label, f(a), b != null && f(b) !== f(a) ? f(b) : null]); };
+  // a plant on the field shows its stats as they are: a bell nearby makes it shoot (or bite) that much more often
+  const quick = 1 + (p?.buff || 0), v = (name, l) => { const x = pstat(g, at(l), name); return name === 'rate' ? x * quick : name === 'eat' ? x / quick : x; }, rows = [], nx = lvl < 3 ? lvl + 1 : null;
+  const add = (label, name, f = num) => { if (P[name] == null) return; const a = v(name, lvl), b = nx ? v(name, nx) : null; if (!a && !b) return; rows.push([label, f(a), b != null && f(b) !== f(a) ? f(b) : null, quick > 1 && (name === 'rate' || name === 'eat')]); };
   add('Урон', 'dmg'); add('Уколотый получает', 'mark', (s) => `+${Math.round(s * 100)}%`); add('Целей', 'multi'); add('Огонь/с', 'burn');
   add('Выстрелов/с', 'rate', (r) => num(r));
   add('Укус', 'chomp'); add('Глотает, если здоровья', 'gulp', (s) => `до ${Math.round(s * 100)}%`); add('Кусает раз в', 'eat', (s) => `${num(s)} с`);
@@ -1111,7 +1114,7 @@ function drawPop() {
   }
   const rows = statRows(p.type, p.lvl, p), up = upgradeCost(p), hc = healCost(p), fresh = isFresh(game, p), fert = game.tiles[p.j][p.i] === 'fertile';
   c.save(); c.font = '900 11px Nunito'; const perk = wrap(`${p.lvl === 3 ? '★' : `${T.lvl3}:`} ${T.perk[p.type]}`, w - 24); c.restore();
-  const notes = (fert ? 1 : 0) + (p.web > 0 ? 1 : 0), h = 34 + rows.length * 16 + 6 + perk.length * 13 + notes * 14 + 8 + 30 + (hc ? 34 : 0) + 10;
+  const notes = (fert ? 1 : 0) + (p.web > 0 ? 1 : 0) + (p.buff > 0 ? 1 : 0) + (p.guard > 0 ? 1 : 0), h = 34 + rows.length * 16 + 6 + perk.length * 13 + notes * 14 + 8 + 30 + (hc ? 34 : 0) + 10;
   const [x, y] = placeAt(h);
   A.hdText(c, T.plant[p.type], x + 12, y + 18, 15, '#6a3e1c', { stroke: null, align: 'left' });
   // the level: three pips after the name
@@ -1119,16 +1122,18 @@ function drawPop() {
   for (let k = 0; k < 3; k++) { c.beginPath(); c.arc(x + 22 + nw + k * 13, y + 18, 4.6, 0, A.TAU); c.fillStyle = k < p.lvl ? '#ffb81a' : '#e4d2ac'; c.fill(); c.lineWidth = 1.4; c.strokeStyle = k < p.lvl ? '#a06a00' : '#c0a878'; c.stroke(); }
   close(x, y);
   let yy = y + 42;
-  for (const [label, cur, next] of rows) {
+  for (const [label, cur, next, rung] of rows) { // rung: faster by a bell, in its colour
     A.hdText(c, label, x + 12, yy, 12, '#8a5a32', { stroke: null, align: 'left', weight: 800 });
-    if (next) { A.hdText(c, next, x + w - 12, yy, 12.5, '#2f9a1f', { stroke: null, align: 'right' }); c.save(); c.font = '900 12.5px Nunito'; const nw2 = c.measureText(next).width; c.restore(); A.hdText(c, `${cur}  →`, x + w - 18 - nw2, yy, 12, '#6a3e1c', { stroke: null, align: 'right' }); }
-    else A.hdText(c, cur, x + w - 12, yy, 12.5, '#6a3e1c', { stroke: null, align: 'right' });
+    if (next) { A.hdText(c, next, x + w - 12, yy, 12.5, '#2f9a1f', { stroke: null, align: 'right' }); c.save(); c.font = '900 12.5px Nunito'; const nw2 = c.measureText(next).width; c.restore(); A.hdText(c, `${cur}  →`, x + w - 18 - nw2, yy, 12, rung ? '#3a6ab0' : '#6a3e1c', { stroke: null, align: 'right' }); }
+    else A.hdText(c, cur, x + w - 12, yy, 12.5, rung ? '#3a6ab0' : '#6a3e1c', { stroke: null, align: 'right' });
     yy += 16;
   }
   yy += 4;
   for (const l of perk) { A.hdText(c, l, x + 12, yy, 11, p.lvl === 3 ? '#c07a10' : '#a08060', { stroke: null, align: 'left' }); yy += 13; }
   if (fert) { A.hdText(c, T.onFertile, x + 12, yy + 1, 11, '#3f8a2a', { stroke: null, align: 'left' }); yy += 14; }
   if (p.web > 0) { A.hdText(c, T.webbed, x + 12, yy + 1, 11, '#7a4ab0', { stroke: null, align: 'left' }); yy += 14; }
+  if (p.buff > 0) { A.hdText(c, T.belled(p.buff), x + 12, yy + 1, 11, '#3a6ab0', { stroke: null, align: 'left' }); yy += 14; } // (the stats above already count it)
+  if (p.guard > 0) { A.hdText(c, T.guarded(p.guard), x + 12, yy + 1, 11, '#3f8a2a', { stroke: null, align: 'left' }); yy += 14; }
   yy += 6;
   const bw = (w - 26) / 2;
   if (up == null) wideBtn(x + 10, yy, bw, 28, '#c8b070', '#8a6a10', T.max, null, () => {}, true);
