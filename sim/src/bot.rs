@@ -2,7 +2,15 @@
 // runs it. The smart bot builds a serpentine maze over the whole field, leads the trail through mud and nettles, puts
 // its best plants on fertile beds and where they see the most of the trail, mixes in mint and bells, upgrades what
 // pays most, mends holes, calls the waves early and uses frost and rain. Options switch its skills off:
-//   route — the share of the maze walls it builds (0: the trail as it is); terrain: false — blind to the ground;
+//   route — the share of the maze walls it builds (0: the trail as it is), or maze — one of the mazes of routes.rs
+//   by name ("mid/fruit": a length of the trail and the way it winds); terrain: false — blind to the ground;
+//   plan — a garden laid out beforehand (balance/design.mjs): plants to put and to grow, cell by cell, in that
+//   order, each as soon as there is dew for it; the bot mends it, calls the waves and uses its powers as ever, and
+//   spends what is left its own way once the plan is done;
+//   policy — a strategy (balance/strategy.mjs finds its weights): the bot weighs its steps as ever, and every
+//   planting is worth exp(w·f) times more, f being what the player sees in the cell for that kind of plant (feat()),
+//   every growing exp(u) times more, by the kind; the maze is the one of routes::pool with the most m·f;
+//   hp — every bug that many times healthier (the batch plays it on data scaled so: main.rs);
 //   powers — on, off or eager (frost and rain at the first chance); bank — that much dew in hand from the start (an
 //   upper bound for a lazy garden); meta — the perks bought; max_plants — a cap on the garden; place — where the
 //   shooters go: best (most damage for the dew), end / start (only by the last / first part of the trail), spread
@@ -12,6 +20,7 @@
 use crate::data::*;
 use crate::game::*;
 use crate::jsmath;
+use crate::routes::{Wall, SERPENTINES, NM};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Powers { Off, On, Eager }
@@ -21,23 +30,72 @@ pub enum Where { Best, End, Start, Spread }
 pub enum Upgrades { Greedy, None, First }
 #[derive(Clone, Debug)]
 pub struct Opts {
-    pub seed: u32, pub max_plants: f64, pub route: f64, pub terrain: bool, pub powers: Powers, pub bank: Option<f64>, pub meta: Vec<(String, usize)>,
+    pub seed: u32, pub max_plants: f64, pub route: f64, pub maze: Option<String>, pub hp: f64, pub plan: Option<Vec<(Option<usize>, i32, i32)>>, pub policy: Option<Policy>, pub terrain: bool, pub powers: Powers, pub bank: Option<f64>, pub meta: Vec<(String, usize)>,
     pub place: Where, pub plants: Option<Vec<usize>>, pub upgrades: Upgrades, pub early: bool, pub repair: bool, pub reserve: f64,
     pub steps: usize, // the party stops after so many steps of the game (for the parity check: a part of a level is enough there)
 }
 // The share of the pay for a wave that the bot keeps for repairs once the diggers come.
 pub const RESERVE: f64 = 0.6;
 impl Default for Opts {
-    fn default() -> Opts { Opts { seed: 7, max_plants: f64::INFINITY, route: 1.0, terrain: true, powers: Powers::On, bank: None, meta: Vec::new(), place: Where::Best, plants: None, upgrades: Upgrades::Greedy, early: true, repair: true, reserve: RESERVE, steps: usize::MAX } }
+    fn default() -> Opts { Opts { seed: 7, max_plants: f64::INFINITY, route: 1.0, maze: None, hp: 1.0, plan: None, policy: None, terrain: true, powers: Powers::On, bank: None, meta: Vec::new(), place: Where::Best, plants: None, upgrades: Upgrades::Greedy, early: true, repair: true, reserve: RESERVE, steps: usize::MAX } }
 }
+// the garden as it stood when a wave began (Bot::gauge)
+#[derive(Clone, Copy, Debug)]
+pub struct Gauge { pub wave: usize, pub ground: f64, pub air: f64, pub towers: usize, pub dew: f64, pub cover: f64, pub trail: usize, pub pepper: f64, pub slowed: f64, pub hot: f64 }
 #[derive(Clone, Debug, Default)]
 pub struct Res {
     pub worth: f64, pub trail: usize, pub won: bool, pub hp: f64, pub max_hp: f64, pub wave: usize, pub waves: usize, pub plants: usize, pub grown: usize, pub maxed: usize,
     pub dew: f64, pub eaten: usize, pub income: f64, pub kinds: Vec<(usize, usize)>, pub bites: Vec<((usize, usize, bool), usize)>, pub powers_used: usize, pub time: f64,
+    pub gauge: Vec<Gauge>,
 }
 // what the bot did, for a replay by the JS simulation (sim/js/replay.mjs)
 #[derive(Clone, Debug)]
 pub enum Op { Step(u32), Place(usize, i32, i32), Up(i32, i32), Wave, Regrow(i32, i32), Sell(i32, i32), Power(Power), Dew(f64) }
+
+// A strategy: the weights of what a player sees in a cell (NF numbers, feat()) for every kind of plant, the weight
+// of growing every kind, and the weights of what is seen in a maze (routes::pool), if it picks its own.
+pub const NF: usize = 9;
+#[derive(Clone, Debug)]
+pub struct Policy { pub place: Vec<[f64; NF]>, pub up: Vec<f64>, pub maze: Option<[f64; NM]> }
+fn hurts(d: &Data, kind: usize) -> bool { let p = &d.plants[kind]; p.has[Stat::Dmg as usize] || p.has[Stat::Eat as usize] }
+// For every cell of the trail: how many plants that deal damage reach it, and whether a mint slows it.
+fn heat_map(g: &Game, s: &Study, tr: &Tr) -> (Vec<f64>, Vec<bool>) {
+    let d = g.d; let mut hits = vec![0.0; tr.len()]; let mut slow = vec![false; tr.len()];
+    for p in &s.plants {
+        let pd = &d.plants[p.kind]; let r = g.pstat(p.kind, p.lvl, p.i, p.j, Stat::Range); if r == 0.0 { continue; }
+        let rg = if pd.ground_range != 0.0 { r.min(pd.ground_range) } else { r };
+        for (k, &(a, b, _)) in tr.iter().enumerate() {
+            if hurts(d, p.kind) && within((a - p.i) as f64, (b - p.j) as f64, rg) { hits[k] += 1.0; }
+            if pd.has[Stat::Slow as usize] && within((a - p.i) as f64, (b - p.j) as f64, r) { slow[k] = true; }
+        }
+    }
+    (hits, slow)
+}
+// What a player sees in cell (i, j) for a plant of this kind:
+//   0 1 (the weight of the kind itself)
+//   1 the cells of the trail in its reach, over 8
+//   2 the times the trail comes into its reach (a trail winding round it comes in more than once), over 3
+//   3 the plants that deal damage reaching those cells, the mean over them, over 4 (where the damage is)
+//   4 the share of those cells a mint slows
+//   5 the plants that deal damage within its reach of the cell, over 4 (for a bell)
+//   6 how far along the trail those cells lie, the mean (0: by the anthill, 1: by the fruit)
+//   7 1 on fertile ground
+//   8 1 on the trail or in a wall of the maze (the plant changes the trail)
+fn feat(g: &Game, s: &Study, tr: &Tr, heat: &(Vec<f64>, Vec<bool>), far: f64, kind: usize, i: i32, j: i32, wall: bool) -> [f64; NF] {
+    let d = g.d; let pd = &d.plants[kind]; let r = pd.st[Stat::Range as usize][0]; let rg = if pd.ground_range != 0.0 { r.min(pd.ground_range) } else { r };
+    let (mut n, mut runs, mut hot, mut sl, mut prog, mut prev) = (0.0, 0.0, 0.0, 0.0, 0.0, false);
+    if r > 0.0 {
+        for (k, &(a, b, step)) in tr.iter().enumerate() {
+            let inn = within((a - i) as f64, (b - j) as f64, rg);
+            if inn { n += 1.0; if !prev { runs += 1.0; } hot += heat.0[k]; if heat.1[k] { sl += 1.0; } prog += step as f64 / far; }
+            prev = inn;
+        }
+    }
+    let nn = if n > 0.0 { n } else { 1.0 };
+    let near = if r > 0.0 { s.plants.iter().filter(|p| (p.i, p.j) != (i, j) && hurts(d, p.kind) && within((p.i - i) as f64, (p.j - j) as f64, r)).count() as f64 } else { 0.0 };
+    [1.0, n / 8.0, runs / 3.0, hot / nn / 4.0, sl / nn, near / 4.0, prog / nn, if g.tiles[key(i, j)] == Tile::Fertile { 1.0 } else { 0.0 }, if wall { 1.0 } else { 0.0 }]
+}
+fn bias(p: &[f64; NF], f: &[f64; NF]) -> f64 { let z: f64 = (0..NF).map(|k| p[k] * f[k]).sum(); z.max(-8.0).min(8.0).exp() }
 
 // a plant as the bot weighs it: one that stands, or one it thinks of planting or growing
 #[derive(Clone, Copy, Debug)]
@@ -76,8 +134,7 @@ pub fn layout(d: &Data, level: usize, terrain: bool) -> Vec<(i32, i32)> {
         min
     };
     let mut best: Vec<(i32, i32)> = Vec::new(); let mut best_v = -1.0;
-    let lists: [&[i32]; 6] = [&[11, 9, 7, 5, 3], &[10, 8, 6, 4, 2], &[11, 9, 7, 5, 2], &[12, 10, 8, 6, 4, 2], &[11, 8, 6, 4, 2], &[12, 10, 8, 6, 4]];
-    for cols in lists {
+    for cols in SERPENTINES {
         let mut walls: Vec<(i32, i32)> = Vec::new();
         let tune = |walls: &mut Vec<(i32, i32)>, k: usize| {
             let mut at = walls[k].1; let mut top = -1.0;
@@ -185,9 +242,10 @@ struct Offer { gain: f64, cost: f64, act: Act }
 
 struct Bot<'a, 'o> {
     g: Game<'a>, d: &'a Data, lv: &'a Level, opt: &'o Opts, o: Soon, r: i32,
-    walls: Vec<(i32, i32)>, planned: Vec<(i32, i32)>, keep: [bool; N], kinds: Vec<usize>, others: Vec<usize>, reach: f64, first_digger: i32,
+    walls: Vec<Wall>, planned: Vec<(i32, i32)>, keep: [bool; N], kinds: Vec<usize>, others: Vec<usize>, reach: f64, first_digger: i32,
     aloe: bool, eaten_at: Vec<(i32, i32)>, seen: Option<(usize, Phase, usize, f64)>, need: f64,
     ops: Option<Vec<Op>>, dew_seen: f64, buf: Vec<f64>,
+    done: Vec<bool>, // the steps of the plan that are done with
 }
 
 impl<'a, 'o> Bot<'a, 'o> {
@@ -207,20 +265,50 @@ impl<'a, 'o> Bot<'a, 'o> {
     // the coming waves: how many walkers stand on a cell of the trail (from their pace: speed and gap), weighed by
     // health; the bites at stake (what gets through bites by its kind's bite); the health of one bug; and the armor
     // a hit meets, weighed by the health that wears it
-    fn look_ahead(&mut self) {
+    fn look_ahead(&mut self) { self.o = self.soon_at(self.g.wave); }
+    // the same for the three waves after wave `from`
+    fn soon_at(&self, from: usize) -> Soon {
         let (g, d, lv) = (&self.g, self.d, self.lv);
         let (mut dd, mut w, mut n_g, mut n_a, mut c_g, mut c_a, mut h_g, mut h_a) = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
         let (mut sum, mut all) = (0.0, 0.0);
-        for (k, wave) in lv.waves.iter().skip(g.wave).take(3).enumerate() {
+        for (k, wave) in lv.waves.iter().skip(from).take(3).enumerate() {
             for gr in wave {
-                let b = &d.bugs[gr.kind]; let n = gr.count as f64; let hp = g.bug_hp(gr.kind, g.wave + 1 + k); let bites = n * b.bite;
+                let b = &d.bugs[gr.kind]; let n = gr.count as f64; let hp = g.bug_hp(gr.kind, from + 1 + k); let bites = n * b.bite;
                 if b.fly { n_a += bites; c_a += n; h_a += n * hp; continue; }
                 n_g += bites; c_g += n; h_g += n * hp; dd += n * hp * (6.0f64).min(1.0 / (0.15f64).max(b.speed * gr.gap)); w += n * hp;
             }
         }
-        for wave in lv.waves.iter().skip(g.wave).take(3) { for gr in wave { let b = &d.bugs[gr.kind]; let q = gr.count as f64 * b.hp * (if b.fly { 0.0 } else { 1.0 }); sum += q * b.armor; all += q; } }
-        self.o = Soon { set: true, armor: if all != 0.0 { sum / all } else { 0.0 }, crowd: if w != 0.0 { dd / w } else { 1.0 }, n_g: if n_g != 0.0 { n_g } else { 0.1 }, n_a,
-            hp_g: if c_g != 0.0 { h_g / c_g } else { 50.0 }, hp_a: if c_a != 0.0 { h_a / c_a } else { 50.0 } };
+        for wave in lv.waves.iter().skip(from).take(3) { for gr in wave { let b = &d.bugs[gr.kind]; let q = gr.count as f64 * b.hp * (if b.fly { 0.0 } else { 1.0 }); sum += q * b.armor; all += q; } }
+        Soon { set: true, armor: if all != 0.0 { sum / all } else { 0.0 }, crowd: if w != 0.0 { dd / w } else { 1.0 }, n_g: if n_g != 0.0 { n_g } else { 0.1 }, n_a,
+            hp_g: if c_g != 0.0 { h_g / c_g } else { 50.0 }, hp_a: if c_a != 0.0 { h_a / c_a } else { 50.0 } }
+    }
+    // The garden against the wave that has just begun and the two after it, in the bot's own count of the damage a
+    // bug takes on its way (study, term): how many times over their health the walkers lose on one pass of the trail
+    // at their own pace (1: the garden kills a bug of the mean health once; the pace is weighed by health), the same
+    // for the flyers, and what that is made of: the plants that are not pumpkins, the dew in them, how many plants
+    // that deal damage reach a cell of the trail (the mean over its cells), and the cells of the trail.
+    fn gauge(&self) -> Gauge {
+        let (g, d) = (&self.g, self.d); let from = g.wave.max(1) - 1; let o = self.soon_at(from);
+        let (mut sp, mut w) = (0.0, 0.0);
+        for (k, wave) in self.lv.waves.iter().skip(from).take(3).enumerate() { for gr in wave { let b = &d.bugs[gr.kind]; if b.fly { continue; } let q = gr.count as f64 * g.bug_hp(gr.kind, from + 1 + k); sp += q * b.speed; w += q; } }
+        let speed = if w != 0.0 { sp / w } else { 1.0 };
+        let tr = trail_of(g, &g.dist); let s = study(g, &tr, &o, true, None); let (gs, a) = sums(g, &s, &tr, &o, true);
+        // how the plants stand by the trail: the cells of it a pepper burns (the mean over the peppers: a trail led
+        // round a pepper gives it more), the share of the plants' reach that lies under a mint, and how many plants
+        // reach a cell a mint slows against a cell of the trail at large (over 1: the mints stand where the damage is)
+        let mut hits = vec![0usize; tr.len()]; let mut slow = vec![false; tr.len()];
+        let (mut reach, mut peppers, mut burnt) = (0usize, 0usize, 0usize);
+        for p in &s.plants { let pd = &d.plants[p.kind]; let r = g.pstat(p.kind, p.lvl, p.i, p.j, Stat::Range);
+            if pd.has[Stat::Slow as usize] { for (k, &(x, y, _)) in tr.iter().enumerate() { if within((x - p.i) as f64, (y - p.j) as f64, r) { slow[k] = true; } } }
+            if !(pd.has[Stat::Dmg as usize] || pd.has[Stat::Eat as usize]) { continue; }
+            let rg = if pd.ground_range != 0.0 { r.min(pd.ground_range) } else { r }; let mut n = 0;
+            for (k, &(x, y, _)) in tr.iter().enumerate() { if within((x - p.i) as f64, (y - p.j) as f64, rg) { hits[k] += 1; n += 1; } }
+            reach += n; if p.kind == d.pepper { peppers += 1; burnt += n; } }
+        let under: usize = (0..tr.len()).filter(|&k| slow[k]).map(|k| hits[k]).sum(); let cells = slow.iter().filter(|&&x| x).count();
+        let towers: Vec<&Plant> = g.plants.iter().filter(|p| p.kind != d.pumpkin).collect();
+        Gauge { wave: g.wave, ground: gs / (o.hp_g * speed), air: if o.n_a != 0.0 { a / o.hp_a } else { -1.0 }, towers: towers.len(), dew: towers.iter().map(|p| p.spent).sum(), cover: reach as f64 / tr.len().max(1) as f64, trail: tr.len(),
+            pepper: if peppers != 0 { burnt as f64 / peppers as f64 } else { -1.0 }, slowed: if reach != 0 { under as f64 / reach as f64 } else { 0.0 },
+            hot: if cells != 0 && reach != 0 { (under as f64 / cells as f64) / (reach as f64 / tr.len() as f64) } else { -1.0 } }
     }
 
     // the step that pays most for its dew
@@ -243,6 +331,11 @@ impl<'a, 'o> Bot<'a, 'o> {
         let part = match wh { Where::End => (0.6, 1.0), Where::Start => (0.0, 0.4), _ => (0.0, 1.0) };
         let far = tr.iter().fold(1.0f64, |m, &(_, _, n)| m.max(n as f64));
         let seg: Vec<(i32, i32)> = tr.iter().filter(|&&(_, _, n)| n as f64 >= part.0 * far && n as f64 <= part.1 * far + 1.0).map(|&(a, b, _)| (a, b)).collect();
+        // a strategy's say in it (Policy): how much more a step is worth for where it puts what
+        let pol = self.opt.policy.as_ref(); let heat = if pol.is_some() { heat_map(g, &s, &tr) } else { (Vec::new(), Vec::new()) };
+        let planned = &self.planned;
+        let lean = |kind: usize, i: i32, j: i32| -> f64 { match pol { None => 1.0, Some(p) => bias(&p.place[kind], &feat(g, &s, &tr, &heat, far, kind, i, j, on[key(i, j)] || planned.contains(&(i, j)))) } };
+        let lean_up = |kind: usize| -> f64 { pol.map_or(1.0, |p| p.up[kind].max(-8.0).min(8.0).exp()) };
         let allowed_at = |i: i32, j: i32, kind: usize| kind == d.pumpkin || wh == Where::Best || wh == Where::Spread || seg.iter().any(|&(a, b)| hyp((a - i) as f64, (b - j) as f64) <= d.plants[kind].st[Stat::Range as usize][0] + 0.01);
         let try_cell = |i: i32, j: i32, kinds: &[usize], offer: &mut dyn FnMut(f64, f64, Act, bool)| {
             if g.grid[key(i, j)] != Cell::Empty || g.stub_at(i, j).is_some() || g.place_problem(i, j) { return; }
@@ -255,7 +348,7 @@ impl<'a, 'o> Bot<'a, 'o> {
                     worth(g, &tr2, &o, terrain, Some(q)) - now + (tr2.len() as f64 - tr.len() as f64) * 1e-3 * o.n_g
                 } else if wide(d, kind) { worth(g, &tr, &o, terrain, Some(q)) - now }
                 else { add(term(g, &s, &tr, &o, terrain, &q), (0.0, 0.0)) }; // only its own share: the others do not change
-                offer(gain, d.plants[kind].cost, Act::Place(kind, i, j), false);
+                offer(gain * lean(kind, i, j), d.plants[kind].cost, Act::Place(kind, i, j), false);
             }
         };
         if self.room() {
@@ -271,14 +364,14 @@ impl<'a, 'o> Bot<'a, 'o> {
                 let up = BP { lvl: p.lvl + 1, ..bp };
                 let gain = if wide(d, p.kind) { worth(g, &tr, &o, terrain, Some(up)) - now } else { let was = term(g, &s, &tr, &o, terrain, &bp); add(term(g, &s, &tr, &o, terrain, &up), was) };
                 let gain = if gain != 0.0 { gain } else if p.kind == d.pumpkin && g.wave as i32 >= self.first_digger - 2 { 1e-3 * o.n_g } else { 0.0 };
-                offer(gain, c, Act::Up(p.id), true);
+                offer(gain * lean_up(p.kind), c, Act::Up(p.id), true);
             }
             if p.kind == d.pumpkin && p.lvl == 1 && g.phase == Phase::Build {
                 for &kind in &self.others {
                     if !allowed_at(p.i, p.j, kind) { continue; }
                     let q = BP { kind, ..bp };
                     let gain = if wide(d, kind) { worth(g, &tr, &o, terrain, Some(q)) - now } else { add(term(g, &s, &tr, &o, terrain, &q), (0.0, 0.0)) };
-                    offer(gain, d.plants[kind].cost - g.refund_of(p) + 0.01, Act::Swap(p.id, kind), false);
+                    offer(gain * lean(kind, p.i, p.j), d.plants[kind].cost - g.refund_of(p) + 0.01, Act::Swap(p.id, kind), false);
                 }
             }
         }
@@ -296,6 +389,12 @@ impl<'a, 'o> Bot<'a, 'o> {
         }
     }
 
+    // from the first diggers on, some dew is always kept to close a hole at once
+    // (a share of the pay for the last wave: little dew comes in while a wave is on, and the upgrades are the dear
+    // part; in the last wave only a hole's worth: what is kept there is left over, and the matrix reads it as idle dew)
+    fn keep_dew(&self) -> f64 {
+        if (!self.walls.is_empty() || self.opt.plan.is_some()) && self.g.wave as i32 >= self.first_digger - 1 { if self.g.wave >= self.g.waves { 50.0 } else { (50.0f64).max(round(self.opt.reserve * self.lv.wave_pay(self.g.wave))) } } else { 0.0 }
+    }
     fn try_build(&mut self) {
         let d = self.d;
         // repairs first: a hole the bugs run through is closed at once for dew; other roots grow back by themselves
@@ -307,6 +406,43 @@ impl<'a, 'o> Bot<'a, 'o> {
                 let s = &self.g.stubs[k];
                 if self.g.phase == Phase::Wave && tr[key(s.i, s.j)] && self.g.dew >= self.g.regrow_cost(k) { self.regrow(k); }
             }
+        }
+        // a garden laid out beforehand: its steps in their order, each when there is dew for it (with the dew for a
+        // hole kept, as the bot keeps it). A step that cannot be taken for good (the cell is taken, the plant is
+        // grown) is done with; a plant of another kind in the cell is sold for the one of the plan; one that cannot be taken now (the plant is eaten and growing back, bugs would be shut
+        // in) is left for later and the steps after it go on; the first step there is no dew for stops the rest
+        let opt = self.opt;
+        if let Some(plan) = &opt.plan {
+            let keep_dew = self.keep_dew();
+            let mut left = false;
+            for n in 0..plan.len() {
+                if self.done[n] { continue; }
+                let (kind, i, j) = plan[n];
+                if self.g.stub_at(i, j).is_some() { left = true; continue; }
+                match kind {
+                    Some(k) => {
+                        // another plant stands there (a pumpkin of the wall, as a rule): it is sold for this one
+                        if let Some(pi) = self.g.plant_at(i, j) {
+                            if self.g.plants[pi].kind == k { self.done[n] = true; continue; }
+                            let back = if self.g.phase == Phase::Build && self.g.plants[pi].born == self.g.wave as i32 { self.g.plants[pi].spent } else { (self.g.plants[pi].spent * self.g.refund).floor() };
+                            if self.g.dew + back < d.plants[k].cost + keep_dew { left = true; break; }
+                            self.sell(pi); self.place(k, i, j); self.done[n] = true; continue;
+                        }
+                        if self.g.grid[key(i, j)] != Cell::Empty { self.done[n] = true; continue; }
+                        if self.g.place_problem(i, j) { if self.g.phase == Phase::Build { self.done[n] = true; } else { left = true; } continue; }
+                        if self.g.dew < d.plants[k].cost + keep_dew { left = true; break; }
+                        self.place(k, i, j); self.done[n] = true;
+                    }
+                    None => {
+                        // a plant not there yet: its own step is still to come (left for later), or it never will
+                        let Some(pi) = self.g.plant_at(i, j) else { if (0..n).any(|m| !self.done[m] && plan[m].0.is_some() && (plan[m].1, plan[m].2) == (i, j)) { left = true; } else { self.done[n] = true; } continue };
+                        let Some(c) = self.g.upgrade_cost(pi) else { self.done[n] = true; continue };
+                        if self.g.dew < c + keep_dew { left = true; break; }
+                        self.upgrade(pi); self.done[n] = true;
+                    }
+                }
+            }
+            if left { return; }
         }
         // an aloe where the plants keep being eaten: by two eaten ones that no aloe reaches yet, as near to all of them
         // as a free cell off the trail gets; an aloe with much to mend around it is grown
@@ -336,16 +472,13 @@ impl<'a, 'o> Bot<'a, 'o> {
         // a long trail keeps a pack under the plants longer, with pumpkins where nothing stands yet
         let due = self.walls.len().min(2 + self.g.wave);
         for w in 0..due {
-            let (col, gap) = self.walls[w];
-            for j in 0..ROWS {
-                if j == gap || self.g.grid[key(col, j)] != Cell::Empty || self.g.stub_at(col, j).is_some() || !self.room() || self.g.place_problem(col, j) { continue; }
-                if !self.place(d.pumpkin, col, j) { return; }
+            for c in 0..self.walls[w].len() {
+                let (i, j) = self.walls[w][c];
+                if self.g.grid[key(i, j)] != Cell::Empty || self.g.stub_at(i, j).is_some() || !self.room() || self.g.place_problem(i, j) { continue; }
+                if !self.place(d.pumpkin, i, j) { return; }
             }
         }
-        // from the first diggers on, some dew is always kept to close a hole at once
-        // (a share of the pay for the last wave: little dew comes in while a wave is on, and the upgrades are the dear
-        // part; in the last wave only a hole's worth: what is kept there is left over, and the matrix reads it as idle dew)
-        let keep_dew = if !self.walls.is_empty() && self.g.wave as i32 >= self.first_digger - 1 { if self.g.wave >= self.g.waves { 50.0 } else { (50.0f64).max(round(self.opt.reserve * self.lv.wave_pay(self.g.wave))) } } else { 0.0 };
+        let keep_dew = self.keep_dew();
         // the best step is looked for again only when the field changed or the dew for the last one found is there
         for _ in 0..60 {
             let sig = (self.g.wave, self.g.phase, self.g.stubs.len(), self.g.plants.iter().fold(0.0, |t, p| t + p.id as f64 * 7.0 + p.lvl as f64));
@@ -382,14 +515,21 @@ impl<'a, 'o> Bot<'a, 'o> {
 // the free function behind Game::compute_dist, for a field the bot only imagines
 fn compute_dist(grid: &[Cell; N], fruit: (i32, i32), extra: i32) -> [f64; N] { crate::game::dist_over(grid, fruit, extra) }
 
-pub fn play_level<'a>(d: &'a Data, level: usize, opt: &Opts, layouts: &dyn Fn(usize, bool) -> Vec<(i32, i32)>, record: bool) -> (Res, Option<Vec<Op>>) {
+pub fn play_level<'a>(d: &'a Data, level: usize, opt: &Opts, layouts: &dyn Fn(usize, bool) -> Vec<(i32, i32)>, mazes: &dyn Fn(usize, &str) -> Option<Vec<Wall>>, pool: &dyn Fn(usize) -> std::sync::Arc<Vec<(Vec<Wall>, [f64; NM])>>, record: bool) -> (Res, Option<Vec<Op>>) {
     let g = Game::new(d, level, opt.seed, &opt.meta); let lv = &d.levels[level];
-    let all = if opt.route > 0.0 { layouts(level, opt.terrain) } else { Vec::new() };
-    let walls: Vec<(i32, i32)> = all[..round(all.len() as f64 * opt.route) as usize].to_vec();
+    let pick = opt.policy.as_ref().and_then(|p| p.maze);
+    let walls: Vec<Wall> = if opt.plan.is_some() { Vec::new() } else if let (Some(m), None) = (pick, &opt.maze) {
+        // the strategy's own maze: the one it sees the most in
+        let all = pool(level); let score = |f: &[f64; NM]| (0..NM).map(|k| m[k] * f[k]).sum::<f64>();
+        all.iter().fold(None::<&(Vec<Wall>, [f64; NM])>, |top, x| if top.map_or(true, |t| score(&x.1) > score(&t.1)) { Some(x) } else { top }).map_or(Vec::new(), |x| x.0.clone())
+    } else if let Some(name) = &opt.maze { mazes(level, name).unwrap_or_else(|| panic!("no maze {} on level {}", name, level + 1)) } else {
+        let all = if opt.route > 0.0 { layouts(level, opt.terrain) } else { Vec::new() };
+        all[..round(all.len() as f64 * opt.route) as usize].iter().map(|&(col, gap)| (0..ROWS).filter(|&j| j != gap).map(|j| (col, j)).collect()).collect()
+    };
     let kinds: Vec<usize> = lv.plants.iter().cloned().filter(|&k| k != d.aloe && opt.plants.as_ref().map_or(true, |a| a.contains(&k))).collect();
     let others: Vec<usize> = kinds.iter().cloned().filter(|&k| k != d.pumpkin).collect();
     let reach = others.iter().fold(f64::NEG_INFINITY, |m, &k| m.max(d.plants[k].st[Stat::Range as usize][2])) + 0.6;
-    let mut planned = Vec::new(); for &(col, gap) in &walls { for j in 0..ROWS { if j != gap { planned.push((col, j)); } } }
+    let planned: Vec<(i32, i32)> = if let Some(plan) = &opt.plan { plan.iter().filter(|s| s.0.is_some()).map(|s| (s.1, s.2)).collect() } else { walls.iter().flatten().cloned().collect() };
     let first_digger = lv.waves.iter().position(|w| w.iter().any(|gr| d.bugs[gr.kind].dig != 0.0)).map_or(0, |k| k as i32 + 1);
     // where the trail will run when the walls stand: nothing but the walls is planted on it; without a maze, the trail as it is
     let mut keep = [false; N];
@@ -401,16 +541,17 @@ pub fn play_level<'a>(d: &'a Data, level: usize, opt: &Opts, layouts: &dyn Fn(us
     let aloe = lv.plants.contains(&d.aloe) && opt.plants.as_ref().map_or(true, |a| a.contains(&d.aloe));
     let dew0 = g.dew;
     let mut b = Bot { g, d, lv, opt, o: Soon::default(), r: (opt.seed as i32).wrapping_mul(7919).wrapping_add(13), walls, planned, keep, kinds, others, reach, first_digger,
-        aloe, eaten_at: Vec::new(), seen: None, need: 0.0, ops: if record { Some(Vec::new()) } else { None }, dew_seen: dew0, buf: Vec::new() };
+        aloe, eaten_at: Vec::new(), seen: None, need: 0.0, ops: if record { Some(Vec::new()) } else { None }, dew_seen: dew0, buf: Vec::new(), done: vec![false; opt.plan.as_ref().map_or(0, |p| p.len())] };
     if let Some(bank) = opt.bank { b.g.dew = bank; }
     let (mut t, mut income, mut eaten, mut powers_used) = (0.0, 0.0, 0usize, 0usize);
     let mut bites: Vec<((usize, usize, bool), usize)> = Vec::new();
     let bank = opt.bank.is_some();
-    let mut steps = 0;
+    let mut steps = 0; let mut gauge: Vec<Gauge> = Vec::new();
     while b.g.phase != Phase::Won && b.g.phase != Phase::Lost && t < 3600.0 && steps < opt.steps {
         // it builds, then calls the wave at once (for the dew of an early start)
         if b.g.phase == Phase::Build && (opt.early || b.g.wave == 0) { b.try_build(); let dew = b.g.dew; b.start_wave(); if bank { b.g.dew = dew; } }
         for _ in 0..15 { b.step(1.0 / 30.0); }
+        if b.g.wave > gauge.len() && b.g.phase == Phase::Wave { gauge.push(b.gauge()); }
         t += 0.5; steps += 15; b.use_powers();
         let events = std::mem::take(&mut b.g.events);
         for e in &events {
@@ -430,7 +571,7 @@ pub fn play_level<'a>(d: &'a Data, level: usize, opt: &Opts, layouts: &dyn Fn(us
     for k in g.plants.iter().map(|p| p.kind).chain(g.stubs.iter().map(|s| s.kind)) { if let Some(x) = kinds.iter_mut().find(|x| x.0 == k) { x.1 += 1; } else { kinds.push((k, 1)); } }
     let res = Res {
         worth: if b.o.set { round(worth(g, &tr, &b.o, opt.terrain, None) * 100.0) / 100.0 } else { 0.0 }, trail: tr.len(), won: g.phase == Phase::Won, hp: g.hp, max_hp: g.max_hp, wave: g.wave, waves: g.waves,
-        plants: g.plants.len(), grown: g.plants.iter().filter(|p| p.lvl > 1).count(), maxed: g.plants.iter().filter(|p| p.lvl == 3).count(), dew: g.dew, eaten, income, kinds, bites, powers_used, time: round(t),
+        plants: g.plants.len(), grown: g.plants.iter().filter(|p| p.lvl > 1).count(), maxed: g.plants.iter().filter(|p| p.lvl == 3).count(), dew: g.dew, eaten, income, kinds, bites, powers_used, time: round(t), gauge,
     };
     (res, b.ops)
 }
@@ -441,7 +582,7 @@ pub fn play_level<'a>(d: &'a Data, level: usize, opt: &Opts, layouts: &dyn Fn(us
 pub fn play_random<'a>(d: &'a Data, level: usize, opt: &Opts) -> Vec<Op> {
     let g = Game::new(d, level, opt.seed, &opt.meta); let lv = &d.levels[level]; let dew0 = g.dew;
     let mut b = Bot { g, d, lv, opt, o: Soon::default(), r: (opt.seed as i32).wrapping_mul(7919).wrapping_add(13), walls: Vec::new(), planned: Vec::new(), keep: [false; N], kinds: Vec::new(), others: Vec::new(), reach: 0.0, first_digger: 0,
-        aloe: false, eaten_at: Vec::new(), seen: None, need: 0.0, ops: Some(Vec::new()), dew_seen: dew0, buf: Vec::new() };
+        aloe: false, eaten_at: Vec::new(), seen: None, need: 0.0, ops: Some(Vec::new()), dew_seen: dew0, buf: Vec::new(), done: vec![false; opt.plan.as_ref().map_or(0, |p| p.len())] };
     let mut r = b.r; let mut rnd = move |n: usize| -> usize { ((js_rng(&mut r) * n as f64).floor() as usize).min(n.saturating_sub(1)) };
     let rich = rnd(3) != 0; // most of these players have dew to burn: more gets planted
     let mut steps = 0;

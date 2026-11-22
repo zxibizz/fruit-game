@@ -17,7 +17,7 @@ function call(bin, cmd, body, jobs) {
 }
 // scenarios: [{ level, opts, record?, random? }], opts as the bot takes them (balance/scenario.mjs resolve): seed,
 // route, terrain, powers (true, false, 'eager'), bank (dew), meta ({ perk: tier }), place, plants ([kinds] or null),
-// upgrades, early, repair, maxPlants, steps. Gives [{ res, ms }] in the same order, { err } for a party that broke;
+// upgrades, early, repair, maxPlants, steps, maze (a maze of routes() by name, instead of route). Gives [{ res, ms }] in the same order, { err } for a party that broke;
 // res is the bot's own report (won, hp, maxHp, wave, waves, plants, grown, maxed, dew, eaten, income, kinds, bites,
 // powersUsed, trail, worth, time). record: a file the party is written to (every action and the hash of the state
 // after every step); random: a player with no plan plays instead of the bot (for the parity check).
@@ -27,3 +27,6 @@ export function play(scenarios, { jobs = Math.max(1, Math.floor(availableParalle
 }
 // the maze the bot builds on a level: [[column, row of the gap], ...]
 export function layout(level, terrain = true) { build(); return call(BIN, 'layout', { data: exportData(), level, terrain }, 1); }
+// the mazes of the balance matrix on those levels (sim/src/routes.rs): [{ level, base, max, routes: [{ name, class,
+// shape, len, walls, trail }] }] — base: the trail as it is, max: the longest found, in cells
+export function routes(levels, { bin = null, data = exportData() } = {}) { if (!bin) build(); return call(bin || BIN, 'routes', { data, levels }, 1); }

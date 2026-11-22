@@ -60,21 +60,60 @@ and in portrait (turned there).
   untouched trail must lose every level with the most perks there can be by then (three stars on every level before),
   planted any of four ways; half a garden or no powers must do worse. The suite takes half a minute and needs `cargo`
   (the bot is native); the full picture is the balance matrix below.
-- `balance/` — the balance matrix (dev only, not in the image): `node balance/run.mjs [quick|full] [--levels 5,6-8]
+- `balance/` — the balance matrix (dev only, not in the image): `node balance/run.mjs [quick|full|routes] [--margin] [--levels 5,6-8]
   [--set L5.dew=500,FLY_SHARE=.2] [--grid 'L5.budget=12/5.8|12/6.4;L5.pay=150/270|170/300']`. For every level it plays many
   scenarios in parallel (the native bot of `sim/` on a snapshot of the code, a batch per variant of the data; half the
-  cores by default at the lowest priority — `--jobs N` for more; the full matrix, some 370 parties, takes half a
+  cores by default at the lowest priority — `--jobs N` for more; the full matrix, some 480 parties, takes under a
   minute; results cached
   per level, so tuning one level reruns only it): the smart bot on several seeds and on other draws of the waves; lazy
   gardens beside the untouched trail with real dew and the most perks of their time, planted best, by the end, by the
   start or at random (they must lose; with every perk at once — a replay — only a warning); "exploits" — the same with all the dew of the level at once (an upper bound, a warning
   only); the smart bot with one skill off (ground, frost and rain, early calls, repairs, upgrades), with fewer or more
-  perks, with part of the maze, without one kind of plant. `rules.mjs` reads the results (the smart bot wins on every
+  perks, without one kind of plant, and on mazes of every length of the trail — straight (no maze), min (a fifth of
+  the way to the longest maze found on the level), mid (half), above (three quarters), max — each length in every
+  shape it can be built in (`sim/src/routes.rs`: upright walls bunched by the anthill, by the fruit, or spread wide,
+  walls along the field behind a door, serpentines on other columns than the bot's; `node balance/routes.mjs` draws
+  them, `run.mjs routes` plays this group alone). `rules.mjs` reads the results (the smart bot wins on every
   seed and draw, every boss dies, lazy gardens lose, no dew piles up once the garden is grown, skills and perks pay, a
-  longer route pays, no wave does most of the damage),
+  longer route pays (by the median over the shapes of a length), mazes of one length do about as well however they
+  wind, the longest wins in every shape, no wave does most of the damage),
   `lint.mjs` looks at the waves alone for sudden walls of bugs (also in the tests). It prints the findings and writes
   `report.html` (level × scenario, coloured by how much fruit was left or how early it was lost) and `results.json`.
   `--grid` compares variants of the data side by side — the way to tune a level.
+  A win or a loss says on which side of the edge a scenario stands, and on a level tuned to its edge that flips with
+  every small thing. **The margin** says how far from the edge it is: how many times healthier every bug may be
+  before the scenario stops winning (118%: it still wins against bugs 18% healthier; 87%: it loses, and would win
+  against bugs 13% weaker). `balance/margin.mjs` finds it by halving, for the smart bot, the lazy gardens and the
+  routes — always in the `routes` plan, in the others with `--margin` (some seven more parties for each scenario:
+  three minutes for all the levels from scratch, and only the levels touched since are played again). With the
+  margins there, the rules of the route are read off them, and the table of the margins — level × smart, the best
+  lazy garden, the trail at every length — is printed and put in the report: the place to see whether a level is
+  tight or loose, what a maze is worth on it, and how much the shape of the maze decides.
+  `node balance/design.mjs --level 3 [--rounds 60]` is the designer: it looks for the strongest garden a level
+  allows, the trail and the plants around it together. It takes the smart bot's own party as a plan (the plants to
+  put and to grow, cell by cell, in order — the bot's option `plan`), tries changes on it (two plants trade cells,
+  a plant becomes another kind or moves, steps come earlier or later, a pumpkin goes on the trail or out of a
+  wall), plays each against bugs a little healthier than the garden holds now and keeps what lasts longer. It
+  prints the margin of the bot and of the design side by side: what the bot leaves on the table is how far the
+  matrix, played by the bot, is from a player who lays the garden out well.
+  `node balance/strategy.mjs` is the strategist. The smart bot is a careful player of one simple plan: the
+  longest of a few serpentines, and every step the one its own model of the damage likes best for the dew. It
+  does not see that a trail winding round a pepper feeds it more, or that a mint pays where the damage is. A
+  strategy (`sim/src/bot.rs`, the option `policy`) gives it eyes: for every kind of plant, weights on what is seen
+  in a cell (the cells of the trail in reach, the times the trail comes by, the plants already reaching those
+  cells, mint over them, shooters around, how far along the trail, fertile ground, a wall of the maze), a weight
+  on growing every kind, and weights on what is seen in a maze that pick the bot's maze from every maze the
+  generator builds (`routes::pool`: length, wall cells, the best cells for a pepper, turns). All zeros is the
+  smart bot. The weights are found by the cross-entropy method on whole levels, all the levels at once (so the
+  strategy plays every map, not one), against bugs a little healthier than it holds; written to
+  `balance/strategy.json`, they are the **expert** of the matrix (`plans.mjs`: three seeds and three other draws
+  of the waves, with margins). `node balance/explain.mjs` shows what the strategy is made of: its weights, and
+  the margin on every level of the strategy, of the strategy with one thing it sees taken away, with the smart
+  bot's maze, of the smart bot and of the designer's gardens.
+  The players the levels are for are in `plans.mjs` (`PLAYERS`): the novice and the ordinary player, each on
+  every maze of the length such a player builds; the rules ask the ordinary one to win with one or two stars,
+  the expert with three, the novice to lose in the last third of the waves. They are a guess until parties of
+  real players are looked at.
 - `sim/` — the simulation once more, in Rust, and the bot that plays it (dev only, not in the image; `cargo` builds
   it, no dependencies). The balance matrix and the balance tests run on it: a party takes a tenth of a second where
   the JS simulation with a JS bot took three.

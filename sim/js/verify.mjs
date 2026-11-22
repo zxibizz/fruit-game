@@ -14,6 +14,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { LEVELS } from '../../public/data.js';
 import { plan } from '../../balance/plans.mjs';
+import { routes } from './play.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url)), root = join(here, '..', '..'), bin = join(root, 'sim', 'target', 'release', 'fruit-sim');
 const args = process.argv.slice(2), opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
@@ -25,7 +26,7 @@ const levels = (opt('--levels') ? range(opt('--levels')) : LEVELS.map((_, n) => 
 // back by themselves and the one that spends frost and rain at once, a garden with all the dew at once (crowds of
 // plants, every upgrade) — and stopped after STEPS steps of the game (the bosses of the middle of a level are in)
 const STEPS = 26000, FAST = [[2, 'no repair'], [3, 'exploit spread'], [4, 'smart s7'], [5, 'smart s7'], [7, 'eager powers']];
-const all = plan('full', LEVELS.map((_, n) => n));
+const all = plan('full', LEVELS.map((_, n) => n), routes(LEVELS.map((_, n) => n)));
 const tasks = (kind === 'full' ? all.filter((t) => levels.includes(t.level)) : FAST.filter(([n]) => levels.includes(n)).map(([n, name]) => {
   const t = all.find((x) => x.level === n && x.name === name); if (!t) throw new Error(`verify: no scenario '${name}' in balance/plans.mjs any more: pick another for the fast set`);
   return { ...t, opts: { ...t.opts, steps: STEPS } }; }))
