@@ -115,7 +115,7 @@ impl Data {
         let levels: Vec<Level> = j.at("LEVELS").arr().iter().map(|l| {
             let pay = nums(l.at("pay")); let fruit = nums(l.at("fruit"));
             Level {
-                dew: l.at("dew").num(), hp: l.at("hp").num(), pay: [pay[0], pay[1]], count: l.at("count").num() as usize, pay_at: nums(l.at("payAt")),
+                dew: l.at("dew").num(), hp: l.get("hp").map_or(1.0, |v| v.num()), pay: [pay[0], pay[1]], count: l.at("count").num() as usize, pay_at: nums(l.at("payAt")),
                 plants: l.at("plants").arr().iter().map(|p| plant_ix(p.str())).collect(),
                 obstacles: l.at("obstacles").arr().iter().map(|o| { let a = o.arr(); (a[0].num() as i32, a[1].num() as i32, a[2].str() == "weed") }).collect(),
                 tiles: l.at("tiles").arr().iter().map(|o| { let a = o.arr(); (a[0].num() as i32, a[1].num() as i32, match a[2].str() { "fertile" => Tile::Fertile, "mud" => Tile::Mud, "nettle" => Tile::Nettle, t => panic!("unknown ground {}", t) }) }).collect(),

@@ -4,8 +4,9 @@ import { COLS, ROWS, FRUIT_HP, PLANTS, BUGS, LEVELS, PERKS, BREAK, EARLY_DEW, RE
 export const VERSION = '0.23.0';
 // The version of a saved level: raised when the balance changes so much that a garden grown under the old rules does
 // not belong in the new level (2: no fatigue, tight packs, one health rule; 3: the plants given their places and
-// every level retuned; an older save is dropped).
-const SAVE_V = 3;
+// every level retuned; 4: the waves retuned for the ordinary player, some levels with fewer and healthier bugs; an
+// older save is dropped).
+const SAVE_V = 4;
 export { COLS, ROWS, BREAK };
 
 const DIRS = [[-1, 0], [0, -1], [0, 1], [1, 0]]; // tie order: towards the fruit side first

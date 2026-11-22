@@ -40,10 +40,10 @@ const vs = [variant('the strategy', x),
   variant('with the smart bot\'s growing', x.map((w, i) => (i >= NP && i < NP + KINDS.length ? 0 : w)))]),
   { name: 'the smart bot', policy: null }];
 // and the gardens of the designer (balance/design.mjs), where there are any: a plan laid out for one map
-const designs = Object.fromEntries(levels.map((n) => [n, join(homedir(), 'tmp', 'balance', 'designs', `L${n + 1}.json`)]).filter(([, f]) => existsSync(f)).map(([n, f]) => [n, JSON.parse(readFileSync(f, 'utf8')).plan]));
+const designs = Object.fromEntries(levels.map((n) => [n, join(homedir(), 'tmp', 'balance', 'designs', `L${n + 1}.json`)]).filter(([, f]) => existsSync(f)).map(([n, f]) => [n, JSON.parse(readFileSync(f, 'utf8'))]));
 if (Object.keys(designs).length) vs.push({ name: 'the designer\'s garden', design: true });
 const draws = waves.flatMap((w) => seeds.map((seed) => ({ w, seed })));
-const items = vs.flatMap((v, a) => levels.filter((n) => !v.design || designs[n]).flatMap((n) => draws.map(({ w, seed }) => ({ v: a, level: n, task: { level: n, w, opts: { ...resolve({ level: n, opts: SMART }), seed, ...(v.policy ? { policy: v.policy } : {}), ...(v.design ? { plan: designs[n] } : {}) } } }))));
+const items = vs.flatMap((v, a) => levels.filter((n) => !v.design || designs[n]).flatMap((n) => draws.map(({ w, seed }) => ({ v: a, level: n, task: { level: n, w, opts: { ...resolve({ level: n, opts: SMART }), seed, ...(v.policy ? { policy: v.policy } : {}), ...(v.design ? { plan: designs[n].plan, ...(designs[n].start === 'expert' ? { policy: S.policy } : {}) } : {}) } } }))));
 const run = (ts) => { const r = Array(ts.length).fill(null);
   for (const w of new Set(ts.map((t) => t.w || 0))) { const ks = ts.map((t, k) => ((t.w || 0) === w ? k : -1)).filter((k) => k >= 0);
     play(ks.map((k) => ({ level: ts[k].level, opts: ts[k].opts })), { jobs: 2, data: datas[w] ?? datas[0] }).forEach((x, i) => { r[ks[i]] = x.err ? null : x.res; }); }

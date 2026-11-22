@@ -116,7 +116,7 @@ for (const n of levels) {
   let tried = [];
   if (dry) { const x = await measure(n, was); console.log('  ' + line(n, x)); tried.push(x); }
   else for (const hp of HPS) { const k = wasHp / hp; tried = tried.concat(await scale(n, [r1(was[0] * k), r1(was[1] * k)], null, hp)); }
-  for (const b of extra) { const x = await measure(n, b); console.log('  ' + line(n, x)); tried.push(x); }
+  for (const b of extra) { const x = await measure(n, b, wasHp); console.log('  ' + line(n, x)); tried.push(x); }
   const best = pick(tried);
   LEVELS[n].budget = was; LEVELS[n].hp = wasHp; reset(); // data.js as it was: every level is tuned on its own
   found.push({ n, was, wasHp, best, keeps: keeps(best), off: off(best) });

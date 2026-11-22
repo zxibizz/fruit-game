@@ -424,6 +424,9 @@ impl<'a, 'o> Bot<'a, 'o> {
                         // another plant stands there (a pumpkin of the wall, as a rule): it is sold for this one
                         if let Some(pi) = self.g.plant_at(i, j) {
                             if self.g.plants[pi].kind == k { self.done[n] = true; continue; }
+                            // only between waves: in a wave a bug may make for the cell once it is free, and the new plant
+                            // could not go in after the old one is sold (a hole in the wall for good)
+                            if self.g.phase != Phase::Build { left = true; continue; }
                             let back = if self.g.phase == Phase::Build && self.g.plants[pi].born == self.g.wave as i32 { self.g.plants[pi].spent } else { (self.g.plants[pi].spent * self.g.refund).floor() };
                             if self.g.dew + back < d.plants[k].cost + keep_dew { left = true; break; }
                             self.sell(pi); self.place(k, i, j); self.done[n] = true; continue;

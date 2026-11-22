@@ -8,16 +8,18 @@
 // at a time: two plants trade cells (a pepper goes where the trail winds round it, a mint where the most plants
 // reach), a plant becomes another kind, a plant off the trail moves, steps come earlier or later, a plant is grown
 // or not, a pumpkin is put on the trail or taken out of a wall. Every change is played against bugs a little
-// healthier than the design holds now, on two seeds of the game (a garden fitted to one seed's luck is no garden);
+// healthier than the design holds now, on the game's own waves and one other draw of them (the seed of the game
+// changes nothing for the bot; a garden fitted to one draw's luck is no garden);
 // it is kept when the garden lasts longer. When the design wins both, the bugs get healthier. In the end the margin (margin.mjs) of the design and of the bot it
 // started from are found: the difference is what the layout is worth.
-import { writeFileSync, readFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { writeFileSync, readFileSync, mkdtempSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir, homedir, setPriority } from 'node:os';
-import { join } from 'node:path';
-import { LEVELS, PLANTS } from '../public/data.js';
+import { join, dirname } from 'node:path';
+import { LEVELS, PLANTS, makeWaves } from '../public/data.js';
+import { exportData } from '../sim/js/export.mjs';
 import { createGame, place, placeProblem, trails, COLS, ROWS } from '../public/game.js';
 import { play } from '../sim/js/play.mjs';
-import { resolve } from './scenario.mjs';
+import { resolve, applyOverrides } from './scenario.mjs';
 import { margins, show } from './margin.mjs';
 
 const args = process.argv.slice(2), opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
@@ -30,7 +32,15 @@ const pick = (a) => a[Math.floor(rnd() * a.length)], K = (i, j) => i + ',' + j;
 const SMART = { place: 'best', upgrades: 'greedy', meta: 'exp2', terrain: true, powers: true, early: true, repair: true, ...(from ? { maze: from } : { route: 1 }) };
 const policy = START === 'expert' ? JSON.parse(readFileSync(new URL('./strategy.json', import.meta.url), 'utf8')).policy : null;
 const base = { ...resolve({ level, opts: SMART }), ...(policy ? { policy } : {}) }, kinds = LEVELS[level].plants;
-const run = (list) => play(list.map((opts) => ({ level, opts })), jobs).map((x) => { if (x.err) throw new Error(x.err); return x.res; });
+mkdirSync(dirname(out), { recursive: true }); // before the search: its result must have somewhere to go
+// the waves of the game (draw 0) and two other draws of them; data.js as it was after
+const DRAWS = [0, 1, 2], datas = DRAWS.map((w) => { if (w) applyOverrides({}, w); return exportData(); });
+LEVELS.forEach((L, n) => { L.waves = makeWaves(L, 101 + n); });
+// plays [{ opts, w }] (w: the draw, 0 when not said), a batch per draw, in the order given
+const run = (list) => { const r = Array(list.length);
+  for (const w of new Set(list.map((x) => x.w || 0))) { const ks = list.map((x, k) => ((x.w || 0) === w ? k : -1)).filter((k) => k >= 0);
+    play(ks.map((k) => ({ level, opts: list[k].opts })), { ...jobs, data: datas[w] }).forEach((x, i) => { if (x.err) throw new Error(x.err); r[ks[i]] = x.res; }); }
+  return r; };
 
 // the bot's own party, as a plan
 const dir = mkdtempSync(join(tmpdir(), 'fruit-design-')), file = join(dir, 'ops.json');
@@ -106,7 +116,7 @@ function mutate(plan) {
 
 // how long a plan lasts against bugs h and a step more times healthier: a win counts for more than any loss, then the fruit left; a loss by the time it took
 const score = (r) => (r.won ? 1e5 + r.hp : r.time);
-function rate(plans, h) { const res = run(plans.flatMap((plan) => [7, 8].map((seed) => ({ ...base, seed, plan, hp: Math.round(h * 1000) / 1000 })))); return plans.map((_, k) => ({ f: score(res[2 * k]) + score(res[2 * k + 1]), wins: res[2 * k].won + res[2 * k + 1].won })); }
+function rate(plans, h) { const res = run(plans.flatMap((plan) => [0, 1].map((w) => ({ w, opts: { ...base, plan, hp: Math.round(h * 1000) / 1000 } })))); return plans.map((_, k) => ({ f: score(res[2 * k]) + score(res[2 * k + 1]), wins: res[2 * k].won + res[2 * k + 1].won })); }
 
 let best = seedPlan, h = 1, cur = rate([best], h)[0], kept = 0; const t0 = Date.now();
 const log = (s) => process.stderr.write(s + '\n');
@@ -119,11 +129,12 @@ for (let round = 1; round <= ROUNDS; round++) {
   if (round % 10 === 0 || round === ROUNDS) log(`  round ${round}: bugs ×${h.toFixed(2)}, ${kept} changes kept, ${Math.round((Date.now() - t0) / 1000)}s`);
 }
 // the margins: the bot as it plays, its own garden as a plan, and the design
-// (each the median over the seeds 7, 8 and 9 of the game; 9 the search never played)
-const SEEDS = [7, 8, 9], tasks = [{ opts: base }, { opts: { ...base, plan: seedPlan } }, { opts: { ...base, plan: best } }].flatMap((t) => SEEDS.map((seed) => ({ opts: { ...t.opts, seed } })));
-const at1 = run(tasks.map((t) => t.opts));
-const ms = await margins(tasks.map((task, k) => ({ task, won: at1[k].won })), async (ts) => run(ts.map((t) => t.opts)), { hi: HI });
-const medOf = (a) => { const xs = ms.slice(a * SEEDS.length, (a + 1) * SEEDS.length).sort((p, q) => p.at - q.at); return { ...xs[1], each: xs.map((x) => x.at) }; };
+// (each the median over the game's own waves and two other draws, the third of which the search never played;
+// each: draw by draw, the game's own first)
+const tasks = [{ opts: base }, { opts: { ...base, plan: seedPlan } }, { opts: { ...base, plan: best } }].flatMap((t) => DRAWS.map((w) => ({ opts: t.opts, w })));
+const at1 = run(tasks);
+const ms = await margins(tasks.map((task, k) => ({ task, won: at1[k].won })), async (ts) => run(ts), { hi: HI });
+const medOf = (a) => { const each = ms.slice(a * DRAWS.length, (a + 1) * DRAWS.length), xs = [...each].sort((p, q) => p.at - q.at); return { ...xs[1], each: each.map((x) => x.at) }; };
 const [bot, seed, design] = [0, 1, 2].map(medOf);
 const s = study(best), count = {}; for (const c of s.cells.values()) count[c.kind] = (count[c.kind] || 0) + 1;
 const peppers = [...s.cells.values()].filter((c) => c.kind === 'pepper'), wrap = peppers.length ? peppers.reduce((t, c) => t + worth(s, 'pepper', c.i, c.j), 0) / peppers.length : null;

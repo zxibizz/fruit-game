@@ -56,7 +56,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     for (const w of new Set(list.map((x) => x.w || 0))) { const ks = list.map((x, k) => ((x.w || 0) === w ? k : -1)).filter((k) => k >= 0);
       play(ks.map((k) => ({ level: list[k].level, opts: list[k].opts })), { jobs, data: datas[w] ?? datas[0] }).forEach((x, i) => { r[ks[i]] = x.err ? null : x.res; }); }
     worked += Date.now() - t; return r; };
-  const rest = () => { if (worked > 600e3) { const until = Date.now() + 120e3; while (Date.now() < until) { /* the host cools down */ } worked = 0; } };
+  const rest = async () => { if (worked > 600e3) { await new Promise((r) => setTimeout(r, 120e3)); worked = 0; } }; // the host cools down
   const r3 = (v) => Math.round(v * 1000) / 1000;
   const value = (r) => (!r ? 0 : r.won ? 1 + r.hp / r.maxHp : (r.wave - 1) / r.waves);
 
@@ -68,9 +68,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (!h) { // the smart bot's margin on every level (to four times the health of the bugs)
     process.stderr.write('the smart bot\'s margins… ');
     const items = levels.map((n) => ({ task: { level: n, opts: base[n] } })), at1 = run(items.map((x) => x.task)); // (on the draw of data.js)
-    const ms = await margins(items.map((x, k) => ({ ...x, won: at1[k].won })), async (ts) => run(ts), { hi: 4 });
-    h = Object.fromEntries(levels.map((n, k) => [n, r3(ms[k].at * 1.05)]));
-    process.stderr.write(levels.map((n) => `L${n + 1} ${Math.round(ms[k(n)].at * 100)}%`).join(' ') + '\n');
+    const ms = await margins(items.map((x, k) => ({ ...x, won: !!at1[k]?.won })), async (ts) => run(ts), { hi: 4 });
+    h = Object.fromEntries(levels.map((n, k) => [n, r3((ms[k]?.at ?? 1) * 1.05)])); // a broken party: as if the bot held the bugs as they are
+    process.stderr.write(levels.map((n) => `L${n + 1} ${ms[k(n)] ? `${Math.round(ms[k(n)].at * 100)}%` : '?'}`).join(' ') + '\n');
     function k(n) { return levels.indexOf(n); }
   }
   const history = prev?.history || [];
@@ -93,7 +93,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     history.push({ gen: history.length + 1, mean: r3(fit[0]), best: r3(fit[order[0]]), h: { ...h }, s: Math.round((Date.now() - t0) / 1000) });
     process.stderr.write(`gen ${history.length}: the mean ${fit[0].toFixed(3)}, the best ${fit[order[0]].toFixed(3)}, bugs ${levels.map((n) => `L${n + 1}×${h[n].toFixed(2)}`).join(' ')}, ${Math.round((Date.now() - t0) / 1000)}s\n`);
     writeFileSync(out, JSON.stringify({ policy: policyOf(mean.map(r3)), sd: sd.map(r3), h, levels: levels.map((n) => n + 1), seeds, waves, history }, null, 1));
-    rest();
+    await rest();
   }
   console.log(out);
 }
