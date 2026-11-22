@@ -271,18 +271,18 @@ export const LEVELS = [
   {
     name: 'Закат', theme: 'sunset', feature: 'twin',
     map: [
-      '....X.....W...',
-      '.......f..W..E',
+      '....X.....W..E',
+      '.......f..W...',
       '..R......n....',
-      '.A....m.......',
+      '......m.......',
       '......m...f...',
       '...n.......X..',
-      '.....S.......E',
-      '..f.....LL....',
+      '.A...S........',
+      '..f.....LL...E',
     ],
     dew: 460, pay: [290, 640],
     plants: ['pumpkin', 'rose', 'corn', 'aloe', 'mint', 'pepper', 'dandelion', 'flytrap', 'bell'],
-    hp: 1.4, count: 30, budget: [5.9, 3.1], roster: [['ant', 1], ['beetle', 2], ['butterfly', 3], ['pillbug', 4], ['caterpillar', 6], ['cricket', 8], ['firefly', 10], ['snail', 12], ['wasp', 14], ['grasshopper', 17], ['aphid', 20]], boss: [[10, 'queen', 1], [20, 'hornet', 1], [30, 'rhino', 2]],
+    count: 30, budget: [7, 3.6], roster: [['ant', 1], ['beetle', 2], ['butterfly', 3], ['pillbug', 4], ['caterpillar', 6], ['cricket', 8], ['firefly', 10], ['snail', 12], ['wasp', 14], ['grasshopper', 17], ['aphid', 20]], boss: [[10, 'queen', 1], [20, 'hornet', 1], [30, 'rhino', 2]],
   },
 ];
 

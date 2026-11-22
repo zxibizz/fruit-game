@@ -1,13 +1,13 @@
 // Simulation: no DOM, plain data. The view reads the state and the events, and calls the actions below.
 import { COLS, ROWS, FRUIT_HP, PLANTS, BUGS, LEVELS, PERKS, BREAK, EARLY_DEW, REPAIR, REGROW, REFUND, CHEW_GROWTH, POWER_EVERY, POWER_MAX, wavePay, FERTILE, FERTILE_ADD, MUD, NETTLE, NETTLE_BOSS, WEED_COST, BROOD_REWARD, FLY_HP, TUNE, MARK_T } from './data.js';
 
-export const VERSION = '0.25.1';
+export const VERSION = '0.25.2';
 // The version of a saved level: raised when the balance changes so much that a garden grown under the old rules does
 // not belong in the new level (2: no fatigue, tight packs, one health rule; 3: the plants given their places and
 // every level retuned; 4: the waves retuned for the ordinary player, some levels with fewer and healthier bugs; 5: the
 // anthill of «Старый сад» moved to the edge, where an old garden could shut the trail; 6: diggers last in a wave;
-// an older save is dropped).
-const SAVE_V = 6;
+// 7: the anthills and the fruit of «Закат» moved; an older save is dropped).
+const SAVE_V = 7;
 export { COLS, ROWS, BREAK };
 
 const DIRS = [[-1, 0], [0, -1], [0, 1], [1, 0]]; // tie order: towards the fruit side first
