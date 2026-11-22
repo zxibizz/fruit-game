@@ -87,7 +87,7 @@ const T = {
   holdHint: 'Зажми растение или жука — узнаешь, кто это',
   dragHint: 'Сначала выбери растение на полке — или просто перетащи его на поле',
   hint2: 'Роса приходит за каждую пройденную волну. Дальше волны придут сами. Нажмёшь ▶ раньше — получишь ещё',
-  digHint: 'Красный пунктир — путь сверчков: они прогрызают растения насквозь. Не оставляй за одним растением короткий проход к яблоку — или ставь туда выращенную тыкву: её грызть долго, и она колется',
+  digHint: 'Сверчки прогрызают растения насквозь. Сверчок на растении — здесь они пройдут. Нажми на сверчка в волне — покажу их путь. Выращенную тыкву грызть долго, и она колется',
   trailHint: 'Чем длиннее и извилистее тропинка, тем дольше жуки ползут мимо твоих растений. Ставь стрелков там, где тропинка проходит рядом несколько раз',
   upHint: 'Улучшения дорогие — копи росу и усиливай те растения, мимо которых жуки ползут дольше всего',
   growNote: `Жуки крепнут: каждая волна добавляет им ${Math.round(TUNE.hpGrowth * 100)}% начального здоровья (летающим — ${Math.round(TUNE.hpGrowth * FLY_HP * 100)}%), на всех уровнях одинаково.`,
@@ -566,6 +566,7 @@ function draw(dt) {
     ring(...cellCenter(pop.i, pop.j), r * CELL); if (r2 > r + .01) ring(...cellCenter(pop.i, pop.j), r2 * CELL, true); groundRing(pop.type, ...cellCenter(pop.i, pop.j), r);
   }
 
+  drawDigWay(dt);
   // depth-sorted things on the ground
   const items = [];
   for (const p of game.plants) items.push([cellCenter(p.i, p.j)[1] + 14, () => drawPlant(p, t)]);
@@ -574,7 +575,7 @@ function draw(dt) {
   const [fxx, fyy] = cellCenter(...game.fruit); items.push([fyy + 12, () => drawApple(fxx, fyy, dt)]);
   items.sort((a, b) => a[0] - b[0]); for (const [, f] of items) f();
   for (const p of game.plants) if (p.hp < p.maxHp) { const [x, y] = cellCenter(p.i, p.j); A.hdHp(c, x, y - 32, 28, p.hp / p.maxHp, '#ffb03a'); }
-  drawDigTrails(t);
+  drawDigMarks(t);
   if (drag) drawDrag();
   for (const s of game.shots) drawShot(s);
   for (const b of game.bugs) if (b.fly) drawBug(b, t, dt);
@@ -589,26 +590,39 @@ function draw(dt) {
   if (pop) drawPop();
   if (tip) drawTip();
 }
-// The way the diggers (crickets) will take — a red dashed line from the anthill to the fruit, a mark on every plant
-// they will eat through — while diggers are in the coming wave or on the field. The walkers' trail is the beaten path
-// of the terrain; nothing else shows that a long maze can be a short way for the ones that eat through it.
-// (from the anthills they will come out of; worked out again only when the garden or the diggers' hills change)
-let digSeen = null, digCache = null;
-function drawDigTrails(t) {
-  if (game.phase !== 'build' && game.phase !== 'wave') return;
-  const hills = digHills(game); if (!hills.size) return;
-  if (!digSeen) { hintOnce('dig', T.digHint, 9); digSeen = true; }
+// Where the diggers (crickets) will eat through the garden, while they are in the coming wave or on the field: a little
+// cricket sits on every plant they will eat (the weak spot of a maze: one plant between the anthill and a short run to
+// the fruit). Their whole way only on a tap on a cricket in the coming wave, for a few seconds, drawn like a trail in
+// the ground. (A red dashed line all the time was too loud for the field.)
+let digSeen = null, digCache = null, digShowT = 0;
+function digState() {
+  if (game.phase !== 'build' && game.phase !== 'wave') return null;
+  const hills = digHills(game); if (!hills.size) return null;
   const sig = `${[...hills]}|${game.plants.map((p) => `${p.i},${p.j},${p.lvl}`).join(';')}|${game.stubs.length}`;
-  if (!digCache || digCache.sig !== sig || digCache.g !== game) digCache = { sig, g: game, trails: digTrails(game) };
-  for (const [e, tr] of digCache.trails.entries()) {
-    if (!hills.has(e)) continue;
-    const pts = tr.cells.map(([i, j]) => cellCenter(i, j)); pts.unshift(hillPos(e));
-    c.save(); c.globalAlpha = .85; c.lineWidth = 3.2; c.lineCap = 'round'; c.lineJoin = 'round'; c.setLineDash([7, 7]); c.lineDashOffset = -t * 18;
-    c.strokeStyle = 'rgba(120,20,10,.5)'; c.lineWidth = 5.5; c.beginPath(); pts.forEach(([x, y], k) => (k ? c.lineTo(x, y) : c.moveTo(x, y))); c.stroke();
-    c.strokeStyle = '#ff5a3a'; c.lineWidth = 3; c.stroke();
-    c.setLineDash([]); c.lineWidth = 3;
-    for (const [i, j] of tr.eats) { const [x, y] = cellCenter(i, j), r = 13 + Math.sin(t * 5) * 1.5; c.strokeStyle = '#ff3a2a'; c.beginPath(); c.arc(x, y - 6, r, 0, A.TAU); c.stroke(); c.beginPath(); c.moveTo(x - 6, y - 12); c.lineTo(x + 6, y); c.moveTo(x + 6, y - 12); c.lineTo(x - 6, y); c.stroke(); }
+  if (!digCache || digCache.sig !== sig || digCache.g !== game) digCache = { sig, g: game, trails: digTrails(game).map((tr, e) => ({ ...tr, e, smooth: null })).filter((tr) => hills.has(tr.e)) };
+  return digCache;
+}
+// the way, under the plants: a darker trail of dug earth that fades out
+function drawDigWay(dt) {
+  if (digShowT <= 0) return; digShowT -= dt; const st = digState(); if (!st) return;
+  const a = Math.min(1, digShowT / .6);
+  for (const tr of st.trails) {
+    if (!tr.smooth) { const pts = tr.cells.map(([i, j]) => cellCenter(i, j)); pts.unshift(hillPos(tr.e)); tr.smooth = A.chaikin(pts, 3); }
+    const sm = tr.smooth;
+    c.save(); c.lineCap = 'round'; c.lineJoin = 'round';
+    for (const [w, col] of [[20, `rgba(60,34,12,${.42 * a})`], [11, `rgba(105,66,28,${.5 * a})`], [3, `rgba(150,105,55,${.45 * a})`]]) { c.lineWidth = w; c.strokeStyle = col; c.beginPath(); sm.forEach(([x, y], n) => (n ? c.lineTo(x, y) : c.moveTo(x, y))); c.stroke(); }
     c.restore();
+  }
+}
+// the marks, over the plants: a cricket on every plant they will eat
+function drawDigMarks(t) {
+  const st = digState(); if (!st) return;
+  if (!digSeen) { hintOnce('dig', T.digHint, 9); digSeen = true; }
+  const s = bugSprite('cricket', Math.floor(t * 4) % 2), k = 30 / s.w;
+  for (const tr of st.trails) for (const [i, j] of tr.eats) {
+    const [x, y] = cellCenter(i, j), bob = Math.sin(t * 3 + i + j) * 1.5;
+    c.save(); c.translate(x + 12, y - 26 + bob); c.fillStyle = 'rgba(255,248,225,.85)'; c.strokeStyle = 'rgba(90,50,20,.55)'; c.lineWidth = 1.5; c.beginPath(); c.arc(0, 0, 13, 0, A.TAU); c.fill(); c.stroke();
+    c.rotate(-.6); c.scale(k, k); blit(s, -s.w / 2, -s.h / 2); c.restore();
   }
 }
 // the reach of a plant that hits walkers only close by (the dandelion): an inner ring
@@ -988,7 +1002,7 @@ function nextWave(x, y, w, h, t) {
   let bx = x + h + 4;
   if (!build && room > per * prev.length + 40) { A.hdText(c, 'Дальше:', bx, cy + .5, 11, '#a08060', { stroke: null, align: 'left' }); bx += 46; }
   const shown = !build && bx > x + h + 4 ? Math.min(prev.length, Math.floor((x + w - 6 - bx) / per)) : fitN;
-  prev.slice(0, shown).forEach(([kind, cnt], i) => bugChip(kind, cnt, bx + 12 + i * per, cy, () => {}));
+  prev.slice(0, shown).forEach(([kind, cnt], i) => bugChip(kind, cnt, bx + 12 + i * per, cy, BUGS[kind].dig ? () => { digShowT = 3.5; } : () => {})); // a tap on a digger: their way for a while
   if (shown < prev.length) A.hdText(c, `+${prev.length - shown}`, bx + shown * per + 4, cy + .5, 11, '#a08060', { stroke: null, align: 'left' });
   if (!endW) return;
   const ex = x + w - endW - 5, eh = 24, ey = cy - eh / 2;
