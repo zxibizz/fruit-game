@@ -1,0 +1,37 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createGame, place, upgrade, startWave, step } from '../public/game.js';
+import { createTelemetry } from '../public/telemetry.js';
+
+// The recorder of public/telemetry.js on a real party of the game: what a player did and what the wave did come out
+// as records, they wait in storage until the server takes them, and nothing is lost when it does not.
+const memory = () => { const m = new Map(); return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k) }; };
+
+test('a party is recorded wave by wave: the garden, the trail, what was built and what bit the fruit', async () => {
+  const sent = []; let up = false;
+  const tm = createTelemetry({ storage: memory(), post: async (body) => { if (up) sent.push(...JSON.parse(body)); return up; } });
+  const g = createGame(0, 7, {}); tm.start(g);
+  g.dew = 1000; for (let j = 0; j < 7; j++) place(g, 'pumpkin', 9, j); place(g, 'rose', 8, 3); place(g, 'corn', 10, 4); upgrade(g, g.plants.at(-1));
+  tm.observe(g); g.events.length = 0;
+  startWave(g);
+  for (let n = 0; n < 60 * 90 && g.phase === 'wave'; n++) { step(g, 1 / 60); tm.tick(1 / 60, 2, false); tm.observe(g); g.events.length = 0; }
+  assert.equal(g.phase, 'build', 'the first wave is over');
+  assert.ok(tm.pending >= 2, 'kept while the server is away');
+  up = true; await tm.flush();
+  assert.equal(tm.pending, 0, 'sent and dropped');
+  const [start, wave] = sent;
+  assert.equal(start.type, 'start'); assert.equal(start.level, 0); assert.equal(start.seed, 7); assert.ok(start.dev && start.id && start.ver);
+  assert.equal(wave.type, 'wave'); assert.equal(wave.n, 1); assert.equal(wave.id, start.id);
+  assert.equal(wave.garden.plants.length, 9); assert.ok(wave.garden.trail > 14, 'the pumpkins lengthen the trail');
+  assert.deepEqual(wave.before.filter((a) => a[0] === 'place').length, 9); assert.equal(wave.before.filter((a) => a[0] === 'up').length, 1);
+  assert.ok(Object.values(wave.kills).reduce((a, b) => a + b, 0) > 0, 'kills counted');
+  assert.ok(wave.t > 0 && wave.atSpeed[1] > 0, 'game and real time');
+  assert.equal(typeof wave.dewEnd, 'number');
+});
+
+test('a party left in the middle is marked; disabled, nothing is kept', () => {
+  const tm = createTelemetry({ storage: memory(), post: async () => false });
+  const g = createGame(1, 3, {}); tm.start(g); startWave(g); tm.observe(g); g.events.length = 0; tm.quit(g);
+  assert.equal(tm.pending, 3); // start, the wave left open, quit
+  const off = createTelemetry({ storage: memory(), enabled: false }); off.start(g); off.quit(g); assert.equal(off.pending, 0);
+});

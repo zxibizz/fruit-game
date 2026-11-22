@@ -3,7 +3,7 @@
 // The music (public/music/) is not in the list: a track goes into its own cache when it is first played, and that
 // cache outlives the versions, so an update does not download the music again.
 // A new version installs in the background and takes over at once; the running page offers a reload on the home screen.
-const VERSION = '0.23.1';
+const VERSION = '0.24.0';
 const CACHE = `fruit-v${VERSION}`;
 const MUSIC = 'fruit-music-1';
 const ASSETS = [
@@ -17,6 +17,7 @@ const ASSETS = [
   'icons/icon-512.png',
   'index.html',
   'manifest.webmanifest',
+  'telemetry.js',
   'vendor/nunito-cyrillic-900-normal.woff2',
   'vendor/nunito-latin-900-normal.woff2',
   'view.js',

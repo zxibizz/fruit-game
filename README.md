@@ -60,6 +60,18 @@ and in portrait (turned there).
   untouched trail must lose every level with the most perks there can be by then (three stars on every level before),
   planted any of four ways; half a garden or no powers must do worse. The suite takes half a minute and needs `cargo`
   (the bot is native); the full picture is the balance matrix below.
+- Party analytics: `public/telemetry.js` records every party wave by wave — the garden when a wave is called
+  (every plant, its level and cell, the roots of eaten ones), the trail through it, the dew and the fruit, the early
+  call, what was built, grown, sold and mended before and during the wave, frost and rain, the bugs killed and the
+  bugs that bit the fruit by kind, the plants eaten, the time (game and real, paused, at what speed), and how the
+  party ended (won, lost, left). Nothing personal: a random id of the device, the version. The records wait in
+  localStorage until the server takes them (`POST /api/telemetry`), so offline parties are sent later; a dev page
+  (`?dev`) or a copy run at home sends nothing (`?t=1` records anyway, to check the recording). The server appends
+  them to `$TELEMETRY_DIR/<day>.jsonl` (off without it), with limits on size and rate since the page is public, and
+  gives them back only with `Authorization: Bearer $TELEMETRY_TOKEN` (`GET /api/telemetry?from=&to=`).
+  `node balance/players.mjs` fetches them (token in `$FRUIT_TELEMETRY_TOKEN` or
+  `~/.config/homelab/fruit-game/telemetry-token`) and sums them up level by level and wave by wave
+  (`--party ID` for one party, wave by wave).
 - `balance/` — the balance matrix (dev only, not in the image): `node balance/run.mjs [quick|full|routes] [--margin] [--levels 5,6-8]
   [--set L5.dew=500,FLY_SHARE=.2] [--grid 'L5.budget=12/5.8|12/6.4;L5.pay=150/270|170/300']`. For every level it plays many
   scenarios in parallel (the native bot of `sim/` on a snapshot of the code, a batch per variant of the data; half the

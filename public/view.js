@@ -7,6 +7,10 @@ import {
 } from './game.js';
 import { PLANTS, BUGS, LEVELS, PERKS, PERK_ORDER, PLANT_ORDER, WEED_COST, FERTILE, TUNE, FLY_HP } from './data.js';
 import { initAudio, applyVolume, sfx, muffleMusic } from './audio.js';
+import { createTelemetry } from './telemetry.js';
+// party analytics (telemetry.js), not from a dev page or a copy run at home: their parties are not players' (?t=1
+// records them all the same, to check the recording itself)
+const tm = createTelemetry({ enabled: new URLSearchParams(location.search).has('t') || (!new URLSearchParams(location.search).has('dev') && !/^(localhost|127\.|192\.168\.)/.test(location.hostname)) });
 
 const T = {
   wave: (n, m) => `Волна ${n} / ${m}`, go: 'В бой!', soon: (n, s) => `Волна ${n} через ${s} с`,
@@ -345,8 +349,8 @@ const bugPic = (kind) => pic(`b:${kind}`, 72, 72, (x) => { const s = isBoss(kind
 
 // ---------- game flow ----------
 const metaNow = () => ({ ...progress.perks });
-function enterLevel(g) {
-  game = g; levelIdx = g.level; resize();
+function enterLevel(g, resumed = false) {
+  game = g; levelIdx = g.level; resize(); tm.start(g, resumed);
   sel = drag = pop = null; fx = []; banners = []; appleMood('idle', 0); angles.clear(); anim.clear(); speed = 1; bossSeen.clear();
   grassLayer = null; terrainDirty = true; paused = false;
   showHome(false); showModal(null); ufx = []; zoom = 1; applyCam(); dropLayers(); muffleMusic(false);
@@ -366,7 +370,7 @@ function startLevel(n) {
 }
 function resumeLevel() {
   const g = restore(readSave(), metaNow()); if (!g) { dropSave(); showHome(true); return; }
-  enterLevel(g);
+  enterLevel(g, true);
 }
 function featurePic(f) {
   return pic(`f:${f}`, 84, 84, (x) => {
@@ -463,6 +467,7 @@ let trayPulse = 0, swapAsk = null;
 const panOf = (x) => clamp((ox + x * ws) / (UW * uk) * 2 - 1, -1, 1) * .6; // where on the screen a world x is, for the sound
 const bossSeen = new Set(), dmgFx = new WeakMap(); // dmgFx: the number now rising over a bug
 function handleEvents() {
+  tm.observe(game);
   for (const e of game.events) {
     switch (e.t) {
       case 'hit': if (e.src !== 'burn') {
@@ -527,6 +532,7 @@ function dust(p) { const [x, y] = cellCenter(p.i, p.j); for (let n = 0; n < 8; n
 // ---------- frame ----------
 function frame(ts) {
   const dt = Math.min(.1, (ts - (now || ts)) / 1000); now = ts;
+  if (game) tm.tick(dt, speed, paused);
   if (game && !paused) {
     let acc = dt * speed; while (acc > 1e-6) { const h = Math.min(acc, 1 / 60); step(game, h); acc -= h; }
     handleEvents();
@@ -1199,6 +1205,7 @@ const $ = (id) => document.getElementById(id);
 function showHome(on) {
   $('home').hidden = !on;
   if (!on) return;
+  if (game) tm.quit(game); // the level is left for the home screen (after its end there is no party to leave)
   paused = true; muffleMusic(false);
   const free = starsAll() - starsSpent(), save = readSave();
   $('bPerks').innerHTML = `${T.perks}${free > 0 ? `<span class="badge">★ ${free}</span>` : ''}`;
@@ -1322,6 +1329,8 @@ function drawLogo() {
 async function boot() {
   try { await document.fonts.load('900 16px Nunito'); } catch { /* font is optional */ }
   initAudio(audio);
+  // the page goes to the background or away: what waits is sent while it still can be
+  addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') tm.flush(true); }); addEventListener('pagehide', () => tm.flush(true)); tm.flush();
   resize(); drawLogo(); showHome(true);
   game = createGame(0); paused = true; // a field behind the menu
   $('bPerks').onclick = () => { sfx.tap(); openPerks(); }; $('bGuide').onclick = () => { sfx.tap(); guideTab = 'plants'; openGuide(); }; $('bSet').onclick = () => { sfx.tap(); openSound(); };
