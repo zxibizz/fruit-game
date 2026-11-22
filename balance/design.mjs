@@ -1,13 +1,15 @@
 // The designer: looks for the strongest garden a level allows — the trail and the plants around it together — by
 // trying changes on a garden laid out beforehand and keeping what the simulation says is better.
-//   node balance/design.mjs --level 3 [--rounds 40] [--batch 12] [--seed 1] [--from max/alt] [--out FILE] [--jobs N]
+//   node balance/design.mjs --level 3 [--rounds 40] [--batch 12] [--seed 1] [--from max/alt] [--start bot|expert]
+//     [--hi 8] [--out FILE] [--jobs N]
 // A design is a plan (sim/src/bot.rs, option plan): the plants to put and to grow, cell by cell, in order. It starts
-// from the smart bot's own party (on its own maze, or on the maze --from of sim/src/routes.rs) and is changed a step
+// from the smart bot's own party (on its own maze, or on the maze --from of sim/src/routes.rs), or with --start expert
+// from the party of the expert (the strategy of balance/strategy.json) and is changed a step
 // at a time: two plants trade cells (a pepper goes where the trail winds round it, a mint where the most plants
 // reach), a plant becomes another kind, a plant off the trail moves, steps come earlier or later, a plant is grown
 // or not, a pumpkin is put on the trail or taken out of a wall. Every change is played against bugs a little
-// healthier than the design holds now (two healths a step apart); it is kept when the garden lasts longer. When the
-// design wins both, the bugs get healthier. In the end the margin (margin.mjs) of the design and of the bot it
+// healthier than the design holds now, on two seeds of the game (a garden fitted to one seed's luck is no garden);
+// it is kept when the garden lasts longer. When the design wins both, the bugs get healthier. In the end the margin (margin.mjs) of the design and of the bot it
 // started from are found: the difference is what the layout is worth.
 import { writeFileSync, readFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir, homedir, setPriority } from 'node:os';
@@ -19,14 +21,15 @@ import { resolve } from './scenario.mjs';
 import { margins, show } from './margin.mjs';
 
 const args = process.argv.slice(2), opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
-const level = Number(opt('--level', 1)) - 1, ROUNDS = Number(opt('--rounds', 40)), BATCH = Number(opt('--batch', 12)), from = opt('--from'), jobs = opt('--jobs') ? { jobs: Number(opt('--jobs')) } : {};
+const START = opt('--start', 'bot'), HI = Number(opt('--hi', 8)), level = Number(opt('--level', 1)) - 1, ROUNDS = Number(opt('--rounds', 40)), BATCH = Number(opt('--batch', 12)), from = opt('--from'), jobs = opt('--jobs') ? { jobs: Number(opt('--jobs')) } : {};
 const out = opt('--out', join(homedir(), 'tmp', 'balance', 'designs', `L${level + 1}.json`)), STEP = 1.05;
 try { setPriority(19); } catch { /* as it is */ }
 let rs = Number(opt('--seed', 1)) * 2654435761 >>> 0;
 const rnd = () => { rs = (rs + 0x6D2B79F5) >>> 0; let t = rs; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 const pick = (a) => a[Math.floor(rnd() * a.length)], K = (i, j) => i + ',' + j;
 const SMART = { place: 'best', upgrades: 'greedy', meta: 'exp2', terrain: true, powers: true, early: true, repair: true, ...(from ? { maze: from } : { route: 1 }) };
-const base = resolve({ level, opts: SMART }), kinds = LEVELS[level].plants;
+const policy = START === 'expert' ? JSON.parse(readFileSync(new URL('./strategy.json', import.meta.url), 'utf8')).policy : null;
+const base = { ...resolve({ level, opts: SMART }), ...(policy ? { policy } : {}) }, kinds = LEVELS[level].plants;
 const run = (list) => play(list.map((opts) => ({ level, opts })), jobs).map((x) => { if (x.err) throw new Error(x.err); return x.res; });
 
 // the bot's own party, as a plan
@@ -103,26 +106,29 @@ function mutate(plan) {
 
 // how long a plan lasts against bugs h and a step more times healthier: a win counts for more than any loss, then the fruit left; a loss by the time it took
 const score = (r) => (r.won ? 1e5 + r.hp : r.time);
-function rate(plans, h) { const res = run(plans.flatMap((plan) => [h, h * STEP].map((hp) => ({ ...base, plan, hp: Math.round(hp * 1000) / 1000 })))); return plans.map((_, k) => ({ f: score(res[2 * k]) + score(res[2 * k + 1]), wins: res[2 * k].won + res[2 * k + 1].won })); }
+function rate(plans, h) { const res = run(plans.flatMap((plan) => [7, 8].map((seed) => ({ ...base, seed, plan, hp: Math.round(h * 1000) / 1000 })))); return plans.map((_, k) => ({ f: score(res[2 * k]) + score(res[2 * k + 1]), wins: res[2 * k].won + res[2 * k + 1].won })); }
 
 let best = seedPlan, h = 1, cur = rate([best], h)[0], kept = 0; const t0 = Date.now();
 const log = (s) => process.stderr.write(s + '\n');
-log(`L${level + 1} ${LEVELS[level].name}: the bot's garden${from ? ` on ${from}` : ''}, ${seedPlan.length} steps`);
+log(`L${level + 1} ${LEVELS[level].name}: the ${START}'s garden${from ? ` on ${from}` : ''}, ${seedPlan.length} steps`);
 for (let round = 1; round <= ROUNDS; round++) {
-  while (cur.wins === 2 && h < 4) { h *= STEP; cur = rate([best], h)[0]; }
+  while (cur.wins === 2 && h < HI) { h *= STEP; cur = rate([best], h)[0]; }
   const cands = []; for (let n = 0; cands.length < BATCH && n < BATCH * 6; n++) { let p = mutate(best); if (p && rnd() < .3) p = mutate(p) || p; if (p) cands.push(p); }
   const fs = rate(cands, h); let top = -1; fs.forEach((x, k) => { if (x.f > (top < 0 ? cur.f : fs[top].f)) top = k; });
   if (top >= 0) { best = cands[top]; cur = fs[top]; kept++; }
-  if (round % 5 === 0 || round === ROUNDS) log(`  round ${round}: bugs ×${h.toFixed(2)}, ${kept} changes kept, ${Math.round((Date.now() - t0) / 1000)}s`);
+  if (round % 10 === 0 || round === ROUNDS) log(`  round ${round}: bugs ×${h.toFixed(2)}, ${kept} changes kept, ${Math.round((Date.now() - t0) / 1000)}s`);
 }
 // the margins: the bot as it plays, its own garden as a plan, and the design
-const tasks = [{ opts: base }, { opts: { ...base, plan: seedPlan } }, { opts: { ...base, plan: best } }];
+// (each the median over the seeds 7, 8 and 9 of the game; 9 the search never played)
+const SEEDS = [7, 8, 9], tasks = [{ opts: base }, { opts: { ...base, plan: seedPlan } }, { opts: { ...base, plan: best } }].flatMap((t) => SEEDS.map((seed) => ({ opts: { ...t.opts, seed } })));
 const at1 = run(tasks.map((t) => t.opts));
-const [bot, seed, design] = await margins(tasks.map((task, k) => ({ task, won: at1[k].won })), async (ts) => run(ts.map((t) => t.opts)));
+const ms = await margins(tasks.map((task, k) => ({ task, won: at1[k].won })), async (ts) => run(ts.map((t) => t.opts)), { hi: HI });
+const medOf = (a) => { const xs = ms.slice(a * SEEDS.length, (a + 1) * SEEDS.length).sort((p, q) => p.at - q.at); return { ...xs[1], each: xs.map((x) => x.at) }; };
+const [bot, seed, design] = [0, 1, 2].map(medOf);
 const s = study(best), count = {}; for (const c of s.cells.values()) count[c.kind] = (count[c.kind] || 0) + 1;
 const peppers = [...s.cells.values()].filter((c) => c.kind === 'pepper'), wrap = peppers.length ? peppers.reduce((t, c) => t + worth(s, 'pepper', c.i, c.j), 0) / peppers.length : null;
 const map = LEVELS[level].map.map((line, j) => [...line].map((ch, i) => { const c = s.cells.get(K(i, j)); return c ? (c.kind === 'pumpkin' ? '#' : c.kind[0].toUpperCase()) : s.on.has(K(i, j)) && ch === '.' ? 'o' : ch === '.' ? ' ' : ch.toLowerCase(); }).join(''));
-writeFileSync(out, JSON.stringify({ level: level + 1, from: from || 'best', margin: { bot, seed, design }, trail: s.trail.length, plants: count, plan: best }));
-console.log(`L${level + 1}: the bot holds bugs of ${show(bot)}, its garden as a plan ${show(seed)}, the design ${show(design)}  (trail ${s.trail.length} cells; ${Object.entries(count).map(([k, n]) => `${k} ${n}`).join(', ')}${wrap != null ? `; a pepper burns ${wrap.toFixed(1)} cells of the trail` : ''})`);
+writeFileSync(out, JSON.stringify({ level: level + 1, from: from || 'best', start: START, rounds: ROUNDS, h, margin: { bot, seed, design }, trail: s.trail.length, plants: count, plan: best }));
+console.log(`L${level + 1} (from the ${START}): the ${START} holds bugs of ${show(bot)}, its garden as a plan ${show(seed)}, the design ${show(design)} [${design.each.map((v) => Math.round(v * 100)).join(' ')}]  (trail ${s.trail.length} cells; ${Object.entries(count).map(([k, n]) => `${k} ${n}`).join(', ')}${wrap != null ? `; a pepper burns ${wrap.toFixed(1)} cells of the trail` : ''})`);
 console.log(map.join('\n'));
 console.log(`(# pumpkin, capitals — plants by their first letter, o — the trail)  ${out}`);
