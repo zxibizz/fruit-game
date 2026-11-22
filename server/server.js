@@ -47,7 +47,7 @@ export function createServer({ telemetryDir = process.env.TELEMETRY_DIR, token =
       const d = day(), file = path.join(telemetryDir, `${d}.jsonl`), got = Date.now(), text = list.map((r) => JSON.stringify({ ...r, got })).join('\n') + '\n';
       if (!sizes.has(d)) { sizes.clear(); let was = 0; try { was = (await fs.stat(file)).size; } catch { /* a new day */ } if (!sizes.has(d)) sizes.set(d, was); }
       // counted before the write, in one step with the check: requests at the same time cannot all slip under the cap
-      if (sizes.get(d) + text.length > DAY_CAP) return reply(res, 507); sizes.set(d, sizes.get(d) + text.length);
+      const bytes = Buffer.byteLength(text); if (sizes.get(d) + bytes > DAY_CAP) return reply(res, 507); sizes.set(d, sizes.get(d) + bytes);
       await fs.mkdir(telemetryDir, { recursive: true });
       await fs.appendFile(file, text);
       return reply(res, 200, { ok: true, n: list.length });

@@ -1333,7 +1333,7 @@ async function boot() {
   // closed or reloaded in the middle of a level: the party is left (and taken up again when the page comes back from the
   // browser's cache as it was)
   addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') tm.flush(true); });
-  addEventListener('pagehide', () => { if (game) tm.quit(game); tm.flush(true); }); addEventListener('pageshow', (e) => { if (e.persisted && game && !['won', 'lost'].includes(game.phase)) tm.start(game, true); }); tm.flush();
+  addEventListener('pagehide', () => { if (game) tm.quit(game); tm.flush(true); }); addEventListener('pageshow', (e) => { if (e.persisted && game && $('home').hidden && !['won', 'lost'].includes(game.phase)) tm.start(game, true); }); // not from the home screen: that party was left already tm.flush();
   resize(); drawLogo(); showHome(true);
   game = createGame(0); paused = true; // a field behind the menu
   $('bPerks').onclick = () => { sfx.tap(); openPerks(); }; $('bGuide').onclick = () => { sfx.tap(); guideTab = 'plants'; openGuide(); }; $('bSet').onclick = () => { sfx.tap(); openSound(); };
