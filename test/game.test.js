@@ -380,11 +380,17 @@ test('a cob of corn hits only so many bugs of a pack', () => {
 
 // Diggers: the way they eat through the garden is what the player is shown (digTrails); and they come last in a wave,
 // so that the holes they make are not a road for the rest of it.
+const GARDEN18 = [["pumpkin",1,13,5],["pepper",3,10,1],["pumpkin",1,4,6],["pumpkin",1,10,5],["rose",3,12,2],["corn",3,12,0],["corn",2,13,0],["aloe",3,11,2],["mint",3,9,2],["pepper",3,8,0],["dandelion",3,7,3],["dandelion",3,6,3],["dandelion",1,2,1],["dandelion",1,2,5],["corn",3,8,2],["pepper",3,6,1],["rose",3,7,2],["corn",3,6,2],["corn",3,5,3],["pepper",3,4,4],["corn",2,4,0],["aloe",1,13,6],["aloe",2,0,4],["mint",3,4,1],["corn",2,3,2],["corn",1,2,2],["pepper",1,10,4],["mint",1,9,4],["rose",1,9,5],["flytrap",1,2,4],["flytrap",1,2,3],["aloe",1,5,4],["aloe",1,3,1],["pepper",1,7,4],["flytrap",1,10,6],["flytrap",1,9,6],["flytrap",1,8,6],["flytrap",1,12,3],["flytrap",1,12,4],["corn",1,5,6],["corn",1,6,6],["corn",1,7,6]];
 test('diggers: their way eats through the one plant that shuts a short run, and they come last in every wave', async () => {
   const { digTrails } = await import('../public/game.js');
   const g = createGame(4); g.dew = 1e9; const [ei, ej] = g.entries[0];
   place(g, 'pumpkin', ei - 1, ej); // one plant in front of the anthill, the rest of the field open
   const [d] = digTrails(g);
   assert.deepEqual(d.cells[0], [ei, ej]); assert.deepEqual(d.cells.at(-1), g.fruit);
+  // a real garden (a party on «Крапивный лог», wave 18, from the analytics): a long maze where one flytrap by the
+  // anthill shuts an empty run to the fruit; the crickets ate it every wave and the party was lost to them
+  const h = createGame(4); h.dew = 1e9;
+  for (const [t, lvl, i, j] of GARDEN18) { if (place(h, t, i, j)) { const p = h.plants.at(-1); while (p.lvl < lvl) upgrade(h, p); } }
+  const [dh] = digTrails(h); assert.deepEqual(dh.eats, [[12, 4]]); assert.ok(dh.cells.length < trails(h)[0].length / 2, 'a short way for them');
   for (const L of LEVELS) for (const w of L.waves) { const ks = w.map((x) => x[0]).filter((k) => !BUGS[k].boss), f = ks.findIndex((k) => BUGS[k].dig); if (f >= 0) assert.ok(ks.slice(f).every((k) => BUGS[k].dig), `${L.name}: ${ks}`); }
 });

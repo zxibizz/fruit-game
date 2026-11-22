@@ -261,11 +261,14 @@ impl<'a> Game<'a> {
         if bonus != 0.0 { self.gain(bonus); }
         let lv = self.lv; let spec = &lv.waves[self.wave]; self.wave += 1; self.phase = Phase::Wave; self.wave_time = 0.0;
         // with two anthills the groups of a wave come out of them in turn
-        let mut q: Vec<Queued> = Vec::new(); let mut t0 = 0.0; let mut e = self.wave;
+        // (a group starts when half the one before is out, but diggers only once all the others are)
+        let mut q: Vec<Queued> = Vec::new(); let mut t0 = 0.0; let mut e = self.wave; let mut last = 0.0f64;
         for g in spec {
             t0 += g.delay; e += 1;
             let boss = self.d.bugs[g.kind].boss;
+            if self.d.bugs[g.kind].dig != 0.0 { t0 = f64::max(t0, last + g.delay); }
             for n in 0..g.count { q.push(Queued { kind: g.kind, at: t0 + n as f64 * g.gap, e: (if boss { e + n } else { e }) % self.entries.len() }); }
+            last = f64::max(last, t0 + (g.count as f64 - 1.0) * g.gap);
             t0 += g.count as f64 * g.gap * 0.5;
         }
         q.sort_by(|a, b| a.at.partial_cmp(&b.at).unwrap());

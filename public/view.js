@@ -3,7 +3,7 @@ import * as A from './art.js';
 import {
   createGame, step, plantOn, plantProblem, placeProblem, blockingCells, previewTrails, trails, upgrade, upgradeCost, removePlant, refund, isFresh,
   startWave, earlyBonus, wavePreview, usePower, stars, regrow, regrowCost, clearStub, stubAt, heal, healCost, bugHp, rewardOf, pstat, clearWeed,
-  snapshot, restore, digTrails, COLS, ROWS, BREAK,
+  snapshot, restore, digTrails, digHills, COLS, ROWS, BREAK,
 } from './game.js';
 import { PLANTS, BUGS, LEVELS, PERKS, PERK_ORDER, PLANT_ORDER, WEED_COST, FERTILE, TUNE, FLY_HP } from './data.js';
 import { initAudio, applyVolume, sfx, muffleMusic } from './audio.js';
@@ -592,12 +592,17 @@ function draw(dt) {
 // The way the diggers (crickets) will take — a red dashed line from the anthill to the fruit, a mark on every plant
 // they will eat through — while diggers are in the coming wave or on the field. The walkers' trail is the beaten path
 // of the terrain; nothing else shows that a long maze can be a short way for the ones that eat through it.
+// (from the anthills they will come out of; worked out again only when the garden or the diggers' hills change)
+let digSeen = null, digCache = null;
 function drawDigTrails(t) {
-  const coming = game.phase === 'build' && wavePreview(game).some(([k]) => BUGS[k].dig), on = game.bugs.some((b) => BUGS[b.kind].dig);
-  if (!coming && !on) return;
-  hintOnce('dig', T.digHint, 9);
-  for (const [e, tr] of digTrails(game).entries()) {
-    const pts = tr.cells.map(([i, j]) => cellCenter(i, j)); pts[0] = hillPos(e);
+  if (game.phase !== 'build' && game.phase !== 'wave') return;
+  const hills = digHills(game); if (!hills.size) return;
+  if (!digSeen) { hintOnce('dig', T.digHint, 9); digSeen = true; }
+  const sig = `${[...hills]}|${game.plants.map((p) => `${p.i},${p.j},${p.lvl}`).join(';')}|${game.stubs.length}`;
+  if (!digCache || digCache.sig !== sig || digCache.g !== game) digCache = { sig, g: game, trails: digTrails(game) };
+  for (const [e, tr] of digCache.trails.entries()) {
+    if (!hills.has(e)) continue;
+    const pts = tr.cells.map(([i, j]) => cellCenter(i, j)); pts.unshift(hillPos(e));
     c.save(); c.globalAlpha = .85; c.lineWidth = 3.2; c.lineCap = 'round'; c.lineJoin = 'round'; c.setLineDash([7, 7]); c.lineDashOffset = -t * 18;
     c.strokeStyle = 'rgba(120,20,10,.5)'; c.lineWidth = 5.5; c.beginPath(); pts.forEach(([x, y], k) => (k ? c.lineTo(x, y) : c.moveTo(x, y))); c.stroke();
     c.strokeStyle = '#ff5a3a'; c.lineWidth = 3; c.stroke();
@@ -1349,10 +1354,10 @@ async function boot() {
   try { await document.fonts.load('900 16px Nunito'); } catch { /* font is optional */ }
   initAudio(audio);
   // the page goes to the background or away: what waits is sent while it still can be
-  // closed or reloaded in the middle of a level: the party is left (and taken up again when the page comes back from the
-  // browser's cache as it was)
+  // closed or reloaded in the middle of a level: the party is left (taken up again from the save, under the same id)
   addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') tm.flush(true); });
-  addEventListener('pagehide', () => { if (game) tm.quit(game); tm.flush(true); }); addEventListener('pageshow', (e) => { if (e.persisted && game && $('home').hidden && !['won', 'lost'].includes(game.phase)) tm.start(game, true); }); // not from the home screen: that party was left already tm.flush();
+  // (kept in the browser's cache, the page comes back as it was, the party with it: nothing is left then)
+  addEventListener('pagehide', (e) => { if (game && !e.persisted) tm.quit(game); tm.flush(true); }); tm.flush();
   resize(); drawLogo(); showHome(true);
   game = createGame(0); paused = true; // a field behind the menu
   $('bPerks').onclick = () => { sfx.tap(); openPerks(); }; $('bGuide').onclick = () => { sfx.tap(); guideTab = 'plants'; openGuide(); }; $('bSet').onclick = () => { sfx.tap(); openSound(); };

@@ -5,8 +5,9 @@ export const VERSION = '0.25.0';
 // The version of a saved level: raised when the balance changes so much that a garden grown under the old rules does
 // not belong in the new level (2: no fatigue, tight packs, one health rule; 3: the plants given their places and
 // every level retuned; 4: the waves retuned for the ordinary player, some levels with fewer and healthier bugs; 5: the
-// anthill of «Старый сад» moved to the edge, where an old garden could shut the trail; an older save is dropped).
-const SAVE_V = 5;
+// anthill of «Старый сад» moved to the edge, where an old garden could shut the trail; 6: diggers last in a wave;
+// an older save is dropped).
+const SAVE_V = 6;
 export { COLS, ROWS, BREAK };
 
 const DIRS = [[-1, 0], [0, -1], [0, 1], [1, 0]]; // tie order: towards the fruit side first
@@ -126,6 +127,14 @@ export function trail(g, dist = g.dist, e = 0) {
     dir = [nx[0] - i, nx[1] - j]; [i, j] = nx; out.push(nx);
   }
   return out;
+}
+// The anthills diggers come out of: in the build phase those the diggers of the coming wave will use (as startWave
+// gives the groups out), in a wave those of the diggers on the field.
+export function digHills(g) {
+  const hills = new Set();
+  if (g.phase === 'build') { const spec = g.L.waves[g.wave] || []; spec.forEach(([kind], k) => { if (BUGS[kind].dig && !BUGS[kind].boss) hills.add((g.wave + 2 + k) % g.entries.length); }); }
+  for (const b of g.bugs) if (BUGS[b.kind].dig) hills.add(b.e % g.entries.length);
+  return hills;
 }
 // The way diggers (crickets) take from every anthill: every cell, and the plants they eat through on it. Shown to the
 // player when diggers are coming: a long maze with one plant between the anthill and an empty run to the fruit is
@@ -260,9 +269,10 @@ export function startWave(g) {
   const bonus = earlyBonus(g); g.nextIn = null;
   if (bonus) { gain(g, bonus); g.events.push({ t: 'early', bonus }); }
   const spec = g.L.waves[g.wave]; g.wave++; g.phase = 'wave'; g.waveTime = 0; g.queue = [];
-  // with two anthills the groups of a wave come out of them in turn
-  let t0 = 0, e = g.wave;
-  for (const [kind, count, gap, delay] of spec) { t0 += delay; e++; for (let n = 0; n < count; n++) g.queue.push({ kind, at: t0 + n * gap, e: (BUGS[kind].boss ? e + n : e) % g.entries.length }); t0 += count * gap * .5; }
+  // with two anthills the groups of a wave come out of them in turn; a group starts when half the one before is out,
+  // but diggers only once all the others are (a hole they eat must not be a road for the rest of the wave)
+  let t0 = 0, e = g.wave, last = 0;
+  for (const [kind, count, gap, delay] of spec) { t0 += delay; e++; if (BUGS[kind].dig) t0 = Math.max(t0, last + delay); for (let n = 0; n < count; n++) g.queue.push({ kind, at: t0 + n * gap, e: (BUGS[kind].boss ? e + n : e) % g.entries.length }); last = Math.max(last, t0 + (count - 1) * gap); t0 += count * gap * .5; }
   g.queue.sort((a, b) => a.at - b.at);
   g.events.push({ t: 'wave', n: g.wave, boss: spec.find(([k]) => BUGS[k].boss)?.[0] || null });
   return true;
