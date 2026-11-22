@@ -21,7 +21,7 @@ export const PLANTS = {
   // splash with no such limit was worth as much as the pack was big
   corn: { cost: 35, up: [90, 180], hp: [60, 80, 100], range: [1.8, 1.9, 1.95], rate: [.6, .65, .7], dmg: [12, 18, 26], splash: [.8, .8, 1.15], hits: [3, 4, 5], shot: 'kernel', speed: 5 },
   // heals the plants around and grows the eaten ones back (regrow: seconds for one); guard: plants around take that much less damage
-  aloe: { cost: 30, up: [70, 130], hp: [70, 90, 110], range: [2.2, 2.6, 3], heal: [3, 5, 8], regrow: [6, 4, 2.5], guard: [0, 0, .3] },
+  aloe: { cost: 30, up: [70, 130], hp: [70, 90, 110], range: [2.2, 2.6, 3.2], heal: [3, 5, 8], regrow: [6, 4, 2.5], guard: [0, 0, .3] },
   // chill: every so many seconds the bugs around freeze for a second
   mint: { cost: 30, up: [80, 150], hp: [60, 80, 100], range: [1.5, 1.6, 1.7], slow: [.3, .4, .5], chill: [0, 0, 6], air: true },
   // burns every bug around it, however many: little to each, so it is for dense crowds of small bugs
@@ -34,7 +34,7 @@ export const PLANTS = {
   // answer to the few thick bugs the others have worn down; eatAir: the third level catches flyers too
   flytrap: { cost: 60, up: [140, 250], hp: [70, 90, 110], range: [1.5, 1.5, 1.6], eat: [3.5, 3, 2.5], chomp: [90, 170, 280], gulp: [.35, .45, .55], eatAir: [0, 0, 1] },
   // the plants around shoot that much more often
-  bell: { cost: 45, up: [110, 200], hp: [50, 65, 80], range: [1.5, 1.5, 2.3], buff: [.3, .45, .6] },
+  bell: { cost: 45, up: [110, 200], hp: [50, 65, 80], range: [1.5, 1.5, 2.9], buff: [.3, .45, .6] },
 };
 export const MARK_T = 3;
 export const PLANT_ORDER = ['pumpkin', 'rose', 'corn', 'aloe', 'mint', 'pepper', 'dandelion', 'flytrap', 'bell'];
