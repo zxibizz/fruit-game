@@ -25,13 +25,14 @@ const smart = (o = {}) => ({ ...SMART, ...o });
 // Players as they are taken to play (a guess until parties of real players are looked at). novice: a short maze, the
 // plants where they do most, grown before more are planted, the ground not looked at, no frost or
 // rain, waves not called early, holes left to grow back, one star a level behind them. ordinary: half a maze, the
-// plants where they do most (as the smart bot puts them), the ground not looked at, frost and rain at the first
+// plants where they do most (as the smart bot puts them), mud and nettles seen (they are the point of some levels:
+// blind to them, the ordinary player did no better than a lazy garden on «Старый сад»), frost and rain at the first
 // chance, waves not called early, two stars a level. (Plants put at random by the trail, as 'spread' does, made
 // both lose to a lazy garden with no maze at all, and the shooters by the fruit alone ('end') put the novice out by
 // the middle of every level: no player plays like that.)
 export const PLAYERS = {
   novice: { cls: 'min', opts: { place: 'best', upgrades: 'first', meta: 'exp1', terrain: false, powers: false, early: false, repair: false } },
-  ordinary: { cls: 'mid', opts: { place: 'best', upgrades: 'greedy', meta: 'exp2', terrain: false, powers: 'eager', early: false, repair: true } },
+  ordinary: { cls: 'mid', opts: { place: 'best', upgrades: 'greedy', meta: 'exp2', terrain: true, powers: 'eager', early: false, repair: true } },
 };
 const EXPLOIT = { route: 0, bank: 'level', meta: 'full' }; // every perk at once: a replay after the whole game
 

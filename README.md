@@ -117,12 +117,16 @@ and in portrait (turned there).
   `node balance/tune.mjs [--levels 1-9] [--dry] [--at 2=9.4/4.7]` tunes the waves: for every level it measures
   the margins of the novice, the ordinary player, the smart bot, the expert and the lazy gardens (on the game's own
   waves and three other draws of them, each margin the median over the draws: the seed of the game changes nothing
-  for the bot, but a bug more or less in a group does) and scales the level's `budget` until the ordinary player
+  for the bot, but a bug more or less in a group does) and, for each health of the bugs of `--hp` (a level's `hp`: how healthy its bugs are against their own health),
+  scales the level's `budget` until the ordinary player
   holds 110% (it wins, and against bugs a tenth healthier it is on the edge); a budget where a lazy garden wins is
   never taken, and a novice out before the last third tilts the budget towards the later waves. The waves of the
   game are one draw, so the numbers it finds are checked on that draw too: the smart bot wins, every lazy garden
   loses, the ordinary player wins on most of its mazes (the tests hold the first two). A level where a lazy garden
   does as well as the ordinary player is said so: no budget makes the maze pay there, the map or the rules must.
+  Of the healths tried it takes the one where the maze pays most (the ordinary player furthest above the best lazy
+  garden) with the hard rules kept on the game's own waves. A moderate 1.4 (fewer bugs, healthier) made the maze pay
+  more on four levels; twice as healthy never did (the bosses grow too).
 - `sim/` — the simulation once more, in Rust, and the bot that plays it (dev only, not in the image; `cargo` builds
   it, no dependencies). The balance matrix and the balance tests run on it: a party takes a tenth of a second where
   the JS simulation with a JS bot took three.

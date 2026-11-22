@@ -262,7 +262,8 @@ function gain(g, n) { g.dew += n; g.stats.earned += n; }
 
 // How much stronger the bugs of a wave are than in the first one, and how much harder they bite the plants.
 export const hpMul = (g, wave = g.wave) => 1 + TUNE.hpGrowth * (wave - 1);
-export const bugHp = (g, kind, wave = g.wave) => Math.round(BUGS[kind].hp * (BUGS[kind].fly ? 1 + (hpMul(g, wave) - 1) * FLY_HP : hpMul(g, wave)));
+// (L.hp: how healthy the bugs of this level are, against their own health; 1 on most levels)
+export const bugHp = (g, kind, wave = g.wave) => Math.round(BUGS[kind].hp * g.L.hp * (BUGS[kind].fly ? 1 + (hpMul(g, wave) - 1) * FLY_HP : hpMul(g, wave)));
 const chewMul = (g) => 1 + CHEW_GROWTH * (g.wave - 1);
 // A bug comes out of anthill e, or (from: a boss) appears where its boss is.
 // The bugs by the cell they are in, rebuilt every step before the plants look round: a plant checks only the cells

@@ -76,10 +76,10 @@ test('flyers stay a side threat: never most of a wave, and shooters do not waste
   }); });
   const g = createGame(0); g.dew = 5000; const [ei, ej] = g.entries[0];
   let k = 0; for (const [di, dj] of [[-1, 1], [-1, -1], [-2, 1], [-2, -1], [-1, 2], [-1, -2]]) if (place(g, 'rose', ei + di, ej + dj)) k++;
-  send(g, 'ant'); g.queue[0].e = 0; const shots = new Set();
-  for (let t = 0; t < 60 * 20 && (g.queue.length || g.bugs.length); t++) { step(g, 1 / 60); for (const s of g.shots) shots.add(s.id); }
+  send(g, 'ant'); g.queue[0].e = 0; const shots = new Set(); let hp = 0; // the ant's health as the level gives it
+  for (let t = 0; t < 60 * 20 && (g.queue.length || g.bugs.length); t++) { step(g, 1 / 60); if (g.bugs[0]) hp ||= g.bugs[0].maxHp; for (const s of g.shots) shots.add(s.id); }
   assert.ok(k >= 4, 'roses planted'); assert.equal(g.stats.kills ?? 1, 1);
-  assert.equal(shots.size, Math.ceil(BUGS.ant.hp / PLANTS.rose.dmg[0]), 'no shot wasted on a doomed ant');
+  assert.equal(shots.size, Math.ceil(hp / PLANTS.rose.dmg[0]), 'no shot wasted on a doomed ant');
 });
 
 test('bugs that reach the fruit bite it and the level can be lost', () => {

@@ -278,7 +278,7 @@ impl<'a> Game<'a> {
     pub fn hp_mul(&self, wave: usize) -> f64 { 1.0 + self.d.hp_growth * (wave as f64 - 1.0) }
     pub fn bug_hp(&self, kind: usize, wave: usize) -> f64 {
         let b = &self.d.bugs[kind];
-        round(b.hp * (if b.fly { 1.0 + (self.hp_mul(wave) - 1.0) * self.d.fly_hp } else { self.hp_mul(wave) }))
+        round(b.hp * self.lv.hp * (if b.fly { 1.0 + (self.hp_mul(wave) - 1.0) * self.d.fly_hp } else { self.hp_mul(wave) }))
     }
     fn chew_mul(&self) -> f64 { 1.0 + self.d.chew_growth * (self.wave as f64 - 1.0) }
 

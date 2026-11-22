@@ -1,4 +1,4 @@
-// The tuner of the waves: node balance/tune.mjs [--levels 1-9] [--dry] [--target 1.1] [--iter 5] [--jobs 2]
+// The tuner of the waves: node balance/tune.mjs [--levels 1-9] [--dry] [--target 1.1] [--iter 5] [--hp 1,1.4,2] [--jobs 2]
 // For every level it measures, on the waves of the game (the draw of data.js) and three other draws of them (the
 // seed of the game changes nothing for the bot, but the draw does: a tenth of a bug more in the budget, and so a bug
 // more or less in some group, swung a margin by a third on one draw), the margins (each the median over the draws) — how much
@@ -13,7 +13,12 @@
 // When the novice is out before the last third, the budget is tilted (a fifth less for the first wave, the growth
 // such that the level holds as many bugs as before) and scaled to the target again; the tilt is kept when the
 // novice lasts longer.
-// Prints the budget found for every level and what is off; the numbers go to data.js by hand.
+// Two knobs: the budget (how many bugs) and the level's hp (how healthy they are). For every hp of --hp the budget
+// is scaled to the target (starting from as much health over the level as before: twice as healthy, half as many),
+// and of all that is measured the one taken is where the maze pays most — the ordinary player furthest above the best
+// lazy garden — among those that keep the hard rules on the game's own waves (the smart bot and the expert win, no
+// lazy garden wins, the ordinary player wins on half its mazes or more) with the ordinary player at the target.
+// Prints the budget and hp found for every level and what is off; the numbers go to data.js by hand.
 // --at 2=9.4/4.7,2=9.2/4.6 measures those budgets as well (with --dry: only those), to look between steps.
 import { setPriority } from 'node:os';
 import { LEVELS, makeWaves } from '../public/data.js';
@@ -47,9 +52,9 @@ function scenarios(n) {
   return out;
 }
 // one level at one budget: what every scenario makes of the waves as they are, and its margin
-async function measure(n, budget) {
+async function measure(n, budget, hp = LEVELS[n].hp) {
   // the data of every draw at this budget (0: the draw of data.js)
-  const datas = DRAWS.map((w) => { applyOverrides({ [`L${n + 1}.budget`]: `${budget[0]}/${budget[1]}` }, w || null); return exportData(); });
+  const datas = DRAWS.map((w) => { applyOverrides({ [`L${n + 1}.budget`]: `${budget[0]}/${budget[1]}`, [`L${n + 1}.hp`]: hp }, w || null); return exportData(); });
   reset();
   const scs = scenarios(n);
   const run = (ts) => { const r = Array(ts.length).fill(null);
@@ -64,11 +69,12 @@ async function measure(n, budget) {
     return { ...s, res: rs[0], all: rs, m: { ...xs[Math.floor(xs.length / 2)], at: med(xs.map((x) => x?.at ?? 0)) } }; }).filter((s) => s.who === who);
   const L = LEVELS[n], stars = (r) => (!r?.won ? 0 : r.hp >= r.maxHp * .8 ? 3 : r.hp >= r.maxHp * .4 ? 2 : 1);
   const o = of('ordinary'), nv = of('novice'), lz = of('lazy'), sm = of('smart')[0], xp = of('expert')[0];
-  return { budget, ordinary: med(o.map((s) => s.m?.at ?? 0)), ordinaryStars: med(o.flatMap((s) => s.all.map(stars))), each: o.map((s) => `${s.name.split('/')[1]} ${show(s.m)}`),
+  const real = (list) => list.map((s) => s.all[0]);
+  return { budget, hp, realSmart: !!sm.all[0]?.won, realExpert: !xp || !!xp.all[0]?.won, realLazy: real([...lz, ...of('lazy2')]).some((r) => r?.won), realOrd: real(o).filter((r) => r?.won).length / Math.max(1, o.length), ordinary: med(o.map((s) => s.m?.at ?? 0)), ordinaryStars: med(o.flatMap((s) => s.all.map(stars))), each: o.map((s) => `${s.name.split('/')[1]} ${show(s.m)}`),
     novice: med(nv.map((s) => s.m?.at ?? 0)), noviceWave: med(nv.flatMap((s) => s.all.map((r) => (r?.won ? L.count + 1 : r?.wave ?? 0)))), smart: sm.m?.at, expert: xp?.m?.at, expertStars: med((xp?.all || []).map(stars)),
     lazy: Math.max(...lz.map((s) => s.m?.at ?? 0)), lazyWon: lz.filter((s) => s.all.filter((r) => r?.won).length * 2 > s.all.length).map((s) => s.name), lazy2: of('lazy2')[0]?.m?.at, waves: L.count };
 }
-const line = (n, x) => `L${n + 1} budget ${x.budget[0]}/${x.budget[1]}: ordinary ${pct(x.ordinary)} (${x.each.join(', ')}; ${x.ordinaryStars}★ at 100%), novice ${pct(x.novice)} out at wave ${x.noviceWave > x.waves ? 'never' : `${x.noviceWave}/${x.waves}`}, smart ${pct(x.smart)}, expert ${x.expert ? `${pct(x.expert)} ${x.expertStars}★` : '-'}, best lazy ${pct(x.lazy)}, lazy with the usual perks ${pct(x.lazy2)}`;
+const line = (n, x) => `L${n + 1} hp ${x.hp} budget ${x.budget[0]}/${x.budget[1]}: real waves ${x.realSmart ? '' : 'SMART LOSES '}${x.realExpert ? '' : 'EXPERT LOSES '}${x.realLazy ? 'A LAZY GARDEN WINS ' : ''}ordinary wins ${Math.round(x.realOrd * 100)}%; ordinary ${pct(x.ordinary)} (${x.each.join(', ')}; ${x.ordinaryStars}★ at 100%), novice ${pct(x.novice)} out at wave ${x.noviceWave > x.waves ? 'never' : `${x.noviceWave}/${x.waves}`}, smart ${pct(x.smart)}, expert ${x.expert ? `${pct(x.expert)} ${x.expertStars}★` : '-'}, best lazy ${pct(x.lazy)}, lazy with the usual perks ${pct(x.lazy2)}`;
 // what is off at a budget, against what the levels are for
 const off = (x) => [
   Math.abs(x.ordinary - TARGET) > TOL * TARGET && `the ordinary player holds ${pct(x.ordinary)}, not ${pct(TARGET)}`,
@@ -79,8 +85,8 @@ const off = (x) => [
 
 // scales a budget until the ordinary player is at the target (the secant over the last two measured); gives every
 // budget measured on the way
-async function scale(n, start, first) {
-  let x = first || await measure(n, start); console.log('  ' + line(n, x));
+async function scale(n, start, first, hp) {
+  let x = first || await measure(n, start, hp); console.log('  ' + line(n, x));
   const tried = [x];
   for (let k = 0; k < ITER && Math.abs(x.ordinary - TARGET) > TOL * TARGET; k++) {
     let s; const [a, b] = tried.slice(-2);
@@ -89,7 +95,7 @@ async function scale(n, start, first) {
     s = Math.min(1.6, Math.max(.6, s));
     const nb = [r1(x.budget[0] * s), r1(x.budget[1] * s)];
     if (nb[0] === x.budget[0] && nb[1] === x.budget[1]) break;
-    x = await measure(n, nb); tried.push(x); console.log('  ' + line(n, x));
+    x = await measure(n, nb, x.hp); tried.push(x); console.log('  ' + line(n, x));
   }
   return tried;
 }
@@ -99,23 +105,21 @@ const cost = (x) => (x.lazy >= 1 || x.lazyWon.length ? 100 + x.lazy : 0) + Math.
   + (x.noviceWave <= x.waves && x.noviceWave < x.waves * 2 / 3 ? (x.waves * 2 / 3 - x.noviceWave) / x.waves : 0) + Math.abs(x.ordinary - TARGET) * .01;
 const near = (list) => list.reduce((p, q) => (cost(q) < cost(p) ? q : p));
 const at = (opt('--at', '') || '').split(',').filter(Boolean).map((x) => { const [n, b] = x.split('='); return [Number(n) - 1, b.split('/').map(Number)]; });
+const HPS = opt('--hp', '1,1.4,2').split(',').map(Number);
+// the hard rules on the game's own waves, and the ordinary player at the target
+const keeps = (x) => x.realSmart && x.realExpert && !x.realLazy && x.realOrd >= .5 && Math.abs(x.ordinary - TARGET) <= TOL * TARGET && !x.lazyWon.length && x.lazy < 1;
+const pick = (list) => { const ok = list.filter(keeps); return ok.length ? ok.reduce((p, q) => (q.ordinary - q.lazy > p.ordinary - p.lazy ? q : p)) : near(list); };
 const found = [];
 for (const n of levels) {
-  const L = LEVELS[n], was = [...L.budget], extra = at.filter(([m]) => m === n).map(([, b]) => b);
+  const L = LEVELS[n], was = [...L.budget], wasHp = L.hp, extra = at.filter(([m]) => m === n).map(([, b]) => b);
   console.log(`L${n + 1} ${L.name}`);
   let tried = [];
-  if (!(dry && extra.length)) { const first = await measure(n, was); tried = dry ? [first] : await scale(n, was, first); if (dry) console.log('  ' + line(n, first)); }
+  if (dry) { const x = await measure(n, was); console.log('  ' + line(n, x)); tried.push(x); }
+  else for (const hp of HPS) { const k = wasHp / hp; tried = tried.concat(await scale(n, [r1(was[0] * k), r1(was[1] * k)], null, hp)); }
   for (const b of extra) { const x = await measure(n, b); console.log('  ' + line(n, x)); tried.push(x); }
-  let best = near(tried);
-  // the novice out too soon: fewer bugs at first, more later, as many over the level
-  if (!dry && best.noviceWave <= best.waves && best.noviceWave < best.waves * 2 / 3) {
-    const c = L.count, total = best.budget[0] * c + best.budget[1] * c * (c - 1) / 2, b0 = r1(best.budget[0] * .8), b1 = r1((total - b0 * c) / (c * (c - 1) / 2));
-    console.log(`  the novice is out at wave ${best.noviceWave}: tilted to ${b0}/${b1}`);
-    const t = await scale(n, [b0, b1]), tb = near(t);
-    tried = tried.concat(t); best = near(tried);
-  }
-  LEVELS[n].budget = was; reset(); // data.js as it was: every level is tuned on its own
-  found.push({ n, was, best, off: off(best) });
+  const best = pick(tried);
+  LEVELS[n].budget = was; LEVELS[n].hp = wasHp; reset(); // data.js as it was: every level is tuned on its own
+  found.push({ n, was, wasHp, best, keeps: keeps(best), off: off(best) });
 }
 console.log(`\n${dry ? 'as it is' : `the budgets for the ordinary player at ${pct(TARGET)}`}:`);
-for (const f of found) console.log(`  L${f.n + 1} ${LEVELS[f.n].name}: budget ${f.was.join('/')}${dry ? '' : ` → ${f.best.budget.join('/')}`}; ${f.off.length ? f.off.join('; ') : 'all as the levels are for'}`);
+for (const f of found) console.log(`  L${f.n + 1} ${LEVELS[f.n].name}: hp ${f.wasHp}, budget ${f.was.join('/')}${dry ? '' : ` → hp ${f.best.hp}, budget ${f.best.budget.join('/')}`}; ordinary ${pct(f.best.ordinary)}, best lazy ${pct(f.best.lazy)} (the maze pays ${Math.round((f.best.ordinary - f.best.lazy) * 100)} points); ${f.keeps ? 'the hard rules hold on the game\'s waves' : 'THE HARD RULES DO NOT ALL HOLD'}${f.off.length ? '; ' + f.off.join('; ') : ''}`);
