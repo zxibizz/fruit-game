@@ -1,7 +1,7 @@
 // Simulation: no DOM, plain data. The view reads the state and the events, and calls the actions below.
 import { COLS, ROWS, FRUIT_HP, PLANTS, BUGS, LEVELS, PERKS, BREAK, EARLY_DEW, REPAIR, REGROW, REFUND, CHEW_GROWTH, POWER_EVERY, POWER_MAX, wavePay, FERTILE, FERTILE_ADD, MUD, NETTLE, NETTLE_BOSS, WEED_COST, BROOD_REWARD, FLY_HP, TUNE, MARK_T } from './data.js';
 
-export const VERSION = '0.22.1';
+export const VERSION = '0.23.0';
 // The version of a saved level: raised when the balance changes so much that a garden grown under the old rules does
 // not belong in the new level (2: no fatigue, tight packs, one health rule; 3: the plants given their places and
 // every level retuned; an older save is dropped).
