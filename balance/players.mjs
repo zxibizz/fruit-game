@@ -29,7 +29,7 @@ async function load() {
   return text;
 }
 const records = (await load()).split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean)
-  .filter((r) => (!opt('--dev') || r.dev === opt('--dev')));
+  .filter((r) => r.dev !== 'agent-check' && (!opt('--dev') || r.dev === opt('--dev'))); // agent-check: the agent's own check that the server keeps records
 // parties: their records by id, in order
 const parties = new Map();
 for (const r of records.sort((a, b) => a.at - b.at)) { if (!parties.has(r.id)) parties.set(r.id, { id: r.id, dev: r.dev, ver: r.ver, level: r.level, waves: [], start: null, end: null, quit: null }); const p = parties.get(r.id);

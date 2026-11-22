@@ -30,7 +30,7 @@ function body(req, max) {
     req.on('end', () => (n > max ? fail(Object.assign(new Error('too big'), { code: 413 })) : ok(Buffer.concat(parts).toString('utf8')))); req.on('error', fail); });
 }
 
-export function createServer({ telemetryDir = process.env.TELEMETRY_DIR, token = process.env.TELEMETRY_TOKEN } = {}) {
+export function createServer({ telemetryDir = process.env.TELEMETRY_DIR, token = process.env.TELEMETRY_TOKEN?.trim() } = {}) { // (a token read from a file keeps its newline)
   const seen = new Map(), sizes = new Map(); // address → [minute, records]; day → bytes written
   const reply = (res, code, obj) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(obj ? JSON.stringify(obj) : ''); };
   async function telemetry(req, res, url) {
