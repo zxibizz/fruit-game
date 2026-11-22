@@ -630,8 +630,11 @@ function drawDigMarks(t) {
   for (const tr of st.trails) for (const [i, j] of tr.eats) {
     digShake.add(`${i},${j}`);
     const [x, y] = cellCenter(i, j), bob = Math.sin(t * 3 + i) * 1.5; c.save(); c.translate(x + 12, y - 30 + bob);
-    c.fillStyle = '#fff6e0'; c.strokeStyle = '#7a4a1e'; c.lineWidth = 1.6; c.beginPath(); c.arc(0, 0, 8, 0, A.TAU); c.moveTo(-3, 6); c.lineTo(-7, 12); c.lineTo(2, 7); c.fill(); c.stroke();
-    A.hdText(c, '!', 0, 4, 12, '#c0391e', { stroke: '#fff6e0', sw: 0 });
+    // the bubble as one shape: both parts outlined wide, then filled over, so that only the outer edge stays
+    const ring = () => { c.beginPath(); c.arc(0, 0, 8.5, 0, A.TAU); }, tail = () => { c.beginPath(); c.moveTo(-4.5, 5.5); c.lineTo(-8, 12.5); c.lineTo(1.5, 7.5); c.closePath(); };
+    c.lineJoin = 'round'; c.strokeStyle = '#7a4a1e'; c.lineWidth = 3.4; ring(); c.stroke(); tail(); c.stroke();
+    c.fillStyle = '#fff6e0'; ring(); c.fill(); tail(); c.fill(); // each filled on its own: together they wind against each other
+    c.fillStyle = '#c8381c'; c.beginPath(); A.rrect(c, -1.4, -5.6, 2.8, 7, 1.4); c.fill(); c.beginPath(); c.arc(0, 4.2, 1.6, 0, A.TAU); c.fill(); // the "!", drawn, in the middle
     c.restore();
   }
 }
