@@ -3,7 +3,7 @@ import * as A from './art.js';
 import {
   createGame, step, plantOn, plantProblem, placeProblem, blockingCells, previewTrails, trails, upgrade, upgradeCost, removePlant, refund, isFresh,
   startWave, earlyBonus, wavePreview, usePower, stars, regrow, regrowCost, clearStub, stubAt, heal, healCost, bugHp, rewardOf, pstat, clearWeed,
-  snapshot, restore, COLS, ROWS, BREAK,
+  snapshot, restore, digTrails, COLS, ROWS, BREAK,
 } from './game.js';
 import { PLANTS, BUGS, LEVELS, PERKS, PERK_ORDER, PLANT_ORDER, WEED_COST, FERTILE, TUNE, FLY_HP } from './data.js';
 import { initAudio, applyVolume, sfx, muffleMusic } from './audio.js';
@@ -87,6 +87,7 @@ const T = {
   holdHint: 'Зажми растение или жука — узнаешь, кто это',
   dragHint: 'Сначала выбери растение на полке — или просто перетащи его на поле',
   hint2: 'Роса приходит за каждую пройденную волну. Дальше волны придут сами. Нажмёшь ▶ раньше — получишь ещё',
+  digHint: 'Красный пунктир — путь сверчков: они прогрызают растения насквозь. Не оставляй за одним растением короткий проход к яблоку — или ставь туда выращенную тыкву: её грызть долго, и она колется',
   trailHint: 'Чем длиннее и извилистее тропинка, тем дольше жуки ползут мимо твоих растений. Ставь стрелков там, где тропинка проходит рядом несколько раз',
   upHint: 'Улучшения дорогие — копи росу и усиливай те растения, мимо которых жуки ползут дольше всего',
   growNote: `Жуки крепнут: каждая волна добавляет им ${Math.round(TUNE.hpGrowth * 100)}% начального здоровья (летающим — ${Math.round(TUNE.hpGrowth * FLY_HP * 100)}%), на всех уровнях одинаково.`,
@@ -573,6 +574,7 @@ function draw(dt) {
   const [fxx, fyy] = cellCenter(...game.fruit); items.push([fyy + 12, () => drawApple(fxx, fyy, dt)]);
   items.sort((a, b) => a[0] - b[0]); for (const [, f] of items) f();
   for (const p of game.plants) if (p.hp < p.maxHp) { const [x, y] = cellCenter(p.i, p.j); A.hdHp(c, x, y - 32, 28, p.hp / p.maxHp, '#ffb03a'); }
+  drawDigTrails(t);
   if (drag) drawDrag();
   for (const s of game.shots) drawShot(s);
   for (const b of game.bugs) if (b.fly) drawBug(b, t, dt);
@@ -586,6 +588,23 @@ function draw(dt) {
   if (drag || (sel && infoT > 0)) drawInfo();
   if (pop) drawPop();
   if (tip) drawTip();
+}
+// The way the diggers (crickets) will take — a red dashed line from the anthill to the fruit, a mark on every plant
+// they will eat through — while diggers are in the coming wave or on the field. The walkers' trail is the beaten path
+// of the terrain; nothing else shows that a long maze can be a short way for the ones that eat through it.
+function drawDigTrails(t) {
+  const coming = game.phase === 'build' && wavePreview(game).some(([k]) => BUGS[k].dig), on = game.bugs.some((b) => BUGS[b.kind].dig);
+  if (!coming && !on) return;
+  hintOnce('dig', T.digHint, 9);
+  for (const [e, tr] of digTrails(game).entries()) {
+    const pts = tr.cells.map(([i, j]) => cellCenter(i, j)); pts[0] = hillPos(e);
+    c.save(); c.globalAlpha = .85; c.lineWidth = 3.2; c.lineCap = 'round'; c.lineJoin = 'round'; c.setLineDash([7, 7]); c.lineDashOffset = -t * 18;
+    c.strokeStyle = 'rgba(120,20,10,.5)'; c.lineWidth = 5.5; c.beginPath(); pts.forEach(([x, y], k) => (k ? c.lineTo(x, y) : c.moveTo(x, y))); c.stroke();
+    c.strokeStyle = '#ff5a3a'; c.lineWidth = 3; c.stroke();
+    c.setLineDash([]); c.lineWidth = 3;
+    for (const [i, j] of tr.eats) { const [x, y] = cellCenter(i, j), r = 13 + Math.sin(t * 5) * 1.5; c.strokeStyle = '#ff3a2a'; c.beginPath(); c.arc(x, y - 6, r, 0, A.TAU); c.stroke(); c.beginPath(); c.moveTo(x - 6, y - 12); c.lineTo(x + 6, y); c.moveTo(x + 6, y - 12); c.lineTo(x - 6, y); c.stroke(); }
+    c.restore();
+  }
 }
 // the reach of a plant that hits walkers only close by (the dandelion): an inner ring
 function groundRing(type, x, y, r) { const g = PLANTS[type].groundRange; if (g && g < r) { c.save(); c.beginPath(); c.arc(x, y, g * CELL, 0, A.TAU); c.fillStyle = 'rgba(255,230,150,.16)'; c.fill(); c.lineWidth = 1.5; c.strokeStyle = 'rgba(255,240,190,.75)'; c.stroke(); c.restore(); } }

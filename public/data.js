@@ -317,7 +317,9 @@ export function makeWaves(L, seed, { flyShare = FLY_SHARE } = {}) {
     const walker = picks.findIndex((k) => !BUGS[k].fly);
     picks.forEach((k, idx) => { if (BUGS[k].fly && shares[idx] > flyShare * rest) { if (walker >= 0) shares[walker] += shares[idx] - flyShare * rest; shares[idx] = flyShare * rest; } });
     picks.unshift(...fresh); shares.unshift(...fresh.map(() => .25));
-    picks.forEach((k, idx) => {
+    // diggers come last: first in a wave, they ate holes in the walls and the whole wave ran through them
+    const order = picks.map((k, idx) => idx).sort((a, b) => (BUGS[picks[a]].dig ? 1 : 0) - (BUGS[picks[b]].dig ? 1 : 0));
+    order.forEach((idx) => { const k = picks[idx];
       let count = Math.max(fresh.includes(k) ? 2 : 1, Math.round(budget * shares[idx] / BUGS[k].w));
       if (BUGS[k].dig) count = Math.min(count, 1 + Math.floor(w / 5));
       if (BUGS[k].mend) count = Math.min(count, 1 + Math.floor(w / 6));

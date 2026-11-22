@@ -1,7 +1,7 @@
 // Simulation: no DOM, plain data. The view reads the state and the events, and calls the actions below.
 import { COLS, ROWS, FRUIT_HP, PLANTS, BUGS, LEVELS, PERKS, BREAK, EARLY_DEW, REPAIR, REGROW, REFUND, CHEW_GROWTH, POWER_EVERY, POWER_MAX, wavePay, FERTILE, FERTILE_ADD, MUD, NETTLE, NETTLE_BOSS, WEED_COST, BROOD_REWARD, FLY_HP, TUNE, MARK_T } from './data.js';
 
-export const VERSION = '0.24.0';
+export const VERSION = '0.25.0';
 // The version of a saved level: raised when the balance changes so much that a garden grown under the old rules does
 // not belong in the new level (2: no fatigue, tight packs, one health rule; 3: the plants given their places and
 // every level retuned; 4: the waves retuned for the ordinary player, some levels with fewer and healthier bugs; 5: the
@@ -126,6 +126,19 @@ export function trail(g, dist = g.dist, e = 0) {
     dir = [nx[0] - i, nx[1] - j]; [i, j] = nx; out.push(nx);
   }
   return out;
+}
+// The way diggers (crickets) take from every anthill: every cell, and the plants they eat through on it. Shown to the
+// player when diggers are coming: a long maze with one plant between the anthill and an empty run to the fruit is
+// a short way for them, and nothing else on the screen tells.
+export function digTrails(g) {
+  return g.entries.map((en) => {
+    const cells = [en.slice()], eats = []; let [i, j] = en, dir = [-1, 0];
+    for (let n = 0; n < COLS * ROWS && !(i === g.fruit[0] && j === g.fruit[1]); n++) {
+      const nx = nextDig(g, i, j, dir); if (!nx) break;
+      dir = [nx[0] - i, nx[1] - j]; [i, j] = nx; cells.push(nx); if (g.grid[j][i]?.type) eats.push(nx);
+    }
+    return { cells, eats };
+  });
 }
 // one trail per anthill
 export const trails = (g, dist = g.dist) => g.entries.map((_, e) => trail(g, dist, e));

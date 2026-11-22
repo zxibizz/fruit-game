@@ -47,3 +47,12 @@ test('sending: batches cut by size, a batch the server refuses as junk does not 
   assert.equal(tm.pending, 0, 'all gone: the refused batch dropped, the rest sent');
   for (const b of bodies.slice(n0)) assert.ok(b.length <= 200 * 1024 && JSON.parse(b).length <= 100, 'a request stays under the server limits');
 });
+
+test('a saved level taken up again goes on as the same party; a new level is a new one', () => {
+  const st = memory(), tm = createTelemetry({ storage: st, post: async () => false });
+  const g = createGame(4, 1, {}); tm.start(g); startWave(g); tm.observe(g); g.events.length = 0; tm.quit(g);
+  const again = createTelemetry({ storage: st, post: async () => false }); again.start(createGame(4, 1, {}), true);
+  const q = JSON.parse(st.getItem('fruit.tq')), ids = new Set(q.map((r) => r.id));
+  assert.equal(ids.size, 1, 'one party across the resume'); assert.ok(q.some((r) => r.type === 'wave' && r.cut), 'the cut wave is marked');
+  again.start(createGame(2, 1, {})); assert.equal(new Set(JSON.parse(st.getItem('fruit.tq')).map((r) => r.id)).size, 2, 'a fresh level, a fresh party');
+});

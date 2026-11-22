@@ -7,14 +7,17 @@
 //           roots of eaten ones), the trail through it, the dew and the fruit, the early call, what was done before
 //           the wave (built, grown, sold, mended…) and during it, frost and rain, the bugs killed and the bugs that bit
 //           the fruit by kind, the plants eaten, the time it took (game and real seconds, paused, at what speed);
-//   end   — won or lost, the stars, the wave reached; quit — the page was left in the middle of a level.
+//   end   — won or lost, the stars, the wave reached; quit — the level was left in the middle (the page closed, the
+//           home screen). A saved level taken up again goes on under the same party id (kept beside the save in
+//           PARTY), with a start record marked resumed; a wave cut off by leaving and played again from the save
+//           comes twice, the cut one marked cut.
 // Records wait in localStorage until the server takes them (a party played offline is sent later), at most MAX of them;
 // each has an id of its own (k), and only the ones a request carried are dropped when it gets through. A request
 // is cut to BYTES (the server takes 256 KB), a beacon to BEACON (browsers refuse more than 64 KB); a batch the server
 // refuses as junk (400, 413) is dropped, so that it does not stop the rest for good.
 import { VERSION, trails } from './game.js';
 
-const KEY = 'fruit.tq', DEV = 'fruit.dev', MAX = 400, URL_ = 'api/telemetry', BYTES = 200 * 1024, BEACON = 60 * 1024;
+const KEY = 'fruit.tq', DEV = 'fruit.dev', PARTY = 'fruit.tp', MAX = 400, URL_ = 'api/telemetry', BYTES = 200 * 1024, BEACON = 60 * 1024;
 const rid = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`);
 const r1 = (v) => Math.round(v * 10) / 10;
 
@@ -42,7 +45,9 @@ export function createTelemetry({ storage = globalThis.localStorage, post = null
     // a level begins (resumed: from a saved party, at its wave)
     start(g, resumed = false) {
       this.quit(); // a party left for another
-      party = { id: rid(), g, level: g.level, t0: performance.now(), build: [], wave: null, early: 0 };
+      let kept = null; try { kept = JSON.parse(storage.getItem(PARTY) || 'null'); } catch { /* none */ }
+      const id = resumed && kept?.level === g.level ? kept.id : rid(); try { storage.setItem(PARTY, JSON.stringify({ id, level: g.level })); } catch { /* as it is */ }
+      party = { id, g, level: g.level, t0: performance.now(), build: [], wave: null, early: 0 };
       push('start', { seed: g.seed, meta: { ...g.meta }, resumed, wave: g.wave, dew: Math.round(g.dew), hp: g.hp, maxHp: g.maxHp });
       this.flush();
     },
@@ -70,17 +75,17 @@ export function createTelemetry({ storage = globalThis.localStorage, post = null
           case 'bite': if (party.wave) { const k = e.b.kind + (e.b.brood ? '*' : ''); party.wave.bites[k] = (party.wave.bites[k] || 0) + 1; } break;
           case 'plantDead': if (party.wave) party.wave.eaten.push([e.p.type, e.p.lvl, e.p.i, e.p.j]); break;
           case 'waveDone': this.closeWave(g, e.bonus); break;
-          case 'won': case 'lost': this.closeWave(g, 0); push('end', { won: e.t === 'won', hp: g.hp, maxHp: g.maxHp, wave: g.wave, waves: g.waves, time: r1(g.time), real: r1((performance.now() - party.t0) / 1000) }); party = null; this.flush(); return;
+          case 'won': case 'lost': this.closeWave(g, 0); try { storage.removeItem(PARTY); } catch { /* as it is */ } push('end', { won: e.t === 'won', hp: g.hp, maxHp: g.maxHp, wave: g.wave, waves: g.waves, time: r1(g.time), real: r1((performance.now() - party.t0) / 1000) }); party = null; this.flush(); return;
         }
       }
     },
-    closeWave(g, bonus) {
+    closeWave(g, bonus, cut = false) {
       const w = party?.wave; if (!w) return; party.wave = null;
-      push('wave', { ...w, t: r1(g.time - w.t0), t0: r1(w.t0), real: r1(w.real), paused: r1(w.paused), atSpeed: w.atSpeed.map(r1), bonus, dewEnd: Math.round(g.dew), hpEnd: g.hp });
+      push('wave', { ...w, ...(cut ? { cut: true } : {}), t: r1(g.time - w.t0), t0: r1(w.t0), real: r1(w.real), paused: r1(w.paused), atSpeed: w.atSpeed.map(r1), bonus, dewEnd: Math.round(g.dew), hpEnd: g.hp });
       this.flush();
     },
     // the page is left, or another level is begun, in the middle of a level
-    quit(g = party?.g) { if (!party) return; if (g && party.wave) this.closeWave(g, 0); push('quit', { wave: g?.wave ?? null }); party = null; },
+    quit(g = party?.g) { if (!party) return; if (g && party.wave) this.closeWave(g, 0, true); push('quit', { wave: g?.wave ?? null }); party = null; },
     // sends what waits; beacon: the page is going away (sendBeacon outlives it)
     // (one sending at a time: a flush asked for while another runs goes after it)
     flush(beacon = false) {

@@ -377,3 +377,14 @@ test('a cob of corn hits only so many bugs of a pack', () => {
   for (let n = 0; n < 60 * 6; n++) { step(g, 1 / 60); cur = g.events.filter((e) => e.t === 'hit' && e.src === 'corn').length; most = Math.max(most, cur); g.events.length = 0; }
   assert.equal(most, PLANTS.corn.hits[0]);
 });
+
+// Diggers: the way they eat through the garden is what the player is shown (digTrails); and they come last in a wave,
+// so that the holes they make are not a road for the rest of it.
+test('diggers: their way eats through the one plant that shuts a short run, and they come last in every wave', async () => {
+  const { digTrails } = await import('../public/game.js');
+  const g = createGame(4); g.dew = 1e9; const [ei, ej] = g.entries[0];
+  place(g, 'pumpkin', ei - 1, ej); // one plant in front of the anthill, the rest of the field open
+  const [d] = digTrails(g);
+  assert.deepEqual(d.cells[0], [ei, ej]); assert.deepEqual(d.cells.at(-1), g.fruit);
+  for (const L of LEVELS) for (const w of L.waves) { const ks = w.map((x) => x[0]).filter((k) => !BUGS[k].boss), f = ks.findIndex((k) => BUGS[k].dig); if (f >= 0) assert.ok(ks.slice(f).every((k) => BUGS[k].dig), `${L.name}: ${ks}`); }
+});

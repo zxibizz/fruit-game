@@ -33,13 +33,15 @@ const records = (await load()).split('\n').filter(Boolean).map((l) => { try { re
 // parties: their records by id, in order
 const parties = new Map();
 for (const r of records.sort((a, b) => a.at - b.at)) { if (!parties.has(r.id)) parties.set(r.id, { id: r.id, dev: r.dev, ver: r.ver, level: r.level, waves: [], start: null, end: null, quit: null }); const p = parties.get(r.id);
-  if (r.type === 'start') p.start = r; else if (r.type === 'wave') p.waves.push(r); else if (r.type === 'end') p.end = r; else if (r.type === 'quit') p.quit = r; }
+  if (r.type === 'start') { if (!p.start) p.start = r; else p.resumes = (p.resumes || 0) + 1; } else if (r.type === 'wave') p.waves.push(r); else if (r.type === 'end') p.end = r; else if (r.type === 'quit') p.quit = r; }
+// a wave cut off by leaving and played again from the save: the played one counts
+for (const p of parties.values()) { const by = new Map(); for (const w of p.waves) if (!by.has(w.n) || by.get(w.n).cut || !w.cut) by.set(w.n, w); p.waves = [...by.values()].sort((a, b) => a.n - b.n); }
 const base = LEVELS.map((_, n) => Math.min(...trails(createGame(n)).map((t) => t.length)));
 const name = (n) => `L${n + 1} ${LEVELS[n]?.name ?? ''}`;
 
 if (opt('--party')) {
   const p = [...parties.values()].find((x) => x.id.startsWith(opt('--party'))); if (!p) throw new Error('no such party');
-  console.log(`${name(p.level)}, party ${p.id} (device ${p.dev.slice(0, 8)}, version ${p.ver}), perks ${JSON.stringify(p.start?.meta || {})}${p.start?.resumed ? ', resumed' : ''}`);
+  console.log(`${name(p.level)}, party ${p.id} (device ${p.dev.slice(0, 8)}, version ${p.ver}), perks ${JSON.stringify(p.start?.meta || {})}${p.resumes ? `, taken up again ${p.resumes} time(s)` : ''}`);
   for (const w of p.waves) {
     const plants = {}; for (const [t, lvl] of w.garden.plants) add(plants, `${t}${lvl > 1 ? lvl : ''}`);
     console.log(`  wave ${w.n}: trail ${w.garden.trail} cells, dew ${w.dew} → ${w.dewEnd}, fruit ${w.hp} → ${w.hpEnd}; ${w.real}s (${w.paused}s paused, ×1/×2/×3 ${w.atSpeed.join('/')}s), thought ${w.buildReal}s before`);
