@@ -5,7 +5,9 @@
 // plants and branches the best gardens are made of, their mazes. Change the numbers on the page (the overrides of
 // balance/run.mjs --set, the field of a level) or the files (public/data.js; the rules in sim/src, rebuilt by cargo),
 // and everything found is played again on the new game first — seconds — and the search goes on from there.
-// What it finds is kept in balance/.studio/ between runs. POST /api/explain {level, wave, rank} tells what each family
+// What it finds is kept in balance/.studio/ between runs. POST /api/campaign {level} plays the whole level from the
+// studio's gardens (balance/campaign.mjs, minutes) against the expert of the matrix; POST /api/verify {level, wave, rank}
+// plays a garden on 8 seeds of the game. POST /api/explain {level, wave, rank} tells what each family
 // of plants of a garden does for it (its margin with that family taken out).
 import { createServer } from 'node:http';
 import { spawn, execFile } from 'node:child_process';
@@ -54,7 +56,7 @@ const clients = new Set();
 function send(res, ev, data) { res.write(`event: ${ev}\ndata: ${JSON.stringify(data)}\n\n`); }
 function broadcast(ev, data, pred = () => true) { for (const c of clients) if (pred(c)) send(c.res, ev, data); }
 const initOf = () => ({ ui: S.ui, overrides: S.overrides, config: S.config, focus: S.focus, caps: S.caps, errors: S.errors, engine: S.engine, buildLog: S.buildLog, status: S.status, baseline: S.baseline,
-  summaries: Object.values(S.waves).map(summary), jobs: JOBS });
+  summaries: Object.values(S.waves).map(summary), jobs: JOBS, campaign: campaignOf() });
 
 // ---- the game data ----
 function makeData() {
@@ -91,6 +93,7 @@ function seedAll() {
 
 // ---- the engine ----
 let engine = null; const waiting = new Map(); let asked = 0;
+let campaign = null; const campaignOf = () => (campaign ? { level: campaign.level, running: campaign.running, log: campaign.log.slice(-30), result: campaign.result && { margins: campaign.result.margins, plan: campaign.result.plan?.length }, error: campaign.error || null, at: campaign.at } : null);
 function setEngine(state, log) { S.engine = state; if (log != null) S.buildLog = log; broadcast('engine', { engine: S.engine, buildLog: S.buildLog }); }
 function build() {
   return new Promise((ok) => {
@@ -169,6 +172,27 @@ createServer(async (req, res) => {
       const id = ++asked; const got = new Promise((ok) => { waiting.set(id, ok); setTimeout(() => { if (waiting.delete(id)) ok({ error: 'timed out' }); }, 60000); });
       engine.write({ cmd: 'explain', id, level: b.level, wave: b.wave, garden: { walls: g.walls, cells: g.cells, m: g.m } });
       return json(res, 200, await got);
+    }
+    // the garden on 8 seeds of the game: {level, wave, rank} or {level, wave, mono}
+    if (url.pathname === '/api/verify') {
+      const r = S.waves[`${b.level}:${b.wave}`]; const g = r && (b.mono ? r.mono?.[b.mono] : r.top?.[b.rank ?? 0]);
+      if (!g || !engine) return json(res, 404, { error: 'no such garden yet' });
+      const id = ++asked; const got = new Promise((ok) => { waiting.set(id, ok); setTimeout(() => { if (waiting.delete(id)) ok({ error: 'timed out' }); }, 120000); });
+      engine.write({ cmd: 'verify', id, level: b.level, wave: b.wave, garden: { walls: g.walls, cells: g.cells, m: g.m } });
+      return json(res, 200, await got);
+    }
+    // the slow check: a whole level played from the studio's gardens (balance/campaign.mjs), one at a time
+    if (url.pathname === '/api/campaign') {
+      if (b.action === 'stop') { campaign?.p?.kill(); return json(res, 200, { ok: true }); }
+      if (campaign?.running) return json(res, 409, { error: 'a campaign is running' });
+      dirtyCache = true; saveCache();
+      const L = Number(b.level), file = join(CACHE_DIR, `campaign-L${L + 1}.json`);
+      const p = spawn(process.execPath, [join(HERE, 'campaign.mjs'), '--level', String(L + 1), '--from', CACHE, '--rounds', String(b.rounds ?? 30), '--jobs', String(Math.max(1, JOBS - 1)), '--out', file]);
+      campaign = { level: L, running: true, log: [], result: null, p, at: Date.now() };
+      const line = (s) => { for (const x of String(s).split('\n').filter((t) => t.trim() && !/^(warning|\s+[|=-]|\s*-->|\s*\d+ \|)/.test(t))) { campaign.log.push(x); if (campaign.log.length > 200) campaign.log.shift(); } broadcast('campaign', campaignOf()); };
+      p.stdout.on('data', line); p.stderr.on('data', line);
+      p.on('exit', (code) => { campaign.running = false; delete campaign.p; try { campaign.result = JSON.parse(readFileSync(file, 'utf8')); } catch { campaign.error = `exit ${code}`; } broadcast('campaign', campaignOf()); });
+      broadcast('campaign', campaignOf()); return json(res, 200, { ok: true });
     }
     if (url.pathname === '/api/overrides') { S.overrides = b.set || {}; dirtyCache = true; pushData(); return json(res, 200, { ok: true }); }
     if (url.pathname === '/api/config') { S.config = { ...S.config, ...b }; dirtyCache = true; pushData(); return json(res, 200, { ok: true }); }

@@ -96,7 +96,9 @@ fn opts_of(d: &Data, j: &J) -> Opts {
                 let maze = v.get("maze").filter(|m| **m != J::Null).map(|m| { let r = row(m); if r.len() != routes::NM { panic!("policy: {} maze weights, not {}", r.len(), routes::NM); } let mut a = [0.0; routes::NM]; a.copy_from_slice(&r); a });
                 Some(bot::Policy { place, up, maze })
             },
-            "plan" => o.plan = if *v == J::Null { None } else { Some(v.arr().iter().map(|s| { let a = s.arr(); (if a[0].str() == "up" { None } else { Some(d.plant(a[0].str())) }, a[1].num() as i32, a[2].num() as i32) }).collect()) },
+            // a step: [plant, column, row] puts a plant; ["up", column, row] grows one, ["up", column, row, branch] taking
+            // that branch (1: a, 2: b) when it grows to level 3 (without one, the bot's own choice)
+            "plan" => o.plan = if *v == J::Null { None } else { Some(v.arr().iter().map(|s| { let a = s.arr(); (if a[0].str() == "up" { None } else { Some(d.plant(a[0].str())) }, a[1].num() as i32, a[2].num() as i32, if a[0].str() == "up" && a.len() > 3 { a[3].num() as u8 } else { 0 }) }).collect()) },
             "maze" => o.maze = if *v == J::Null { None } else { Some(v.str().to_string()) },
             "terrain" => o.terrain = v.truthy(),
             "powers" => o.powers = match v { J::Str(s) if s == "eager" => Powers::Eager, x => if x.truthy() { Powers::On } else { Powers::Off } },

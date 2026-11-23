@@ -130,6 +130,7 @@ table.ed td.na{color:var(--muted);opacity:.5}
 .pal button.on{outline:2px solid var(--accent)}
 .pal .sw{margin:0;border:1px solid rgba(0,0,0,.25)}
 .pbtn{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px}
+.camp{margin-top:10px;border-top:1px solid var(--line);padding-top:8px}.camp .hint{font-size:12px}.camplog{font-size:11px;max-height:9em;overflow:auto;background:var(--bg);padding:6px;border-radius:6px;white-space:pre-wrap}
 </style>
 </head>
 <body>
@@ -171,6 +172,7 @@ table.ed td.na{color:var(--muted);opacity:.5}
       <div id="lvTable"></div>
     </div>
     <div class="legendrow" id="lvLegend"></div>
+    <div class="camp"><button id="campBtn">Проверить полной партией</button> <span class="hint">медленно (минуты): лучшие сады студии становятся планом на весь уровень, его играет бот с экономикой, поеданием, морозом и дождём, план дорабатывается; запас уровня сравнивается с ботом-экспертом, по которому настроена матрица</span><div id="campOut"></div></div>
   </section>
 
   <section class="card" id="secWave">
@@ -503,13 +505,23 @@ function openBig(g, label, rank) {
   for (const [, p, t] of g.cells || []) { const k = p + ':' + t; tally[k] = (tally[k] || 0) + 1; }
   const rows = Object.entries(tally).sort().map(([k, n]) => { const [p, t] = k.split(':'); const br = tierBranch(+t); return `<tr><td><span class="fam">${famSwatch(p + (br ? '.' + br : ''))}${PLANT_RU[p]}</span></td><td>${TIERS[t]}${br ? ' · ' + BR_RU[p][br] : ''}</td><td>${n}</td></tr>`; }).join('');
   $('#ovlBox').innerHTML = `<button class="x" id="ovlX">✕</button><div><h2 style="margin:0 0 6px;font-size:14px">${label}: ${isInf(g.m) ? '∞' : '×' + g.m.toFixed(2)} · цена ${Math.round(g.cost)}${r ? ' / ' + Math.round(r.budget) : ''} · тропа ${g.len}${trailExtra()} · уровень ${S.sel.level + 1}, волна ${S.sel.wave}</h2>${mapSvg(g, 44)}</div>
-  <div><h3 style="margin:0 0 4px;font-size:13px">Состав</h3>${mixBar(g.mix)}<div class="row"><button id="explainBtn">Кто работает?</button></div><div id="explainOut"></div><table class="t" style="margin-top:8px"><tr><th>Растение</th><th>уровень</th><th>шт.</th></tr>${rows}</table>
+  <div><h3 style="margin:0 0 4px;font-size:13px">Состав</h3>${mixBar(g.mix)}<div class="row"><button id="explainBtn">Кто работает?</button><button id="verifyBtn">Проверить на 8 сидах</button></div><div id="explainOut"></div><div id="verifyOut"></div><table class="t" style="margin-top:8px"><tr><th>Растение</th><th>уровень</th><th>шт.</th></tr>${rows}</table>
   <h3 style="margin:10px 0 4px;font-size:13px">Обозначения</h3><div class="hint">Круг — растение (буква — вид, цифра справа — уровень: 1, 2, 3А, 4А, 3Б, 4Б); светлый — базовое, цветной — ветка А, тёмный с белой каймой — ветка Б. Пунктирная ломаная — тропа жуков от муравейника к плоду. Пунктирный квадрат — стена лабиринта.</div>
   <div class="legendrow">${Object.entries(TERR_RU).map(([c, n]) => `<span><span class="sw" style="background:var(--t-${TERR[c]})"></span>${n}</span>`).join('')}</div></div>`;
   $('#ovl').classList.add('show');
 }
 const closeBig = () => { $('#ovl').classList.remove('show'); S.big = null; };
 $('#ovl').addEventListener('click', (e) => {
+  if (e.target.id === 'verifyBtn') {
+    const out = $('#verifyOut'), L = S.sel.level, W = S.sel.wave; out.innerHTML = '<span class="hint">играем на 8 сидах…</span>'; e.target.disabled = true;
+    api('/api/verify', { level: L, wave: W, ...bigReq }).then((r) => {
+      e.target.disabled = false;
+      if (!r || !r.margins) { out.innerHTML = '<span class="flagnote">не удалось посчитать</span>'; return; }
+      const xs = [...r.margins].sort((a, b) => a - b), lo = xs[0], med = xs[xs.length >> 1], hi = xs[xs.length - 1];
+      out.innerHTML = `<div class="hint" style="margin-top:6px">запас на 8 сидах (откуда летят летающие, куда падает выводок): мин <b>${fmtM(lo, 2)}</b>, медиана <b>${fmtM(med, 2)}</b>, макс ${fmtM(hi, 2)}${hi > lo * 1.1 ? ' — <span class="flagnote">сильно зависит от случая</span>' : ' — устойчиво'}</div>`;
+    });
+    return;
+  }
   if (e.target.id === 'explainBtn') {
     const out = $('#explainOut'), L = S.sel.level, W = S.sel.wave; out.innerHTML = '<span class="hint">считаем…</span>'; e.target.disabled = true;
     api('/api/explain', { level: L, wave: W, ...bigReq }).then((r) => {
@@ -650,6 +662,24 @@ $('#bClear').addEventListener('click', () => api('/api/baseline', { action: 'cle
 
 // ---------- SSE ----------
 let es = null, retry = 0;
+// ---------- the campaign: a whole level from the studio's gardens ----------
+const CAMP_RU = { expert: 'эксперт (матрица)', 'smart bot': 'умный бот', 'studio plan': 'план студии', 'refined plan': 'план, доработанный' };
+function paintCamp() {
+  const c = S.campaign, out = $('#campOut'), btn = $('#campBtn'); if (!out) return;
+  btn.textContent = c?.running ? 'Остановить' : 'Проверить полной партией';
+  if (!c) { out.innerHTML = ''; return; }
+  const lv = S.ui?.levels[c.level]?.name ?? '';
+  let h = `<div class="hint">уровень ${c.level + 1} ${esc(lv)}${c.running ? ' — идёт…' : ''}</div>`;
+  if (c.result?.margins) {
+    const ms = c.result.margins, ex = ms.find((m) => m.name === 'expert');
+    h += `<table class="t" style="margin-top:4px;max-width:520px"><tr><th>кто играет</th><th>запас уровня</th><th>по трём раскладам волн</th></tr>${ms.map((m) => `<tr><td>${CAMP_RU[m.name] || esc(m.name)}</td><td><b>${m.median.bound === 'above' ? '≥' : m.median.bound === 'below' ? '≤' : ''}${Math.round(m.median.at * 100)}%</b>${ex && m !== ex ? ` <span class="${m.median.at > ex.median.at ? 'up' : 'down'}">${m.median.at > ex.median.at ? '+' : ''}${Math.round((m.median.at / ex.median.at - 1) * 100)}% к эксперту</span>` : ''}</td><td>${m.each.map((v) => Math.round(v * 100) + '%').join(' · ')}</td></tr>`).join('')}</table>
+      <div class="hint">запас уровня — во сколько раз здоровее могут быть все жуки, пока партия ещё выигрывается. План заметно выше эксперта — уровень легче, чем его настроила матрица, для игрока, который найдёт такую игру.</div>`;
+  } else if (c.error) h += `<div class="flagnote">не получилось: ${esc(c.error)}</div>`;
+  if (c.running || !c.result) h += `<pre class="camplog">${esc((c.log || []).slice(-8).join('\n'))}</pre>`;
+  out.innerHTML = h;
+}
+$('#campBtn').addEventListener('click', () => { if (S.campaign?.running) api('/api/campaign', { action: 'stop' }); else api('/api/campaign', { level: S.sel.level }).then((r) => { if (r?.error) alert(r.error); }); });
+
 function connect() {
   if (es) try { es.close(); } catch {}
   es = new EventSource('/events');
@@ -657,6 +687,7 @@ function connect() {
   es.onerror = () => { S.conn = false; dirty.header = true; kick(); try { es.close(); } catch {} clearTimeout(retry); retry = setTimeout(connect, 2000); };
   const on = (n, f) => es.addEventListener(n, (e) => { try { f(JSON.parse(e.data)); } catch (er) { console.error(n, er); } });
   on('init', (d) => {
+    S.campaign = d.campaign || null; setTimeout(paintCamp, 0);
     S.ui = d.ui; S.ov = d.overrides || {}; S.config = d.config; S.focus = d.focus; S.caps = d.caps || S.caps; S.errors = d.errors || []; S.engine = d.engine; S.buildLog = d.buildLog; S.status = d.status; S.baseline = d.baseline;
     S.sums = {}; for (const s of d.summaries) S.sums[s.level + ':' + s.wave] = s;
     const first = !S.inited; S.inited = true;
@@ -670,6 +701,7 @@ function connect() {
   on('status', (s) => { S.status = s; dirty.status = true; kick(); });
   on('engine', (d) => { S.engine = d.engine; S.buildLog = d.buildLog; dirty.header = true; kick(); });
   on('data', (d) => { const lvls = S.ui?.levels.length; S.ui = d.ui || S.ui; S.errors = d.errors || []; if (!pending) S.ov = d.overrides || {}; S.config = d.config; dirty.header = dirty.chips = dirty.editor = dirty.level = dirty.wave = true; wvSig = ''; dirty.ovAll = true; kick(); });
+  on('campaign', (c) => { S.campaign = c; paintCamp(); });
   on('baseline', (b) => { S.baseline = b; dirty.header = dirty.level = dirty.wave = dirty.ovAll = true; wvSig = ''; kick(); });
 }
 paintOvLegend(); document.body.classList.toggle('drawer', S.drawer); paintHeader(); connect();

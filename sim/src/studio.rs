@@ -21,6 +21,7 @@
 //   {cmd:"seed", level, wave, gardens: [{walls: [cell], cells: [[cell, plant, tier]]}]}  gardens to start from (a
 //       restart keeps what was found)
 //   {cmd:"cap", focus, other}     how many gardens are tried for a wave of the focused level, of the others
+//   {cmd:"verify", id, level, wave, garden, seeds}  → {t:"verify", id, seeds, margins}: the garden on other seeds
 //   {cmd:"explain", id, level, wave, garden}  → {t:"explain", id, base, without: {family: margin}}: what each family does
 //   out: {t:"wave", gen, level, wave, trailBase, trailMax (the trail as it is and the longest maze), budget, tried, plays, stale, top: [garden], mono: {plant: garden}}
 //        garden: {m, cost, len, walls, trail, cells: [[cell, plant, tier]], mix: {family: share}, stale}
@@ -411,10 +412,10 @@ fn job_of(w: &World, p: &mut Problem, r: &mut Rng, migrant: Option<(Garden, Opti
 }
 
 // a good garden of a wave next to this one (one of its best few, or its best of one plant)
-fn neighbour(eng: &Engine, level: usize, wave: usize, r: &mut Rng) -> Option<(Garden, Option<usize>)> {
+fn neighbour(eng: &Engine, gen: u64, level: usize, wave: usize, r: &mut Rng) -> Option<(Garden, Option<usize>)> {
     let to = if r.f() < 0.5 { wave.wrapping_sub(1) } else { wave + 1 };
     let pm = eng.problems.read().unwrap().iter().find(|p| { let p = p.lock().unwrap(); p.level == level && p.wave == to }).cloned()?;
-    let p = pm.lock().unwrap();
+    let p = pm.lock().unwrap(); if p.gen != gen { return None; } // a garden of another game: its maze is another's
     if r.f() < 0.2 { let ks: Vec<usize> = (0..p.mono.len()).filter(|&k| p.mono[k].is_some()).collect(); if ks.is_empty() { return None; } let k = r.pick(&ks); return Some((p.mono[k].as_ref().unwrap().gd.clone(), Some(k))); }
     if p.arch.is_empty() { return None; }
     Some((p.arch[r.n(p.arch.len().min(5))].gd.clone(), None))
@@ -422,24 +423,31 @@ fn neighbour(eng: &Engine, level: usize, wave: usize, r: &mut Rng) -> Option<(Ga
 
 fn work(eng: &Engine, seed: u64) {
     let mut r = Rng::new(seed);
+    // a piece of work that breaks is said and dropped; the worker goes on
     loop {
-        let Some(w) = eng.world.read().unwrap().clone() else { std::thread::sleep(Duration::from_millis(50)); continue };
-        let Some(pm) = pick_problem(eng, &w) else { eng.idle.store(true, Ordering::Relaxed); std::thread::sleep(Duration::from_millis(60)); continue };
+        let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| work_once(eng, &mut r)));
+        if let Err(e) = res { let msg = e.downcast_ref::<String>().cloned().or_else(|| e.downcast_ref::<&str>().map(|s| s.to_string())).unwrap_or_else(|| "panic".into()); eng.say(&format!("{{\"t\":\"error\",\"msg\":{:?}}}", format!("worker: {}", msg))); }
+    }
+}
+fn work_once(eng: &Engine, r: &mut Rng) {
+    {
+        let Some(w) = eng.world.read().unwrap().clone() else { std::thread::sleep(Duration::from_millis(50)); return };
+        let Some(pm) = pick_problem(eng, &w) else { eng.idle.store(true, Ordering::Relaxed); std::thread::sleep(Duration::from_millis(60)); return };
         eng.idle.store(false, Ordering::Relaxed);
         let (level, wave) = { let p = pm.lock().unwrap(); (p.level, p.wave) };
-        let migrant = if r.f() < 0.3 { neighbour(eng, level, wave, &mut r) } else { None };
-        let (job, budget) = { let mut p = pm.lock().unwrap(); let j = job_of(&w, &mut p, &mut r, migrant); (j, p.budget) };
-        let Some(job) = job else { continue };
+        let migrant = if r.f() < 0.3 { neighbour(eng, w.gen, level, wave, r) } else { None };
+        let (job, budget) = { let mut p = pm.lock().unwrap(); let j = job_of(&w, &mut p, r, migrant); (j, p.budget) };
+        let Some(job) = job else { return };
         let judge = Judge { d: &w.d, level, wave, meta: &w.metas[level], info: &w.infos[level], tol: w.tol, seed: 1 };
         let mut plays = 0;
         match job {
             Job::Again { mono, id, mut gd, guess } => {
                 // on new data the dew may be less: the garden is cut back to it (or grown to it) first
                 let cx = Ctx::new(&w.d, &w.infos[level], budget, mono.map(|k| k as u8));
-                if gd.cost(&w.d) > budget || gd.cost(&w.d) < budget * 0.9 { let _ = cx.repair(&mut gd, &mut r); cx.fill(&mut gd, &mut r); }
+                if gd.cost(&w.d) > budget || gd.cost(&w.d) < budget * 0.9 { let _ = cx.repair(&mut gd, r); cx.fill(&mut gd, r); }
                 let m = judge.margin(&gd, guess, None, &mut plays).unwrap_or(0.0);
                 eng.plays.fetch_add(plays as u64, Ordering::Relaxed);
-                let mut p = pm.lock().unwrap(); if p.gen != w.gen { continue; } p.plays += plays;
+                let mut p = pm.lock().unwrap(); if p.gen != w.gen { return; } p.plays += plays;
                 let e = Elite { niche: niche(&mix_of(&w.d, &gd)), gd, margin: m, gen: w.gen, busy: false, id: new_id() };
                 match mono {
                     Some(k) => { p.mono[k] = None; p.offer_mono(k, e); }
@@ -450,7 +458,7 @@ fn work(eng: &Engine, seed: u64) {
             Job::Try { gd, floor, guess, mono } => {
                 let m = judge.margin(&gd, guess, floor, &mut plays);
                 eng.plays.fetch_add(plays as u64, Ordering::Relaxed);
-                let mut p = pm.lock().unwrap(); if p.gen != w.gen { continue; } p.plays += plays;
+                let mut p = pm.lock().unwrap(); if p.gen != w.gen { return; } p.plays += plays;
                 if let Some(m) = m {
                     let e = Elite { niche: niche(&mix_of(&w.d, &gd)), gd, margin: m, gen: w.gen, busy: false, id: new_id() };
                     if let Some(k) = mono { p.offer_mono(k, e.clone()); }
@@ -544,6 +552,24 @@ fn explain(eng: &Engine, j: &J) {
     eng.say(&format!("{{\"t\":\"explain\",\"id\":{},\"level\":{},\"wave\":{},\"base\":{:.4},\"without\":{{{}}},\"plays\":{}}}", id, level, wave, base, out.join(","), plays));
 }
 
+// A garden played again on other seeds of the game (where the flyers come from, where a boss's brood lands): its
+// margin on each, for how far one seed's margin can be trusted.
+fn verify(eng: &Engine, j: &J) {
+    let Some(w) = eng.world.read().unwrap().clone() else { return };
+    let (level, wave) = (j.at("level").num() as usize, j.at("wave").num() as usize); let id = j.get("id").map_or(0.0, |v| v.num());
+    let info = &w.infos[level]; let g = j.at("garden");
+    let mut walls: Vec<usize> = g.at("walls").arr().iter().map(|x| x.num() as usize).collect(); walls.sort();
+    let Some(maze) = info.mazes.iter().position(|m| m.walls == walls) else { eng.say(&format!("{{\"t\":\"verify\",\"id\":{},\"error\":\"no such maze\"}}", id)); return };
+    let cells: Vec<(usize, Spec)> = g.at("cells").arr().iter().filter_map(|c| { let a = c.arr(); kind_ix(&w.d, a[1].str()).map(|k| (a[0].num() as usize, Spec { kind: k as u8, tier: a[2].num() as u8 })) }).collect();
+    let gd = Garden { maze, cells }; let guess = g.get("m").map_or(1.0, |m| m.num());
+    let seeds: Vec<u32> = j.get("seeds").map_or((1..=8).collect(), |s| s.arr().iter().map(|x| x.num() as u32).collect());
+    let ms: Vec<f64> = std::thread::scope(|sc| { let hs: Vec<_> = seeds.iter().map(|&seed| { let (w, gd, info) = (&w, &gd, info); sc.spawn(move || {
+        let judge = Judge { d: &w.d, level, wave, meta: &w.metas[level], info, tol: w.tol, seed }; let mut plays = 0; judge.margin(gd, guess, None, &mut plays).unwrap_or(0.0) }) }).collect();
+        hs.into_iter().map(|h| h.join().unwrap()).collect() });
+    eng.say(&format!("{{\"t\":\"verify\",\"id\":{},\"level\":{},\"wave\":{},\"seeds\":[{}],\"margins\":[{}]}}", id, level, wave,
+        seeds.iter().map(|s| s.to_string()).collect::<Vec<_>>().join(","), ms.iter().map(|m| format!("{:.4}", m)).collect::<Vec<_>>().join(",")));
+}
+
 pub fn serve(jobs: usize) {
     let eng = Arc::new(Engine { world: RwLock::new(None), problems: RwLock::new(Vec::new()), focus: Mutex::new((-1, -1)), caps: Mutex::new((6000, 600)),
         plays: AtomicU64::new(0), gen: AtomicU64::new(0), idle: AtomicBool::new(true), out: Mutex::new(()) });
@@ -567,6 +593,7 @@ pub fn serve(jobs: usize) {
             "focus" => { *eng.focus.lock().unwrap() = (j.get("level").map_or(-1, |v| if *v == J::Null { -1 } else { v.num() as i64 }), j.get("wave").map_or(-1, |v| if *v == J::Null { -1 } else { v.num() as i64 })); }
             "cap" => { let mut c = eng.caps.lock().unwrap(); if let Some(v) = j.get("focus") { c.0 = v.num() as usize; } if let Some(v) = j.get("other") { c.1 = v.num() as usize; } }
             "seed" => seed(&eng, &j),
+            "verify" => { let e = eng.clone(); let j = j.clone(); std::thread::spawn(move || { let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| verify(&e, &j))); if r.is_err() { e.say("{\"t\":\"verify\",\"error\":\"failed\"}"); } }); }
             "explain" => { let e = eng.clone(); let j = j.clone(); std::thread::spawn(move || { let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| explain(&e, &j))); if r.is_err() { e.say("{\"t\":\"explain\",\"error\":\"failed\"}"); } }); }
             x => eng.say(&format!("{{\"t\":\"error\",\"msg\":\"unknown command {}\"}}", x)),
         }));
