@@ -173,6 +173,14 @@ and in portrait (turned there).
   level next, the rest a little (`/api/caps`). What it found is kept in `balance/.studio/` between runs. Some 1000
   waves a second on four cores; a level of 20 waves gets good gardens in a minute or two and better ones the longer it
   runs. The search is a search: the best it shows is the best it has found, a lower bound of what the wave allows.
+  A wave where something is drawn by the game (flyers, a boss's brood) is judged on three seeds: on one, the search
+  fitted the gardens to its draw. `node balance/meta.mjs [--levels 6] [--secs 60] [--verify]` prints the same as a
+  table per level with what stands out (a monoculture as good as the mix, `∞`, no garden that holds, a plant or branch
+  no best garden uses). `node balance/campaign.mjs --level 6` (or «Проверить полной партией» on the page) is the slow
+  check: the best gardens of the last and the hardest waves become plans the smart bot plays over the whole level
+  (the economy, eaten plants, frost and rain), refined step by step, and the margin of the level is set beside the
+  expert's — whether the meta of single waves carries over to a party, and how much easier a level is for a player
+  who plays it that way. How far all this can be trusted: [docs/studio.md](docs/studio.md).
 - `sim/` — the simulation once more, in Rust, and the bot that plays it (dev only, not in the image; `cargo` builds
   it, no dependencies). The balance matrix and the balance tests run on it: a party takes a tenth of a second where
   the JS simulation with a JS bot took three.
