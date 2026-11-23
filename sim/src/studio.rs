@@ -14,7 +14,8 @@
 // of what a party has then, not a plan of the party.
 //
 // The process reads commands from stdin, a JSON object a line, and writes what it found to stdout, a JSON object a line:
-//   {cmd:"data", data, meta: [[[perk, tier], ...] per level], tol, early}  the game as it is now (sim/js/export.mjs):
+//   {cmd:"data", data, meta: [[[perk, tier], ...] per level], tol, early, seeds}  (seeds: how many seeds of the game a
+//       wave with something drawn in it — flyers, a boss's brood — is judged on, 3 if not said)  the game as it is now (sim/js/export.mjs):
 //       every elite found so far is played again on it first (their old margins stay shown, marked stale, till then),
 //       then the search goes on from them
 //   {cmd:"focus", level, wave}    what is looked at: searched first and longest (wave null: the whole level)
@@ -143,9 +144,19 @@ pub fn play_wave(d: &Data, level: usize, wave: usize, meta: &[(String, usize)], 
 // health (thorns, spikes, nettles, a flytrap swallowing the worn) may hold at any health: its margin is MAX, shown as
 // such (no health of the bugs beats it, only more bugs or other bugs do).
 pub const MAX: f64 = 30.0;
-pub struct Judge<'a> { pub d: &'a Data, pub level: usize, pub wave: usize, pub meta: &'a [(String, usize)], pub info: &'a LevelInfo, pub tol: f64, pub seed: u32 }
+// seeds: the seeds of the game a garden has to hold on, every one (where the flyers come from and where a boss's brood
+// lands are drawn by the game: one seed alone, the search finds the gardens that suit its draw, and their margin on
+// other seeds is lower)
+pub struct Judge<'a> { pub d: &'a Data, pub level: usize, pub wave: usize, pub meta: &'a [(String, usize)], pub info: &'a LevelInfo, pub tol: f64, pub seeds: Vec<u32> }
+// the seeds a wave is judged on: n of them when something in it is drawn (flyers, a boss's brood or split), else one
+pub fn seeds_of(d: &Data, level: usize, wave: usize, n: usize) -> Vec<u32> {
+    let drawn = d.levels[level].waves[wave - 1].iter().any(|g| { let b = &d.bugs[g.kind]; b.fly || b.brood.is_some() || b.split.is_some() });
+    (1..=if drawn { n.max(1) } else { 1 } as u32).collect()
+}
 impl<'a> Judge<'a> {
-    pub fn holds(&self, gd: &Garden, s: f64, plays: &mut usize) -> bool { *plays += 1; play_wave(self.d, self.level, self.wave, self.meta, self.info, gd, s, self.seed, self.tol + 1e-9) <= self.tol + 1e-9 }
+    pub fn holds(&self, gd: &Garden, s: f64, plays: &mut usize) -> bool {
+        self.seeds.iter().all(|&seed| { *plays += 1; play_wave(self.d, self.level, self.wave, self.meta, self.info, gd, s, seed, self.tol + 1e-9) <= self.tol + 1e-9 })
+    }
     // guess: where to look first; floor: below that the margin is not worth knowing (None comes back: one party)
     pub fn margin(&self, gd: &Garden, guess: f64, floor: Option<f64>, plays: &mut usize) -> Option<f64> {
         const STEP: f64 = 1.6; const MIN: f64 = 0.02; const PREC: f64 = 1.02;
@@ -241,6 +252,19 @@ impl<'a> Ctx<'a> {
         gd.norm(); if !self.repair(&mut gd, r) { return None; }
         self.fill(&mut gd, r); Some(gd)
     }
+    // a family put into a garden: k of its cells (the best placed off the walls first, now and then any) become that
+    // family, at the top of it the dew allows (a branch at 4, else 3; a plant at 2), and the rest is cut back to the dew
+    fn inject(&self, gd: &mut Garden, fam: usize, k: usize, r: &mut Rng) {
+        let kind = (fam / 3) as u8; let br = (fam % 3) as u8;
+        let tiers: &[u8] = match br { 0 => &[1, 0], 1 => &[3, 2], _ => &[5, 4] };
+        let Some(&t) = tiers.iter().find(|&&t| self.open(Spec { kind, tier: t })) else { return };
+        let m = &self.info.mazes[gd.maze];
+        let value = |c: usize| m.slots.iter().find(|s| s.0 == c).map_or(0.5, |s| s.1);
+        let mut ix: Vec<usize> = (0..gd.cells.len()).collect();
+        if r.f() < 0.7 { ix.sort_by(|&a, &b| value(gd.cells[b].0).partial_cmp(&value(gd.cells[a].0)).unwrap()); } else { for q in (1..ix.len()).rev() { ix.swap(q, r.n(q + 1)); } }
+        for &c in ix.iter().take(k) { gd.cells[c].1 = Spec { kind, tier: t }; }
+    }
+    fn families(&self) -> Vec<usize> { let mut f: Vec<usize> = self.specs.iter().map(|s| s.family()).collect(); f.sort(); f.dedup(); f }
     // two gardens cut along a column or a row: one side of the first, the other of the second (on the first's maze)
     fn cross(&self, a: &Garden, b: &Garden, r: &mut Rng) -> Option<Garden> {
         let m = &self.info.mazes[a.maze]; let rows = r.f() < 0.4;
@@ -264,7 +288,8 @@ impl<'a> Ctx<'a> {
                 42..=55 => { let (a, b) = (r.n(gd.cells.len()), r.n(gd.cells.len())); let t = gd.cells[a].1; gd.cells[a].1 = gd.cells[b].1; gd.cells[b].1 = t; }
                 56..=67 => { let ex: Vec<usize> = (0..gd.cells.len()).filter(|&c| !m.wall[gd.cells[c].0]).collect(); if !ex.is_empty() { if let Some(k) = self.slot(&gd, r) { let c = r.pick(&ex); gd.cells[c].0 = k; } } }
                 68..=75 => { let ex: Vec<usize> = (0..gd.cells.len()).filter(|&c| !m.wall[gd.cells[c].0]).collect(); if !ex.is_empty() { gd.cells.remove(r.pick(&ex)); } }
-                76..=87 => if !only { // every plant of one family becomes another
+                76..=81 => if !only { let fs = self.families(); let f = r.pick(&fs); let k = 1 + r.n(4); self.inject(&mut gd, f, k, r); },
+                82..=87 => if !only { // every plant of one family becomes another
                     let from = gd.cells[r.n(gd.cells.len())].1; let to = r.pick(&self.specs);
                     for c in gd.cells.iter_mut() { if c.1.family() == from.family() { let t = if to.br() == 0 { c.1.tier.min(1) } else if c.1.tier < 2 { c.1.tier } else { (if to.br() == 1 { 2 } else { 4 }) + (c.1.tier % 2 == 1) as u8 }; let x = Spec { kind: to.kind, tier: t }; if self.open(x) { c.1 = x; } } }
                 },
@@ -330,7 +355,7 @@ impl Problem {
 }
 
 // What every worker reads: the game, the levels, the perks; a new one comes with every `data`.
-pub struct World { pub gen: u64, pub d: Data, pub infos: Vec<LevelInfo>, pub metas: Vec<Vec<(String, usize)>>, pub tol: f64 }
+pub struct World { pub gen: u64, pub d: Data, pub infos: Vec<LevelInfo>, pub metas: Vec<Vec<(String, usize)>>, pub tol: f64, pub seeds: usize }
 struct Engine {
     world: RwLock<Option<Arc<World>>>,
     problems: RwLock<Vec<Arc<Mutex<Problem>>>>,
@@ -393,6 +418,13 @@ fn job_of(w: &World, p: &mut Problem, r: &mut Rng, migrant: Option<(Garden, Opti
             return Some(Job::Try { gd, floor, guess, mono });
         }
     }
+    // at the start of a wave, a garden built round every family in turn (a few of each): every family gets looked at,
+    // not only the ones a random start happens on
+    { let cx = Ctx::new(&w.d, info, p.budget, None); let fs = cx.families();
+      if p.tried <= fs.len() * 3 { let f = fs[p.tried % fs.len()];
+        if let Some(mut gd) = cx.random(r) { let k = (gd.cells.len() as f64 * (0.3 + 0.3 * r.f())).ceil() as usize; cx.inject(&mut gd, f, k, r);
+          if cx.repair(&mut gd, r) { cx.fill(&mut gd, r); let nk = niche(&mix_of(&w.d, &gd)); let floor = p.arch.iter().find(|e| e.niche == nk).map(|e| e.margin).or(if best > 0.0 { Some(best * 0.5) } else { None });
+            return Some(Job::Try { guess: floor.unwrap_or(1.0), floor, gd, mono: None }); } } } }
     // a garden of one plant now and then: the measure the mixed ones are held against
     if r.f() < 0.18 {
         let k = r.pick(&info.kinds) as usize; let cx = Ctx::new(&w.d, info, p.budget, Some(k as u8));
@@ -438,7 +470,7 @@ fn work_once(eng: &Engine, r: &mut Rng) {
         let migrant = if r.f() < 0.3 { neighbour(eng, w.gen, level, wave, r) } else { None };
         let (job, budget) = { let mut p = pm.lock().unwrap(); let j = job_of(&w, &mut p, r, migrant); (j, p.budget) };
         let Some(job) = job else { return };
-        let judge = Judge { d: &w.d, level, wave, meta: &w.metas[level], info: &w.infos[level], tol: w.tol, seed: 1 };
+        let judge = Judge { d: &w.d, level, wave, meta: &w.metas[level], info: &w.infos[level], tol: w.tol, seeds: seeds_of(&w.d, level, wave, w.seeds) };
         let mut plays = 0;
         match job {
             Job::Again { mono, id, mut gd, guess } => {
@@ -480,7 +512,8 @@ fn load(eng: &Engine, j: &J) {
     let infos: Vec<LevelInfo> = std::thread::scope(|s| { let hs: Vec<_> = (0..d.levels.len()).map(|n| { let d = &d; s.spawn(move || level_info(d, n)) }).collect(); hs.into_iter().map(|h| h.join().unwrap()).collect() });
     let gen = eng.gen.fetch_add(1, Ordering::SeqCst) + 1;
     let old = eng.world.read().unwrap().clone();
-    let w = Arc::new(World { gen, d, infos, metas, tol });
+    let seeds = j.get("seeds").map_or(3, |v| v.num() as usize);
+    let w = Arc::new(World { gen, d, infos, metas, tol, seeds });
     let mut ps = eng.problems.write().unwrap();
     let mut next: Vec<Arc<Mutex<Problem>>> = Vec::new();
     for (n, lv) in w.d.levels.iter().enumerate() {
@@ -539,7 +572,7 @@ fn explain(eng: &Engine, j: &J) {
     let Some(maze) = info.mazes.iter().position(|m| m.walls == walls) else { eng.say(&format!("{{\"t\":\"explain\",\"id\":{},\"error\":\"no such maze\"}}", id)); return };
     let cells: Vec<(usize, Spec)> = g.at("cells").arr().iter().filter_map(|c| { let a = c.arr(); kind_ix(&w.d, a[1].str()).map(|k| (a[0].num() as usize, Spec { kind: k as u8, tier: a[2].num() as u8 })) }).collect();
     let gd = Garden { maze, cells };
-    let judge = Judge { d: &w.d, level, wave, meta: &w.metas[level], info, tol: w.tol, seed: 1 };
+    let judge = Judge { d: &w.d, level, wave, meta: &w.metas[level], info, tol: w.tol, seeds: seeds_of(&w.d, level, wave, w.seeds) };
     let mut plays = 0; let base = judge.margin(&gd, g.get("m").map_or(1.0, |m| m.num()), None, &mut plays).unwrap_or(0.0);
     let cheap = Ctx::new(&w.d, info, f64::INFINITY, None).cheapest(); let m = &info.mazes[maze];
     let mut fams: Vec<usize> = gd.cells.iter().map(|c| c.1.family()).collect(); fams.sort(); fams.dedup();
@@ -564,7 +597,7 @@ fn verify(eng: &Engine, j: &J) {
     let gd = Garden { maze, cells }; let guess = g.get("m").map_or(1.0, |m| m.num());
     let seeds: Vec<u32> = j.get("seeds").map_or((1..=8).collect(), |s| s.arr().iter().map(|x| x.num() as u32).collect());
     let ms: Vec<f64> = std::thread::scope(|sc| { let hs: Vec<_> = seeds.iter().map(|&seed| { let (w, gd, info) = (&w, &gd, info); sc.spawn(move || {
-        let judge = Judge { d: &w.d, level, wave, meta: &w.metas[level], info, tol: w.tol, seed }; let mut plays = 0; judge.margin(gd, guess, None, &mut plays).unwrap_or(0.0) }) }).collect();
+        let judge = Judge { d: &w.d, level, wave, meta: &w.metas[level], info, tol: w.tol, seeds: vec![seed] }; let mut plays = 0; judge.margin(gd, guess, None, &mut plays).unwrap_or(0.0) }) }).collect();
         hs.into_iter().map(|h| h.join().unwrap()).collect() });
     eng.say(&format!("{{\"t\":\"verify\",\"id\":{},\"level\":{},\"wave\":{},\"seeds\":[{}],\"margins\":[{}]}}", id, level, wave,
         seeds.iter().map(|s| s.to_string()).collect::<Vec<_>>().join(","), ms.iter().map(|m| format!("{:.4}", m)).collect::<Vec<_>>().join(",")));

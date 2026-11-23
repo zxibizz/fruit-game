@@ -5,10 +5,10 @@
 // far standing in it. A party is more than that: the garden grows wave by wave on the dew there is, eaten plants are
 // holes till the wave is over, the fruit's health is spent over the level, frost and rain help. Here:
 //   1. the studio searches every wave of the level for --secs seconds (or starts from balance/.studio/ with --warm);
-//   2. every one of the best gardens of the last waves and of the hardest one becomes a plan (sim/src/bot.rs, option
+//   2. every one of the best gardens of the last waves and of the hardest ones becomes plans (sim/src/bot.rs, option
 //      plan: the plants to put and to grow, cell by cell, in order, a branch named for each): the steps go in the order
 //      of the first wave whose best gardens have them — what the studio found worth having at that dew comes when there
-//      is that dew — and the smart bot plays it (frost, rain, early calls), spending what is left its own way;
+//      is that dew — or the walls first; the smart bot plays it (frost, rain, early calls), spending what is left its own way;
 //   3. the best plan is changed a step at a time (a step earlier or later, another branch, a plant grown once more or
 //      less, another kind on a cell, two cells trading plants) and kept when it lasts against healthier bugs, on the
 //      game's own waves and another draw of them, as balance/design.mjs does;
@@ -59,6 +59,9 @@ if (from) {
   log(`L${level + 1} ${LEVELS[level].name}: the studio searches its waves for ${SECS} s`);
   await sleep(SECS * 1000);
   reps = eng.level(level); eng.stop();
+  // what the studio found, beside the result: --from it plays the same gardens again (another order, more rounds)
+  mkdirSync(dirname(out), { recursive: true });
+  writeFileSync(out.replace(/\.json$/, '') + '.studio.json', JSON.stringify({ overrides: set, waves: Object.fromEntries(reps.map((r) => [`${r.level}:${r.wave}`, r])) }));
 }
 if (!reps.length) throw new Error('the studio found nothing');
 
@@ -96,10 +99,13 @@ function firstWave(step) {
   }
   return 999;
 }
-function planOf(g) {
+// two orders of the same garden: by the first wave whose best gardens have a step (a wall no early garden has comes
+// last then: the maze is built late), and the walls first (the trail at its longest from the start, the plants later)
+function plansOf(g) {
   const st = stepsOf(g).map((x) => ({ ...x, at: firstWave(x) }));
-  st.sort((a, b) => a.at - b.at || a.lvl - b.lvl || (b.wall - a.wall));
-  return st.map((x) => x.s);
+  const byWave = [...st].sort((a, b) => a.at - b.at || a.lvl - b.lvl || (b.wall - a.wall));
+  const walls = [...st].sort((a, b) => ((b.wall && b.lvl === 1) - (a.wall && a.lvl === 1)) || a.at - b.at || a.lvl - b.lvl);
+  return [byWave.map((x) => x.s), walls.map((x) => x.s)];
 }
 // the targets: the best gardens of the last three waves and of the two hardest (the lowest margin of the best)
 const hard = [...reps].sort((a, b) => a.top[0].m - b.top[0].m).slice(0, 2), last = reps.slice(-3);
@@ -109,9 +115,9 @@ log(`  ${targets.length} gardens of waves ${[...new Set(targets.map((t) => t.wav
 const score = (r) => (r.won ? 1e5 + r.hp : r.time);
 const rate = (plans, h, draws = [0, 1]) => { const res = run(plans.flatMap((plan) => draws.map((w) => ({ w, opts: { ...base, plan, hp: Math.round(h * 1000) / 1000 } }))));
   return plans.map((_, k) => { const xs = res.slice(k * draws.length, (k + 1) * draws.length); return { f: xs.reduce((t, r) => t + score(r), 0), wins: xs.filter((r) => r.won).length, res: xs }; }); };
-const plans = targets.map((t) => planOf(t.g));
+const plans = [], of = []; targets.forEach((t) => plansOf(t.g).forEach((p, v) => { plans.push(p); of.push({ ...t, order: v ? 'walls first' : 'by wave' }); }));
 const first = rate(plans, 1);
-first.forEach((x, k) => log(`  plan of wave ${targets[k].wave} #${targets[k].g.m.toFixed(2)}: ${x.wins}/2 won, fruit ${x.res.map((r) => r.won ? r.hp : `lost at wave ${r.wave}`).join(' / ')}`));
+first.forEach((x, k) => log(`  plan of wave ${of[k].wave} #${of[k].g.m.toFixed(2)} (${of[k].order}): ${x.wins}/2 won, fruit ${x.res.map((r) => r.won ? r.hp : `lost at wave ${r.wave}`).join(' / ')}`));
 let bi = first.reduce((b, x, k) => (x.f > first[b].f ? k : b), 0);
 const seedPlan = plans[bi];
 
@@ -165,5 +171,5 @@ for (const r of res) console.log(`  ${r.name.padEnd(13)} ${show(r.median).padSta
 const count = {}; for (const c of cellsOf(best).values()) count[c.kind] = (count[c.kind] || 0) + 1;
 console.log(`  the refined plan: ${best.length} steps, ${Object.entries(count).map(([k, n]) => `${k} ${n}`).join(', ')}`);
 mkdirSync(dirname(out), { recursive: true });
-writeFileSync(out, JSON.stringify({ level: level + 1, set, secs: SECS, rounds: ROUNDS, margins: res, seedPlan, plan: best, target: targets[bi] }));
+writeFileSync(out, JSON.stringify({ level: level + 1, set, secs: SECS, rounds: ROUNDS, margins: res, seedPlan, plan: best, target: of[bi] }));
 console.log(`  ${out}`);
