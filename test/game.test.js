@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, step, place, placeProblem, plantOn, plantProblem, trail, trails, startWave, removePlant, upgrade, usePower, earlyBonus, stubAt, refund, pstat, clearWeed, snapshot, restore, bugHp, COLS, ROWS, BREAK } from '../public/game.js';
+import { createGame, step, place, placeProblem, plantOn, plantProblem, trail, trails, startWave, removePlant, upgrade, upgradeCost, usePower, earlyBonus, stubAt, refund, pstat, clearWeed, snapshot, restore, bugHp, COLS, ROWS, BREAK } from '../public/game.js';
 import { LEVELS, PLANTS, BUGS, PLANT_ORDER, PERKS, PERK_ORDER, WEED_COST, FERTILE, MARK_T, wavePay } from '../public/data.js';
 import { expectedMeta, fullMeta } from '../balance/scenario.mjs';
 import { play } from '../sim/js/play.mjs';
@@ -14,7 +14,7 @@ test('every level has a way from the entrance to the fruit', () => {
     for (const tr of trails(g)) assert.deepEqual(tr[tr.length - 1], g.fruit, `level ${n + 1}`);
     assert.ok(L.map.length === ROWS && L.map.every((r) => r.length === COLS), `level ${n + 1} map size`);
     assert.ok(L.boss.length >= 2 && L.boss.every(([at, kind]) => at <= L.count && BUGS[kind].boss), `level ${n + 1} bosses`);
-    assert.ok(!L.waves.flat().some(([k]) => BUGS[k].fly) || L.plants.includes('dandelion') || !L.boss.some(([, k]) => BUGS[k].fly), `level ${n + 1}: a flying boss needs dandelions`);
+    assert.ok(!L.boss.some(([, k]) => BUGS[k].fly) || PLANTS.rose.b.from <= n + 1, `level ${n + 1}: a flying boss needs the far shot rose`);
     assert.ok(L.plants.every((p) => PLANTS[p]), `level ${n + 1} plants`);
   });
 });
@@ -43,26 +43,27 @@ test('a new plant over an old one of another kind sells the old one first', () =
   const g = createGame(2); g.dew = 100;
   place(g, 'rose', 12, 6); const trail0 = trail(g).length;
   assert.equal(plantProblem(g, 'rose', 12, 6), 'same');
-  g.dew = PLANTS.corn.cost - PLANTS.rose.cost - 1; assert.equal(plantProblem(g, 'corn', 12, 6), 'poor');
-  g.dew = PLANTS.corn.cost - PLANTS.rose.cost; assert.ok(plantOn(g, 'corn', 12, 6)); // fresh: the rose gives all its dew back
-  assert.equal(g.dew, 0); assert.equal(g.grid[6][12].type, 'corn'); assert.equal(g.plants.length, 1); assert.equal(trail(g).length, trail0);
-  startWave(g); g.dew = 0; const spent = g.grid[6][12].spent; // later only half comes back
+  g.dew = PLANTS.pepper.cost - PLANTS.rose.cost - 1; assert.equal(plantProblem(g, 'pepper', 12, 6), 'poor');
+  g.dew = PLANTS.pepper.cost - PLANTS.rose.cost; assert.ok(plantOn(g, 'pepper', 12, 6)); // fresh: the rose gives all its dew back
+  assert.equal(g.dew, 0); assert.equal(g.grid[6][12].type, 'pepper'); assert.equal(g.plants.length, 1); assert.equal(trail(g).length, trail0);
+  startWave(g); g.dew = PLANTS.pumpkin.cost; const spent = g.grid[6][12].spent; // later only half comes back
   assert.equal(plantProblem(g, 'pumpkin', 12, 6), null); assert.ok(plantOn(g, 'pumpkin', 12, 6));
-  assert.equal(g.dew, Math.floor(spent / 2) - PLANTS.pumpkin.cost); assert.equal(g.grid[6][12].type, 'pumpkin');
+  assert.equal(g.dew, Math.floor(spent / 2)); assert.equal(g.grid[6][12].type, 'pumpkin');
 });
 
-test('a dandelion hits walkers too, weaker, and takes the flyers first', () => {
-  const n = LEVELS.findIndex((L) => L.plants.includes('dandelion'));
+test('a far shot rose hits walkers too, weaker, and takes the flyers first', () => {
+  const n = LEVELS.length - 1;
   const shoot = (kinds) => {
     const g = createGame(n); g.dew = 1000; const [ei, ej] = g.entries[0];
-    for (const [di, dj] of [[-1, 1], [-1, -1], [-2, 1], [-2, -1], [-1, 2], [-1, -2]]) if (place(g, 'dandelion', ei + di, ej + dj)) break;
+    for (const [di, dj] of [[-1, 1], [-1, -1], [-2, 1], [-2, -1], [-1, 2], [-1, -2]]) if (place(g, 'rose', ei + di, ej + dj)) break;
+    const p = g.plants[0]; upgrade(g, p); assert.ok(upgrade(g, p, 'b')); assert.equal(p.br, 'b'); p.cd = 2.5; // shoots once both are in
     assert.equal(g.plants.length, 1); startWave(g); g.queue = kinds.map((kind) => ({ kind, at: 0, e: 0 }));
-    for (let k = 0; k < 60 * 20; k++) { step(g, 1 / 60); const s = g.shots.find((q) => q.from === 'dandelion'); if (s) return [g, s]; }
+    for (let k = 0; k < 60 * 20; k++) { step(g, 1 / 60); for (const q of g.bugs) if (q.fly && k < 2) q.y = ej + .5; const s = g.shots.find((q) => q.from === 'rose'); if (s) return [g, s]; } // (the flyer on the anthill's row: both come into reach)
     return [g, null];
   };
   const [, s1] = shoot(['ant', 'butterfly']); assert.ok(s1 && s1.target.fly, 'the flyer first');
   const [g2, s2] = shoot(['ant']); assert.ok(s2 && !s2.target.fly, 'walkers too');
-  assert.equal(s2.dmg, pstat(g2, g2.plants[0], 'dmg') * PLANTS.dandelion.ground); assert.equal(s2.stun, 0);
+  assert.equal(s2.dmg, pstat(g2, g2.plants[0], 'dmg') * PLANTS.rose.b.ground); assert.equal(s2.down, 0);
 });
 
 test('no wave is a sudden wall of bugs the player cannot see coming', () => {
@@ -90,10 +91,17 @@ test('bugs that reach the fruit bite it and the level can be lost', () => {
   assert.equal(g.phase, 'lost');
 });
 
-test('upgrades raise the level up to 3, powers are limited', () => {
+test('a plant grows to level 2, takes a branch open on the level at 3, and tops it at 4; powers are limited', () => {
   const g = createGame(0); g.dew = 1000; place(g, 'rose', 10, 0);
   const p = g.plants[0];
-  assert.ok(upgrade(g, p)); assert.ok(upgrade(g, p)); assert.equal(upgrade(g, p), false); assert.equal(p.lvl, 3);
+  assert.ok(upgrade(g, p)); assert.equal(p.lvl, 2);
+  assert.equal(upgrade(g, p), false, 'no branch said'); assert.equal(upgrade(g, p, 'a'), false, 'no branch open on the first level');
+  const h = createGame(1); h.dew = 5000; place(h, 'rose', 10, 0); const q = h.plants[0]; upgrade(h, q);
+  assert.equal(upgradeCost(q, 'a'), PLANTS.rose.a.up[0]); assert.equal(upgrade(h, q, 'b'), false, 'the far shot opens later');
+  const dew = h.dew; assert.ok(upgrade(h, q, 'a')); assert.equal(q.lvl, 3); assert.equal(q.br, 'a'); assert.equal(h.dew, dew - PLANTS.rose.a.up[0]);
+  assert.equal(pstat(h, q, 'multi'), 2); assert.ok(upgrade(h, q, 'b')); assert.equal(q.br, 'a', 'the branch stays'); assert.equal(q.lvl, 4);
+  assert.equal(upgrade(h, q), false); assert.equal(upgradeCost(q), null);
+  for (const k of PLANT_ORDER) for (const br of ['a', 'b']) assert.ok(PLANTS[k][br].from <= LEVELS.length && LEVELS[PLANTS[k][br].from - 1].plants.includes(k), `${k}.${br} opens where the plant is`);
   assert.ok(usePower(g, 'rain')); assert.equal(usePower(g, 'rain'), false);
 });
 
@@ -131,7 +139,7 @@ test('a garden beside the untouched trail loses every level, however it is plant
   for (let n = 0; n < LEVELS.length; n++) {
     const r = usual[n];
     assert.equal(r.won, false, `level ${n + 1}`);
-    // («Опушка» is the exception: a row of corn with mint holds there until the last waves, and loses in them)
+    // («Опушка» is the exception: a row of chili with mint holds there until the last waves, and loses in them)
     if (n < 3 && n !== 1) assert.ok(Math.min(...Object.keys(r.bites).map((k) => parseInt(k, 10))) <= LEVELS[n].count * LEAK, `level ${n + 1}: it leaks well before the end`);
   }
   hard.forEach((n, a) => PLACES.forEach((place, b) => assert.equal(most[a * PLACES.length + b].won, false, `level ${n + 1}, three stars a level, planted ${place}`)));
@@ -204,12 +212,12 @@ test('a digger walks round when the way round is short', () => {
   assert.equal(g.plants.length, 1); assert.equal(g.stubs.length, 0);
 });
 
-test('no plant is healed in a wave: the aloe only guards the plants around, rain grows the roots back and heals nothing', () => {
+test('no plant is healed in a wave: a pumpkin only guards the plants around, rain grows the roots back and heals nothing', () => {
   const g = createGame(0); g.dew = 1000;
-  place(g, 'aloe', 7, 4); place(g, 'pumpkin', 7, 5); place(g, 'rose', 7, 3); place(g, 'pumpkin', 12, 7);
-  const [aloe, pumpkin, rose, far] = g.plants;
-  assert.equal(pumpkin.guard, PLANTS.aloe.guard[0]); assert.equal(far.guard, 0);
-  upgrade(g, aloe); assert.equal(pumpkin.guard, PLANTS.aloe.guard[1]);
+  place(g, 'pumpkin', 7, 4); place(g, 'pumpkin', 7, 5); place(g, 'rose', 7, 3); place(g, 'pumpkin', 12, 7);
+  const [guard, pumpkin, rose, far] = g.plants;
+  assert.equal(pumpkin.guard, PLANTS.pumpkin.guard[0]); assert.equal(rose.guard, PLANTS.pumpkin.guard[0]); assert.equal(far.guard, 0);
+  upgrade(g, guard); assert.equal(rose.guard, PLANTS.pumpkin.guard[1]);
   pumpkin.hp = 10; far.hp = 10;
   for (let n = 0; n < 60 * 5; n++) step(g, 1 / 60);
   assert.equal(pumpkin.hp, 10); assert.equal(far.hp, 10);
@@ -249,6 +257,9 @@ test('a plant sees its level, the soil under it and the perk bought for it', () 
   assert.equal(pstat(g, plain, 'dmg'), PLANTS.rose.dmg[0] * PERKS.rose.v[1]);
   assert.ok(Math.abs(pstat(g, rich, 'dmg') - PLANTS.rose.dmg[0] * PERKS.rose.v[1] * FERTILE) < 1e-9);
   assert.equal(rich.maxHp, Math.round(PLANTS.rose.hp[0] * FERTILE));
+  const m = createGame(4, 1, { mint: 1 }); m.dew = 1e4; place(m, 'mint', 12, 7); const mint = m.plants[0];
+  assert.ok(Math.abs(pstat(m, mint, 'frost') - (PLANTS.mint.frost[0] + PERKS.mint.v[0])) < 1e-9, 'the mint perk: the icicle slows more');
+  upgrade(m, mint); upgrade(m, mint, 'a'); assert.ok(Math.abs(pstat(m, mint, 'slow') - (PLANTS.mint.a.slow + PERKS.mint.v[0])) < 1e-9, 'and so does the cold');
   const h = createGame(0, 1, { dew: 3, heart: 1, clouds: 2 });
   assert.equal(h.dew, LEVELS[0].dew + PERKS.dew.v[2]); assert.equal(h.maxHp, 20 + PERKS.heart.v[0]); assert.equal(h.powers.frost, 3);
   for (const k of PERK_ORDER) assert.ok(PERKS[k].cost.length === PERKS[k].v.length, k);
@@ -302,26 +313,26 @@ test('bosses: the queen lets ants out, the slug king splits, the spider webs pla
   }
 });
 
-test('new plants: a flytrap bites hard and swallows small bugs, a bell makes its neighbours shoot more often, level 3 tricks', () => {
-  const g = createGame(8); g.dew = 5000; place(g, 'flytrap', 12, 2); place(g, 'bell', 12, 3); place(g, 'rose', 11, 3); place(g, 'rose', 5, 7);
-  assert.ok(g.plants[2].buff > 0); assert.equal(g.plants[3].buff, 0);
-  send(g, 'ant'); let eaten = null;
-  for (let k = 0; k < 60 * 20 && !eaten; k++) { step(g, 1 / 60); eaten = g.events.find((e) => e.t === 'eat'); }
-  assert.ok(eaten && eaten.whole && eaten.b.hp <= 0, 'a small bug is swallowed whole');
-  const rose = g.plants[2]; upgrade(g, rose); upgrade(g, rose); assert.equal(pstat(g, rose, 'multi'), 2);
+test('every plant is used, and every branch looks and plays different', () => {
   for (const k of PLANT_ORDER) assert.ok(LEVELS.some((L) => L.plants.includes(k)), `${k} is used`);
+  const g = createGame(8); g.dew = 1e5;
+  const grow = (k, br, i, j) => { assert.ok(place(g, k, i, j), `${k} ${i},${j}`); const p = g.grid[j][i]; upgrade(g, p); upgrade(g, p, br); upgrade(g, p); return p; };
+  const heat = grow('pepper', 'a', 12, 0), burn = grow('pepper', 'b', 12, 7);
+  assert.ok(pstat(g, heat, 'blaze') && !pstat(g, heat, 'splash')); assert.ok(pstat(g, burn, 'melt') && pstat(g, burn, 'splash'));
+  const cold = grow('mint', 'a', 11, 0), ice = grow('mint', 'b', 11, 7);
+  assert.ok(pstat(g, cold, 'slow') && !pstat(g, cold, 'dmg')); assert.ok(pstat(g, ice, 'heavy') && !pstat(g, ice, 'air'));
 });
 
 test('a level in progress is saved between waves and comes back as it was', () => {
   const g = createGame(6, 5); g.dew = 900; place(g, 'rose', 8, 4); place(g, 'pumpkin', 8, 5); upgrade(g, g.plants[0]);
   const [wi, wj] = LEVELS[6].obstacles.find(([, , t]) => t === 'weed'); clearWeed(g, wi, wj);
-  const [vi, vj] = LEVELS[6].obstacles.filter(([, , t]) => t === 'weed')[1]; clearWeed(g, vi, vj); place(g, 'corn', vi, vj); // a plant where a weed was
+  const [vi, vj] = LEVELS[6].obstacles.filter(([, , t]) => t === 'weed')[1]; clearWeed(g, vi, vj); place(g, 'pepper', vi, vj); // a plant where a weed was
   g.plants[1].hp = 5; g.wave = 7; g.hp = 13;
   const snap = JSON.parse(JSON.stringify(snapshot(g))), r = restore(snap);
   assert.equal(r.wave, 7); assert.equal(r.hp, 13); assert.equal(r.dew, g.dew); assert.equal(r.phase, 'build'); assert.equal(r.nextIn, null);
   assert.equal(r.grid[4][8].type, 'rose'); assert.equal(r.grid[4][8].lvl, 2); assert.equal(r.grid[4][8].hp, r.grid[4][8].maxHp);
   assert.equal(r.grid[5][8]?.type, 'pumpkin'); assert.equal(r.grid[5][8].hp, r.grid[5][8].maxHp, 'whole again'); assert.equal(r.grid[wj][wi], null);
-  assert.equal(r.grid[vj][vi].type, 'corn');
+  assert.equal(r.grid[vj][vi].type, 'pepper');
   assert.equal(restore({ ...snap, v: 7 }), null, 'a save of the rules with healing is dropped'); assert.equal(restore({ v: 0 }), null); assert.equal(restore({ v: 1, level: 0, plants: 'x' }), null);
 });
 
@@ -332,7 +343,7 @@ test('a wave got through pays by the level, a bug gives its own reward whatever 
   }
   for (const level of [0, 4]) {
     const g = createGame(level); g.dew = 5000;
-    for (let j = 0; j < ROWS; j++) for (const i of [9, 11]) place(g, 'corn', i, j);
+    for (let j = 0; j < ROWS; j++) for (const i of [9, 11]) place(g, 'pepper', i, j);
     for (const p of g.plants.slice()) { upgrade(g, p); upgrade(g, p); }
     startWave(g); let kills = 0, paid = null;
     for (let n = 0; n < 60 * 200 && paid == null; n++) {
@@ -352,40 +363,99 @@ function lone(kind, hp, plants) {
   const b = g.bugs[0]; b.hp = b.maxHp = hp; g.events.length = 0;
   for (let n = 0; n < 60 * 4; n++) step(g, 1 / 60); // a few cells onto the field
   const i = Math.floor(b.x), j = Math.floor(b.y);
-  for (const [type, lvl, di, dj] of plants) { assert.ok(place(g, type, i + di, j + dj), `${type} at ${i + di},${j + dj}`); const p = g.plants[g.plants.length - 1]; for (let l = 1; l < lvl; l++) upgrade(g, p); }
+  for (const [type, lvl, di, dj] of plants) { assert.ok(place(g, type, i + di, j + dj), `${type} at ${i + di},${j + dj}`); const p = g.plants[g.plants.length - 1]; for (let l = 1; l < lvl; l++) upgrade(g, p, 'a'); }
   return { g, b };
 }
 const hitsOf = (g, secs, src) => { const out = []; for (let n = 0; n < 60 * secs; n++) { step(g, 1 / 60); for (const e of g.events) if (e.t === 'hit' && (!src || e.src === src)) out.push(e); g.events.length = 0; } return out; };
 
-test('a bug pricked by a rose takes more from every plant for a while', () => {
-  const { g, b } = lone('snail', 1e5, [['rose', 1, -1, 1]]);
+test('a bug pricked by a hunter rose takes more from every plant for a while', () => {
+  const { g, b } = lone('snail', 1e5, [['rose', 3, -1, 1]]);
   const first = hitsOf(g, 3, 'rose'); assert.ok(first.length >= 2);
-  assert.equal(first[0].dmg, PLANTS.rose.dmg[0]); // the first prick finds it unmarked
-  assert.ok(Math.abs(first[1].dmg - PLANTS.rose.dmg[0] * (1 + PLANTS.rose.mark[0])) < 1e-6, `${first[1].dmg}`);
+  assert.equal(first[0].dmg, PLANTS.rose.a.dmg[0]); // the first prick finds it unmarked
+  assert.ok(Math.abs(first[1].dmg - PLANTS.rose.a.dmg[0] * (1 + PLANTS.rose.a.mark)) < 1e-6, `${first[1].dmg}`);
   assert.ok(b.mark > 0 && b.mark <= MARK_T);
 });
 
-test('a flytrap swallows a bug the others have worn down, however thick, but never a boss', () => {
+test('a marked bug dying passes the mark of a top hunter on to the bugs next to it', () => {
+  const { g, b } = lone('snail', 1e5, [['rose', 4, -1, 1]]);
+  hitsOf(g, 2, 'rose'); assert.ok(b.mark > 0 && b.chain === PLANTS.rose.a.chain[1]);
+  const near = [.3, -.3].map((dy) => { const q = { ...b, id: g.nextId++, mark: 0, markV: 0, chain: 0, hp: 1e5, maxHp: 1e5, y: b.y + dy, coming: 0 }; g.bugs.push(q); return q; });
+  b.hp = 1; hitsOf(g, 1, 'rose');
+  assert.ok(b.hp <= 0); assert.ok(near.every((q) => q.mark > 0), 'both marked');
+});
+
+test('a flytrap swallows a bug the others have worn down, however thick, leaves a healthier one alone, never eats a boss', () => {
   const big = 1e5, { g, b } = lone('snail', big, [['flytrap', 1, -1, 1]]);
-  b.hp = big * (PLANTS.flytrap.gulp[0] + .2); hitsOf(g, 1.5); assert.ok(b.hp > 0, 'too healthy to swallow: a bite only');
+  b.hp = big * (PLANTS.flytrap.gulp[0] + .2); hitsOf(g, 3); assert.equal(b.hp, big * (PLANTS.flytrap.gulp[0] + .2), 'too healthy: not touched at all');
   b.hp = big * (PLANTS.flytrap.gulp[0] - .05); hitsOf(g, PLANTS.flytrap.eat[0] + 1); assert.ok(b.hp <= 0, 'worn down: swallowed whole');
   const boss = lone('rhino', big, [['flytrap', 1, -1, 1]]); boss.b.hp = big * .1; hitsOf(boss.g, 2); assert.ok(boss.b.hp > 0);
 });
 
-test('a cob of corn hits only so many bugs of a pack', () => {
+test('mint: an icicle slows the bug it hits (snails not), the cold slows all around, an icicle mint hits harder and harder', () => {
+  const { g, b } = lone('ant', 1e5, [['mint', 1, -1, 1]]);
+  hitsOf(g, 2, 'mint'); assert.ok(b.slowT > 0 && Math.abs(b.slowV - (1 - PLANTS.mint.frost[0])) < 1e-9);
+  const s = lone('snail', 1e5, [['mint', 1, -1, 1]]), x0 = s.b.x; hitsOf(s.g, 2, 'mint'); assert.ok(s.b.slowT > 0);
+  const t = lone('ant', 1e5, [['mint', 3, -1, 1]]); // (to 3 on branch a: cold)
+  t.g.plants.at(-1).br === 'a' && hitsOf(t.g, .2); assert.equal(t.b.slow, 1 - PLANTS.mint.a.slow, 'the cold slows the bug in its reach');
+  const ice = lone('snail', 1e7, []), [i, j] = [Math.floor(ice.b.x), Math.floor(ice.b.y)];
+  assert.ok(place(ice.g, 'mint', i - 1, j + 1) || place(ice.g, 'mint', i - 1, j - 1)); const m = ice.g.plants.at(-1); upgrade(ice.g, m); upgrade(ice.g, m, 'b'); upgrade(ice.g, m);
+  const hits = hitsOf(ice.g, 8, 'mint'); assert.ok(hits.length >= 3); assert.ok(hits[2].dmg > hits[0].dmg * 1.4, `${hits.map((h) => Math.round(h.dmg))}`);
+});
+
+test('pumpkins: thorns on the free cells around, spikes of a shell, a ward that saves one plant a wave', () => {
+  const g = createGame(8); g.dew = 1e5; assert.ok(place(g, 'pumpkin', 7, 3));
+  const k = (i, j) => j * COLS + i;
+  assert.equal(g.thorn[k(7, 4)], PLANTS.pumpkin.thorns[0]); assert.equal(g.thorn[k(7, 3)], 0, 'not under the pumpkin'); assert.equal(g.thorn[k(10, 3)], 0);
+  assert.ok(place(g, 'rose', 7, 4)); assert.equal(g.thorn[k(7, 4)], 0, 'not under a plant either');
+  const [shell, rose] = g.plants; upgrade(g, shell); upgrade(g, shell, 'a'); upgrade(g, shell);
+  assert.equal(rose.guard, PLANTS.pumpkin.a.guard[1]); assert.equal(rose.spikes, PLANTS.pumpkin.a.spikes[1]); assert.equal(rose.ward, shell);
+  send(g, 'caterpillar'); for (let n = 0; n < 600 && !g.bugs.length; n++) step(g, 1 / 60);
+  const b = g.bugs[0]; Object.assign(b, { x: 8.5, y: 4.5, ti: 8, tj: 4, hp: 1e4, maxHp: 1e4 });
+  const chew = () => { rose.hp = 1; b.chew = .01; b.chewTarget = rose; step(g, 1 / 60); };
+  chew(); assert.equal(rose.hp, 1, 'the ward keeps it'); assert.ok(shell.warded); assert.ok(b.hp < 1e4, 'spikes');
+  chew(); assert.ok(!g.plants.includes(rose), 'once a wave');
+});
+
+test('chili: heat burns all around and the fire spreads at the top; burn-through takes the armor off while it burns', () => {
+  const { g, b } = lone('pillbug', 1e5, [['pepper', 3, -1, 1]]);
+  hitsOf(g, 3, 'pepper'); assert.ok(b.burn > 0 && b.melt === 0, 'heat sets it burning, the armor stays');
+  const { g: h, b: c } = lone('pillbug', 1e5, []), [i, j] = [Math.floor(c.x), Math.floor(c.y)];
+  assert.ok(place(h, 'pepper', i - 1, j + 1) || place(h, 'pepper', i - 1, j - 1)); const p = h.plants.at(-1); upgrade(h, p); upgrade(h, p, 'b'); upgrade(h, p);
+  const hits = hitsOf(h, 4, 'pepper'); assert.ok(hits.length >= 1); assert.ok(c.melt > 0, 'no armor while it burns');
+  assert.ok(c.armor < BUGS.pillbug.armor, 'the top cracks the armor for good');
+});
+
+test('flyers: a lure flytrap turns them to it once, a top far shot brings a worn one down onto the trail', () => {
+  const g = createGame(8); g.dew = 1e6; g.hp = g.maxHp = 1e6; const [fi, fj] = g.fruit;
+  const at = [[fi + 3, fj], [fi + 3, fj + 1], [fi + 3, fj - 1], [fi + 4, fj]].find(([i, j]) => !placeProblem(g, i, j));
+  place(g, 'flytrap', ...at); const f = g.plants[0]; upgrade(g, f); upgrade(g, f, 'b'); upgrade(g, f);
+  startWave(g); g.queue = [{ kind: 'butterfly', at: 0, e: 0 }];
+  let lured = false; for (let n = 0; n < 60 * 30 && g.bugs.length + g.queue.length; n++) { step(g, 1 / 60); if (g.events.some((e) => e.t === 'lure')) lured = true; g.events.length = 0; for (const q of g.bugs) q.hp = q.maxHp; }
+  assert.ok(lured, 'the butterfly turned to the nectar');
+  const h = createGame(8); h.dew = 1e6; h.hp = h.maxHp = 1e6;
+  const spot = [[fi + 2, fj], [fi + 2, fj + 1], [fi + 1, fj + 1]].find(([i, j]) => !placeProblem(h, i, j));
+  place(h, 'rose', ...spot); const r = h.plants[0]; upgrade(h, r); upgrade(h, r, 'b'); upgrade(h, r);
+  startWave(h); h.queue = [{ kind: 'wasp', at: 0, e: 0 }];
+  let fell = null; for (let n = 0; n < 60 * 40 && !fell && h.bugs.length + h.queue.length; n++) { for (const q of h.bugs) if (q.fly && q.maxHp < 1e4) Object.assign(q, { maxHp: 1e4, hp: 5100 }); step(h, 1 / 60); fell = h.events.find((e) => e.t === 'fall'); h.events.length = 0; }
+  assert.ok(fell, 'a wasp brought down'); assert.equal(fell.b.fly, false); assert.ok(trails(h).some((tr) => tr.some(([i, j]) => i === fell.b.ti && j === fell.b.tj)), 'onto the trail');
+});
+
+test('a pepper of a chili hits only so many bugs of a pack', () => {
   const g = createGame(0); g.dew = 1e6; g.hp = g.maxHp = 1e6; startWave(g);
   g.queue = Array.from({ length: 12 }, (_, n) => ({ kind: 'ant', at: n * .05, e: 0 }));
   for (let n = 0; n < 60 * 4; n++) step(g, 1 / 60);
   for (const q of g.bugs) q.hp = q.maxHp = 1e5;
-  const lead = g.bugs[0]; assert.ok(place(g, 'corn', Math.floor(lead.x) - 1, Math.floor(lead.y) + 1)); g.events.length = 0;
-  let most = 0, cur = 0;
-  for (let n = 0; n < 60 * 6; n++) { step(g, 1 / 60); cur = g.events.filter((e) => e.t === 'hit' && e.src === 'corn').length; most = Math.max(most, cur); g.events.length = 0; }
-  assert.equal(most, PLANTS.corn.hits[0]);
+  const lead = g.bugs[0]; assert.ok(place(g, 'pepper', Math.floor(lead.x) - 1, Math.floor(lead.y) + 1)); g.events.length = 0;
+  let most = 0, cur = 0, burnt = false;
+  for (let n = 0; n < 60 * 6; n++) { step(g, 1 / 60); cur = g.events.filter((e) => e.t === 'hit' && e.src === 'pepper').length; most = Math.max(most, cur); if (cur) burnt ||= g.bugs.some((q) => q.burn > 0); g.events.length = 0; }
+  assert.equal(most, PLANTS.pepper.hits[0]);
+  assert.ok(burnt, 'and sets them burning');
 });
 
 // Diggers: the way they eat through the garden is what the player is shown (digTrails); and they come last in a wave,
 // so that the holes they make are not a road for the rest of it.
-const GARDEN18 = [["pumpkin",1,13,5],["pepper",3,10,1],["pumpkin",1,4,6],["pumpkin",1,10,5],["rose",3,12,2],["corn",3,12,0],["corn",2,13,0],["aloe",3,11,2],["mint",3,9,2],["pepper",3,8,0],["dandelion",3,7,3],["dandelion",3,6,3],["dandelion",1,2,1],["dandelion",1,2,5],["corn",3,8,2],["pepper",3,6,1],["rose",3,7,2],["corn",3,6,2],["corn",3,5,3],["pepper",3,4,4],["corn",2,4,0],["aloe",1,13,6],["aloe",2,0,4],["mint",3,4,1],["corn",2,3,2],["corn",1,2,2],["pepper",1,10,4],["mint",1,9,4],["rose",1,9,5],["flytrap",1,2,4],["flytrap",1,2,3],["aloe",1,5,4],["aloe",1,3,1],["pepper",1,7,4],["flytrap",1,10,6],["flytrap",1,9,6],["flytrap",1,8,6],["flytrap",1,12,3],["flytrap",1,12,4],["corn",1,5,6],["corn",1,6,6],["corn",1,7,6]];
+// (the garden of that party with the plants of now: corn as chili, aloe as mint, dandelion as rose)
+const GARDEN18 = [["pumpkin",1,13,5],["pepper",3,10,1],["pumpkin",1,4,6],["pumpkin",1,10,5],["rose",3,12,2],["pepper",3,12,0],["pepper",2,13,0],["mint",3,11,2],["mint",3,9,2],["pepper",3,8,0],["rose",3,7,3],["rose",3,6,3],["rose",1,2,1],["rose",1,2,5],["pepper",3,8,2],["pepper",3,6,1],["rose",3,7,2],["pepper",3,6,2],["pepper",3,5,3],["pepper",3,4,4],["pepper",2,4,0],["mint",1,13,6],["mint",2,0,4],["mint",3,4,1],["pepper",2,3,2],["pepper",1,2,2],["pepper",1,10,4],["mint",1,9,4],["rose",1,9,5],["flytrap",1,2,4],["flytrap",1,2,3],["mint",1,5,4],["mint",1,3,1],["pepper",1,7,4],["flytrap",1,10,6],["flytrap",1,9,6],["flytrap",1,8,6],["flytrap",1,12,3],["flytrap",1,12,4],["pepper",1,5,6],["pepper",1,6,6],["pepper",1,7,6]];
 test('diggers: their way eats through the one plant that shuts a short run, and they come last in every wave', async () => {
   const { digTrails } = await import('../public/game.js');
   const g = createGame(4); g.dew = 1e9; const [ei, ej] = g.entries[0];
@@ -395,7 +465,7 @@ test('diggers: their way eats through the one plant that shuts a short run, and 
   // a real garden (a party on «Крапивный лог», wave 18, from the analytics): a long maze where one flytrap by the
   // anthill shuts an empty run to the fruit; the crickets ate it every wave and the party was lost to them
   const h = createGame(4); h.dew = 1e9;
-  for (const [t, lvl, i, j] of GARDEN18) { if (place(h, t, i, j)) { const p = h.plants.at(-1); while (p.lvl < lvl) upgrade(h, p); } }
+  for (const [t, lvl, i, j] of GARDEN18) { if (place(h, t, i, j)) { const p = h.plants.at(-1); while (p.lvl < lvl) upgrade(h, p, 'a'); } }
   const [dh] = digTrails(h); assert.deepEqual(dh.eats, [[12, 4]]); assert.ok(dh.cells.length < trails(h)[0].length / 2, 'a short way for them');
   for (const L of LEVELS) for (const w of L.waves) { const ks = w.map((x) => x[0]).filter((k) => !BUGS[k].boss), f = ks.findIndex((k) => BUGS[k].dig); if (f >= 0) assert.ok(ks.slice(f).every((k) => BUGS[k].dig), `${L.name}: ${ks}`); }
 });

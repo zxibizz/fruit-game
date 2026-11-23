@@ -5,7 +5,7 @@
 import { LEVELS, PLANTS, BUGS, PERKS, PERK_ORDER, TUNE, BREAK, EARLY_DEW, wavePay, makeWaves } from '../public/data.js';
 
 // The perks a player has by level n who took two stars on every level before it, and all of them.
-const BUY = ['dew', 'rose', 'heart', 'corn', 'pumpkin', 'mint', 'dew', 'refund', 'pepper', 'rose', 'clouds', 'corn', 'dandelion', 'heart', 'aloe', 'flytrap', 'bell', 'mint', 'pepper', 'dew'];
+const BUY = ['dew', 'rose', 'heart', 'pepper', 'pumpkin', 'mint', 'dew', 'refund', 'pepper', 'rose', 'clouds', 'heart', 'pumpkin', 'flytrap', 'mint', 'flytrap', 'dew'];
 export function expectedMeta(level, perLevel = 2) {
   let stars = level * perLevel; const meta = {};
   for (const k of BUY) { const cost = PERKS[k].cost[meta[k] || 0]; if (cost == null || cost > stars) continue; stars -= cost; meta[k] = (meta[k] || 0) + 1; }
@@ -33,7 +33,7 @@ const plantsOf = (spec, level) => {
   const [op, k] = spec.split(':'), all = LEVELS[level].plants;
   return op === 'no' ? all.filter((x) => x !== k) : ['pumpkin', k];
 };
-// Overrides: { 'L5.dew': 500, 'L5.pay': '150/270', 'TUNE.hpGrowth': 1.2, 'PLANTS.dandelion.ground': .3, 'BUGS.butterfly.hp': 12, FLY_SHARE: .2 }.
+// Overrides: { 'L5.dew': 500, 'L5.pay': '150/270', 'TUNE.hpGrowth': 1.2, 'PLANTS.rose.b.ground': .3, 'BUGS.butterfly.hp': 12, FLY_SHARE: .2 }.
 const WAVE_KEYS = new Set(['count', 'budget', 'roster', 'boss']);
 export function applyOverrides(set = {}, waveSeed = null) {
   const regen = new Set(); let flyShare;

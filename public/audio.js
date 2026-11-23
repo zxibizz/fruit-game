@@ -262,11 +262,11 @@ const ROOT = 330;
 let run = 0, comboAt = 0;
 export const sfx = {
   // ---- the frequent group (rate-limited here; call them for every event) ----
-  // a plant shoots: 'thorn' — a tiny soft "pft", 'kernel' — a hollow "thup", 'fluff' — an airy puff
+  // a plant shoots: 'thorn' (and an icicle) — a tiny soft "pft", 'pepper' and a big icicle — a hollow "thup" of a lob, 'fluff' — an airy puff
   shoot(kind = 'thorn', pan = 0) {
     const m = vary(0.12), p = pan * 0.6;
-    if (kind === 'kernel') {
-      frequent('kernel', 70, 2, () => {
+    if (kind === 'pepper' || kind === 'icicleBig') { // a lob: a soft woody throw
+      frequent(kind, 80, 2, () => {
         note(430 * m, { type: 'triangle', vol: 0.13, a: 0.003, dur: 0.07, to: 210 * m, lp: 1100, pan: p });
         burst({ type: 'bandpass', f0: 900 * m, q: 1.2, vol: 0.1, a: 0.003, dur: 0.03, pan: p });
       });

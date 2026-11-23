@@ -8,23 +8,31 @@ pub const ROWS: i32 = 8;
 pub const N: usize = (COLS * ROWS) as usize;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Stat { Range, Rate, Dmg, Mark, Multi, Splash, Hits, Guard, Slow, Chill, Burn, BurnT, Stun, Eat, Chomp, Gulp, EatAir, Buff, Hp, Thorns }
-pub const NSTAT: usize = 20;
+pub enum Stat {
+    Range, Rate, Dmg, Mark, Multi, Splash, Hits, Guard, Slow, Burn, BurnT, Eat, Gulp, EatAir, Hp, Thorns, Spikes, Ward, ThornAir,
+    Chain, Ground, GroundRange, Down, Air, Speed, Blaze, Spread, Melt, Crack, Frost, FrostT, Rime, Heavy, Stack, Heads, Lure, LureBoss,
+}
+pub const NSTAT: usize = 37;
 fn stat_of(name: &str) -> Option<Stat> {
     use Stat::*;
     Some(match name {
-        "range" => Range, "rate" => Rate, "dmg" => Dmg, "mark" => Mark, "multi" => Multi, "splash" => Splash, "hits" => Hits,
-        "guard" => Guard, "slow" => Slow, "chill" => Chill, "burn" => Burn, "burnT" => BurnT, "stun" => Stun, "eat" => Eat,
-        "chomp" => Chomp, "gulp" => Gulp, "eatAir" => EatAir, "buff" => Buff, "hp" => Hp, "thorns" => Thorns,
+        "range" => Range, "rate" => Rate, "dmg" => Dmg, "mark" => Mark, "multi" => Multi, "splash" => Splash, "hits" => Hits, "guard" => Guard,
+        "slow" => Slow, "burn" => Burn, "burnT" => BurnT, "eat" => Eat, "gulp" => Gulp, "eatAir" => EatAir, "hp" => Hp, "thorns" => Thorns,
+        "spikes" => Spikes, "ward" => Ward, "thornAir" => ThornAir, "chain" => Chain, "ground" => Ground, "groundRange" => GroundRange,
+        "down" => Down, "air" => Air, "speed" => Speed, "blaze" => Blaze, "spread" => Spread, "melt" => Melt, "crack" => Crack,
+        "frost" => Frost, "frostT" => FrostT, "rime" => Rime, "heavy" => Heavy, "stack" => Stack, "heads" => Heads, "lure" => Lure, "lureBoss" => LureBoss,
         _ => return None,
     })
 }
+// The tier a plant stands at: levels 1 and 2, then levels 3 and 4 of branch a (br 1), of branch b (br 2).
+#[inline] pub fn slot(lvl: usize, br: u8) -> usize { if lvl <= 2 { lvl - 1 } else { 2 + 2 * (br as usize - 1) + (lvl - 3) } }
 
-pub struct Perk { pub stat: Option<Stat>, pub mul: bool, pub v: Vec<f64>, pub cost: Vec<f64> }
+pub struct Perk { pub stat: Vec<Stat>, pub mul: bool, pub v: Vec<f64>, pub cost: Vec<f64> }
+// st: every stat on the six tiers (slot()); has: whether any tier has it. up: the dew for level 2, for levels 3 and 4
+// of branch a, of branch b; from: the first level of the campaign (1-based) where branch a, b can be taken.
 pub struct PlantDef {
-    pub name: String, pub cost: f64, pub up: [f64; 2],
-    pub st: [[f64; 3]; NSTAT], pub has: [bool; NSTAT],
-    pub air: bool, pub ground: f64, pub ground_range: f64, pub speed: f64,
+    pub name: String, pub cost: f64, pub up: [f64; 5], pub from: [f64; 2],
+    pub st: [[f64; 6]; NSTAT], pub has: [bool; NSTAT],
     pub perk: Option<Perk>,
 }
 pub struct BugDef {
@@ -41,11 +49,11 @@ pub struct Level {
     pub tiles: Vec<(i32, i32, Tile)>, pub entries: Vec<i32>, pub fruit: (i32, i32), pub waves: Vec<Vec<Group>>,
 }
 pub struct Data {
-    pub fruit_hp: f64, pub brk: f64, pub early_dew: f64, pub refund: f64, pub chew_growth: f64,
+    pub fruit_hp: f64, pub brk: f64, pub early_dew: f64, pub refund: f64, pub guard_r: f64, pub thorn_boss: f64, pub sniff: f64, pub fall_t: f64, pub chew_growth: f64,
     pub power_every: f64, pub power_max: f64, pub fertile: f64, pub fertile_add: f64, pub mud: f64, pub nettle: f64, pub nettle_boss: f64,
-    pub weed_cost: f64, pub brood_reward: f64, pub fly_hp: f64, pub mark_t: f64, pub hp_growth: f64, pub boss_bite: f64,
+    pub weed_cost: f64, pub brood_reward: f64, pub fly_hp: f64, pub mark_t: f64, pub hp_growth: f64,
     pub plants: Vec<PlantDef>, pub bugs: Vec<BugDef>, pub perks: Vec<(String, Perk)>, pub levels: Vec<Level>,
-    pub pepper: usize, pub pumpkin: usize, pub aloe: usize, pub cricket: usize,
+    pub pepper: usize, pub pumpkin: usize, pub flytrap: usize, pub cricket: usize,
 }
 
 impl Level {
@@ -56,9 +64,6 @@ impl Level {
     }
 }
 
-fn triple(v: &J) -> [f64; 3] {
-    match v { J::Arr(a) => { assert!(a.len() == 3, "a stat has three levels"); [a[0].num(), a[1].num(), a[2].num()] } _ => { let x = v.num(); [x, x, x] } }
-}
 fn nums(v: &J) -> Vec<f64> { v.arr().iter().map(|x| x.num()).collect() }
 
 impl Data {
@@ -70,27 +75,27 @@ impl Data {
         assert!(n("COLS") as i32 == COLS && n("ROWS") as i32 == ROWS, "the field is {}x{} here", COLS, ROWS);
         let perks: Vec<(String, Perk)> = j.at("PERKS").obj().iter().map(|(name, p)| {
             for (k, _) in p.obj() { assert!(matches!(k.as_str(), "cost" | "v" | "stat" | "mul"), "perk {}: unknown key {}", name, k); }
-            let stat = p.get("stat").map(|s| stat_of(s.str()).unwrap_or_else(|| panic!("perk {}: unknown stat {}", name, s.str())));
+            let stat = p.get("stat").map_or(Vec::new(), |s| s.arr().iter().map(|x| stat_of(x.str()).unwrap_or_else(|| panic!("perk {}: unknown stat {}", name, x.str()))).collect());
             (name.clone(), Perk { stat, mul: p.get("mul").map_or(false, |m| m.truthy()), v: nums(p.at("v")), cost: nums(p.at("cost")) })
         }).collect();
-        let plants: Vec<PlantDef> = j.at("PLANTS").obj().iter().map(|(name, p)| {
-            let mut d = PlantDef { name: name.clone(), cost: 0.0, up: [0.0; 2], st: [[0.0; 3]; NSTAT], has: [false; NSTAT], air: false, ground: 0.0, ground_range: 0.0, speed: 0.0, perk: None };
+        let plants: Vec<PlantDef> = j.at("TIERS").obj().iter().map(|(name, p)| {
+            let mut d = PlantDef { name: name.clone(), cost: 0.0, up: [0.0; 5], from: [0.0; 2], st: [[0.0; 6]; NSTAT], has: [false; NSTAT], perk: None };
             for (k, v) in p.obj() {
                 match k.as_str() {
                     "cost" => d.cost = v.num(),
-                    "up" => { let u = nums(v); d.up = [u[0], u[1]]; }
-                    "air" => d.air = v.truthy(),
-                    "ground" => d.ground = v.num(),
-                    "groundRange" => d.ground_range = v.num(),
-                    "speed" => d.speed = v.num(),
-                    "shot" => {}
-                    _ => { let s = stat_of(k).unwrap_or_else(|| panic!("plant {}: unknown key {}", name, k)); d.st[s as usize] = triple(v); d.has[s as usize] = true; }
+                    "up" => { let u = nums(v); assert!(u.len() == 5, "plant {}: five prices", name); d.up.copy_from_slice(&u); }
+                    "from" => { let u = nums(v); d.from = [u[0], u[1]]; }
+                    "st" => for (sk, sv) in v.obj() {
+                        let s = stat_of(sk).unwrap_or_else(|| panic!("plant {}: unknown stat {}", name, sk)); let u = nums(sv);
+                        assert!(u.len() == 6, "plant {}: six tiers of {}", name, sk); d.st[s as usize].copy_from_slice(&u); d.has[s as usize] = u.iter().any(|&x| x != 0.0);
+                    },
+                    _ => panic!("plant {}: unknown key {}", name, k),
                 }
             }
             d
         }).collect();
         let plants: Vec<PlantDef> = plants.into_iter().map(|mut d| {
-            if let Some((_, pk)) = perks.iter().find(|(n, _)| *n == d.name) { d.perk = Some(Perk { stat: pk.stat, mul: pk.mul, v: pk.v.clone(), cost: pk.cost.clone() }); }
+            if let Some((_, pk)) = perks.iter().find(|(n, _)| *n == d.name) { d.perk = Some(Perk { stat: pk.stat.clone(), mul: pk.mul, v: pk.v.clone(), cost: pk.cost.clone() }); }
             d
         }).collect();
         let names: Vec<String> = j.at("BUGS").obj().iter().map(|(k, _)| k.clone()).collect();
@@ -125,13 +130,13 @@ impl Data {
             }
         }).collect();
         for (n, l) in levels.iter().enumerate() { for (k, &p) in l.pay_at.iter().enumerate() { assert!(l.wave_pay(k + 1) == p, "level {}: the pay of wave {} is {} in data.js and {} here", n + 1, k + 1, p, l.wave_pay(k + 1)); } }
-        let (pepper, pumpkin, aloe) = (plant_ix("pepper"), plant_ix("pumpkin"), plant_ix("aloe"));
+        let (pepper, pumpkin, flytrap) = (plant_ix("pepper"), plant_ix("pumpkin"), plant_ix("flytrap"));
         let cricket = bug_ix("cricket");
         Data {
-            fruit_hp: n("FRUIT_HP"), brk: n("BREAK"), early_dew: n("EARLY_DEW"), refund: n("REFUND"), chew_growth: n("CHEW_GROWTH"),
+            fruit_hp: n("FRUIT_HP"), brk: n("BREAK"), early_dew: n("EARLY_DEW"), guard_r: n("GUARD_R"), thorn_boss: n("THORN_BOSS"), sniff: n("SNIFF"), fall_t: n("FALL_T"), refund: n("REFUND"), chew_growth: n("CHEW_GROWTH"),
             power_every: n("POWER_EVERY"), power_max: n("POWER_MAX"), fertile: n("FERTILE"), fertile_add: n("FERTILE_ADD"), mud: n("MUD"), nettle: n("NETTLE"), nettle_boss: n("NETTLE_BOSS"),
-            weed_cost: n("WEED_COST"), brood_reward: n("BROOD_REWARD"), fly_hp: n("FLY_HP"), mark_t: n("MARK_T"), hp_growth: n("hpGrowth"), boss_bite: c.get("bossBite").map_or(1.0, |v| v.num()),
-            plants, bugs, perks, levels, pepper, pumpkin, aloe, cricket,
+            weed_cost: n("WEED_COST"), brood_reward: n("BROOD_REWARD"), fly_hp: n("FLY_HP"), mark_t: n("MARK_T"), hp_growth: n("hpGrowth"),
+            plants, bugs, perks, levels, pepper, pumpkin, flytrap, cricket,
         }
     }
 }

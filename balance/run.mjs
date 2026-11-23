@@ -4,7 +4,7 @@
 // scenario, prints the findings per variant and writes report.html and results.json to --out (default
 // ~/tmp/balance/<time>). The parties are played by the native bot on the native simulation (sim/, built here by
 // cargo): a batch per variant of the data, on --jobs threads.
-//   --set  overrides for every variant: L5.dew=500, TUNE.hpGrowth=1.2, PLANTS.dandelion.ground=.3, FLY_SHARE=.2
+//   --set  overrides for every variant: L5.dew=500, TUNE.hpGrowth=1.2, PLANTS.rose.b.ground=.3, FLY_SHARE=.2
 //   --grid variants to compare: every combination of the listed values is one variant
 //   --margin for the smart bot, the lazy gardens and the routes, how much healthier the bugs may be before each stops
 //          winning (margin.mjs; seven more parties for each; always on in the routes plan; some three minutes for

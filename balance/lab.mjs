@@ -1,11 +1,12 @@
 // The plant lab: node balance/lab.mjs [--wave 14] [--dew 4000] [--weight 100] [--level 8] [--set K=V,...]
-//   [--plants rose,corn] [--mix rose,mint] [--bugs ant,snail] [--no-mix]
+//   [--plants rose,rose.a,pepper.b] [--base pepper.b] [--mix mint.a,rose.a] [--bugs ant,snail] [--no-mix]
 // What each plant is for, measured apart from the levels: a fixed maze of pumpkins, beside its trail a garden of one
 // kind of plant bought for --dew (on the free cells beside the trail from the fruit end, grown level by level), and one pack of one kind of bug
-// with the health of --wave and of --weight (as in the wave budgets). The number is the share of the pack's health
-// the garden takes, in percent: 100 is a pack killed to the last bug. Supports (rose marks, mint, bell, flytrap, aloe) are also
-// measured as a fifth of the dew of a corn garden: the number there is that garden over an all-corn one.
-import { LEVELS, BUGS, PLANTS, PLANT_ORDER, TUNE } from '../public/data.js';
+// with the health of --wave and of --weight (as in the wave budgets). A kind is a plant (grown to level 2) or a plant
+// and its branch, 'rose.a' (grown to level 4). The number is the share of the pack's health the garden takes, in
+// percent: 100 is a pack killed to the last bug. Supports (marks, cold, flytraps, pumpkins) are also measured as a fifth
+// of the dew of a --base garden: the number there is that garden over an all-base one.
+import { LEVELS, BUGS, PLANTS, TUNE, upCost } from '../public/data.js';
 import { createGame, step, place, upgrade, upgradeCost, startWave, placeProblem, bugHp, trails, COLS, ROWS } from '../public/game.js';
 import { layout } from '../sim/js/play.mjs';
 import { applyOverrides } from './scenario.mjs';
@@ -22,6 +23,8 @@ const walls = layout(level, true), within = (dx, dy, r) => dx * dx + dy * dy <= 
 function garden(mix) {
   const g = createGame(level, 7, {}); g.dew = 1e9;
   for (const [col, gap] of walls) for (let j = 0; j < ROWS; j++) if (j !== gap && !g.grid[j][col] && !placeProblem(g, col, j)) place(g, 'pumpkin', col, j);
+  for (const p of g.plants) p.web = 1e9; // the walls are walls only: no guard, no thorns (pumpkins are measured as plants of the garden)
+  g.thorn.fill(0); g.thornAir.fill(0); // (what they gave so far; the plants put later count without them)
   const tr = trailOf(g), on = new Set(tr.map(([i, j]) => i + ',' + j)), cells = [];
   for (let i = 0; i < COLS; i++) for (let j = 0; j < ROWS; j++) {
     if (on.has(i + ',' + j) || placeProblem(g, i, j)) continue; // the free cells: the walls stay pumpkins
@@ -29,16 +32,19 @@ function garden(mix) {
   }
   cells.sort((a, b) => b[2] - a[2]);
   const left = Object.fromEntries(mix.map(([k, s]) => [k, dew * s])), mine = Object.fromEntries(mix.map(([k]) => [k, []]));
+  const typeOf = (k) => k.split('.')[0], brOf = (k) => k.split('.')[1]?.[0] || null, top = (k) => Number(k.split('.')[1]?.[1]) || (brOf(k) ? 4 : 2); // 'rose.a3': grown to 3
   // as many plants of a kind as its dew grows to the full (one at least), the kinds standing mixed along the trail
-  const full = (k) => PLANTS[k].cost + PLANTS[k].up[0] + PLANTS[k].up[1], want = mix.map(([k, s]) => [k, Math.max(1, Math.round(dew * s / full(k)))]);
+  const full = (k) => { const P = PLANTS[typeOf(k)]; let c = P.cost; for (let l = 1; l < top(k); l++) c += upCost(P, l, brOf(k)); return c; };
+  const want = mix.map(([k, s]) => [k, Math.max(1, Math.round(dew * s / full(k)))]);
   const total = want.reduce((t, [, n]) => t + n, 0), deal = [];
   for (const [k, n] of want) for (let q = 0; q < n; q++) deal.push([(q + .5) / n, k]);
   deal.sort((a, b) => a[0] - b[0]);
   cells.slice(0, total).forEach(([i, j], q) => {
-    const k = deal[q][1]; if (left[k] < PLANTS[k].cost) return;
-    if (place(g, k, i, j)) { left[k] -= PLANTS[k].cost; mine[k].push(g.plants[g.plants.length - 1]); }
+    const k = deal[q][1], P = PLANTS[typeOf(k)]; if (left[k] < P.cost) return;
+    if (place(g, typeOf(k), i, j)) { left[k] -= P.cost; mine[k].push(g.plants[g.plants.length - 1]); }
   });
-  for (const [k] of mix) for (let lvl = 1; lvl < 3; lvl++) for (const p of mine[k]) { const c = upgradeCost(p); if (p.lvl === lvl && c != null && left[k] >= c) { upgrade(g, p); left[k] -= c; } }
+  g.level = LEVELS.length - 1; // every branch open
+  for (const [k] of mix) for (let lvl = 1; lvl < top(k); lvl++) for (const p of mine[k]) { const c = upgradeCost(p, brOf(k)); if (p.lvl === lvl && c != null && left[k] >= c) { upgrade(g, p, brOf(k)); left[k] -= c; } }
   return g;
 }
 // the health a garden takes off a pack too big for it (--weight, as in the wave budgets), in thousands
@@ -60,11 +66,12 @@ const bugs = (opt('--bugs') || 'ant,aphid,grasshopper,beetle,pillbug,caterpillar
 const pad = (s, n = 8) => String(s).padEnd(n), row = (name, f) => console.log(pad(name, 16) + bugs.map((k) => pad(f(k))).join(''));
 console.log(`wave ${wave}, ${dew} dew, a pack of weight ${WEIGHT}, level ${level + 1}: the share of the pack's health a garden takes, %`);
 console.log(pad('', 16) + bugs.map((k) => pad(k.slice(0, 7))).join(''));
-const solo = (opt('--plants') || 'rose,corn,pepper,dandelion,flytrap').split(','), pc = (mix, b) => Math.round(dealt(mix, b).share * 100);
+const solo = (opt('--plants') || 'rose,pepper,mint,flytrap,rose.a,rose.b,pepper.a,pepper.b,mint.a,mint.b,flytrap.a,flytrap.b').split(','), pc = (mix, b) => Math.round(dealt(mix, b).share * 100);
 for (const k of solo) row(k, (b) => pc([[k, 1]], b));
 if (!args.includes('--no-mix')) {
-  console.log('a fifth of a corn garden given to it:');
-  for (const k of (opt('--mix') || 'rose,mint,bell,flytrap,pepper,aloe').split(',')) row(`corn + ${k}`, (b) => pc([['corn', .8], [k, .2]], b));
+  const base = opt('--base', 'pepper.b');
+  console.log(`a fifth of a ${base} garden given to it:`);
+  for (const k of (opt('--mix') || 'rose.a,mint.a,mint.b,flytrap.a,pumpkin.a,pumpkin.b').split(',')) row(`${base} + ${k}`, (b) => pc([[base, .8], [k, .2]], b));
 }
 if (args.includes('--debug')) { const [k, b, w] = opt('--debug').split(':'), g = garden([[k, 1]]); const c = {}; for (const p of g.plants) c[p.type + p.lvl] = (c[p.type + p.lvl] || 0) + 1;
   console.log(c, 'trail', trailOf(g).length, [.5, 1, 2, 4].map((m) => `${w * m}: ${dealt([[k, 1]], b, w * m).share.toFixed(2)}`).join('  ')); }

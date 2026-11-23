@@ -10,10 +10,14 @@ and in portrait (turned there).
   then tap a cell (one plant per pick: the shelf lets go once it is planted). A plant of another kind can go right over
   an old one: the old one is sold first and its dew counts. Until the wave starts, a fresh plant sells for its full
   price, so a slip costs nothing.
-- **Plants**: nine of them, three levels each. A level is seen at a glance (one, two, three blooms or cobs, bigger,
-  gold on the third); the panel of a plant shows every number now and after the upgrade, and the third level adds a
-  trick of its own (a rose shoots two bugs, a pumpkin grows thorns, mint freezes…). Hold a plant or a bug to read
-  about it; the guide on the home screen has all of them.
+- **Plants**: five of them, four levels each. Levels 1 and 2 are the plant itself; at level 3 every plant on the field
+  takes one of its two branches (two cards in its panel, one tap), and level 4 is the top of that branch. The pumpkin
+  defends (a guard to the plants around, thorns on the free cells around; Shell / Thorny vines), the rose hits one bug
+  (Hunter marks / Far shot at flyers), the chili throws fire (Heat burns all around / Burn-through takes armor off),
+  mint is the only plant that slows (Cold slows all around / Icicle hits the thickest hard), the flytrap swallows the
+  worn bugs (Glutton / Lure turns flyers to its nectar). A branch opens on the level where the bugs it answers first
+  come. A branch and a top are seen at a glance (a look of their own, gold at the top); the panel shows every number
+  now and after the upgrade. Hold a plant or a bug to read about it; the guide on the home screen has all of them.
 - **Levels**: nine, 20–30 waves each, with their own ground: fertile beds (a stronger plant), mud (slow bugs), ponds,
   nettles (sting the bugs, nothing grows), weeds (cleared for dew), two anthills. A boss comes in the middle and at
   the end of every level: the rhino beetle runs, the queen lets ants out, the slug king splits into snails, the
@@ -31,13 +35,12 @@ and in portrait (turned there).
   garden grows back for nothing, at its levels and in full health. The rain (rare: it comes back every tenth wave)
   grows the roots back at once and washes the webs off, and heals no bitten plant. A plant elsewhere that would shut
   the bugs in once the roots grow back cannot go in. Freezes do not chain; flyers cross the maze in a straight line.
-- **Every plant has its place**: the pumpkin is the wall; corn is the all-rounder for packs (a cob hits a few bugs);
-  the pepper burns every bug around it, a little each — for dense crowds of small ones; the rose marks the bugs it
-  pricks (they take more from every plant) and reaches flyers; the flytrap bites through armor and swallows whole a
-  bug the others have worn down — for the few thick ones; the dandelion is the far shot at flyers; mint slows, the
-  bell makes neighbours shoot faster, the aloe guards the plants around (they take less damage). `node balance/lab.mjs` measures each plant apart
-  from the levels (a fixed maze, a garden of one kind for a sum of dew, a pack of one kind of bug), and the matrix
-  fails when a plant is not planted by the bot or when no level goes worse without it.
+- **Every plant has its place**, and every branch: who answers what is in `docs/redesign.md` (3.6) — crowds of small
+  bugs: Heat; armor: Burn-through, Icicle; the thick and bosses: Icicle and a flytrap for the worn ones; flyers: roses
+  and mint by the fruit, the Far shot, Cold, the Lure; fast bugs and snails: Cold (its top freezes snails too); the
+  walls: pumpkins. `node balance/lab.mjs` measures each plant and branch apart from the levels (a fixed maze, a garden
+  of one kind — 'rose.a', or 'rose.a3' for level 3 — for a sum of dew, a pack of one kind of bug), and the matrix fails
+  when a plant is not planted by the bot or when no level goes worse without it.
 - **Stars and perks**: up to three stars a level; they buy permanent perks (more dew at the start, a sturdier apple,
   a stronger plant…), which can be taken back and dealt again for free.
 - A level in progress is kept between waves and can be continued from the home screen.
@@ -58,7 +61,7 @@ and in portrait (turned there).
 - `node --test test/*.test.js` — pathing and placement rules, economy, eaten plants and roots, bosses, the ground, perks, saving, server, offline
   cache list, no sudden walls of flyers in the waves, the two copies of the simulation against each other (see `sim/`
   below), and the balance on one seed: the smart bot (`sim/src/bot.rs`: a maze through mud and nettles; it values a
-  garden by the bugs it stops — walkers and flyers apart, a crowd sharing a single shooter while corn and pepper hit
+  garden by the bugs it stops — walkers and flyers apart, a crowd sharing a single shooter while chili, heat and thorns hit
   many; frost and rain, the perks of two stars a level) must win every level; a garden beside the
   untouched trail must lose every level with the most perks there can be by then (three stars on every level before),
   planted any of four ways; half a garden or no powers must do worse. The suite takes half a minute and needs `cargo`

@@ -36,7 +36,7 @@ export function createTelemetry({ storage = globalThis.localStorage, post = null
   const drop = (sent) => { const ks = new Set(sent.map((r) => r.k)); write(read().filter((r) => !ks.has(r.k))); };
 
   // the garden as it stands: plants and roots, the trail (cells, the shortest when there are two anthills)
-  const garden = (g) => ({ plants: g.plants.map((p) => [p.type, p.lvl, p.i, p.j, Math.round(p.hp)]), stubs: g.stubs.map((s) => [s.type, s.lvl, s.i, s.j]),
+  const garden = (g) => ({ plants: g.plants.map((p) => [p.type + (p.br ? '.' + p.br : ''), p.lvl, p.i, p.j, Math.round(p.hp)]), stubs: g.stubs.map((s) => [s.type + (s.br ? '.' + s.br : ''), s.lvl, s.i, s.j]),
     trail: Math.min(...trails(g).map((t) => t.length)) });
   const openWave = (g) => ({ n: g.wave, t0: g.time, real: 0, paused: 0, atSpeed: [0, 0, 0], dew: Math.round(g.dew), hp: g.hp, early: party.early || 0,
     before: party.build, during: [], kills: {}, reward: 0, bites: {}, eaten: [], garden: garden(g) });
@@ -63,7 +63,7 @@ export function createTelemetry({ storage = globalThis.localStorage, post = null
       for (const e of g.events) {
         switch (e.t) {
           case 'place': act(['place', e.p.type, e.p.i, e.p.j]); break;
-          case 'upgrade': act(['up', e.p.type, e.p.lvl, e.p.i, e.p.j]); break;
+          case 'upgrade': act(['up', e.p.type, e.p.lvl, e.p.i, e.p.j, e.p.br || '']); break; // (the branch from level 3 on)
           case 'sell': act(['sell', e.p.type, e.p.lvl, e.p.i, e.p.j]); break;
           case 'regrow': if (e.by === 'rain') act(['regrow', e.p.type, e.p.i, e.p.j, 1]); break; // by the rain; after the wave the whole garden grows back by itself
           case 'weed': act(['weed', e.i, e.j]); break;

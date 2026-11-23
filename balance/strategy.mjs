@@ -27,7 +27,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 // what a cell and a maze show, in the order of feat() and routes::pool (the names are for the report only)
 export const FEATURES = ['kind', 'reach', 'passes', 'heat', 'slowed', 'shooters near', 'along', 'fertile', 'wall'];
 export const MAZE = ['length', 'wall cells', 'best pepper cell', 'eight best cells', 'turns', 'the bot\'s own'];
-export const KINDS = ['pumpkin', 'rose', 'corn', 'mint', 'pepper', 'dandelion', 'flytrap', 'bell']; // the aloe has a rule of its own
+export const KINDS = ['pumpkin', 'rose', 'mint', 'pepper', 'flytrap'];
 export const SMART = { route: 1, place: 'best', upgrades: 'greedy', meta: 'exp2', terrain: true, powers: true, early: true };
 // a flat vector of weights ↔ the policy the bot takes
 const NP = KINDS.length * FEATURES.length, NU = KINDS.length, DIM = NP + NU + MAZE.length;

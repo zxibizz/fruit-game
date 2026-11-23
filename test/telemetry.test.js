@@ -11,7 +11,7 @@ test('a party is recorded wave by wave: the garden, the trail, what was built an
   const sent = []; let up = false;
   const tm = createTelemetry({ storage: memory(), post: async (body) => { if (up) sent.push(...JSON.parse(body)); return up; } });
   const g = createGame(0, 7, {}); tm.start(g);
-  g.dew = 1000; for (let j = 0; j < 7; j++) place(g, 'pumpkin', 9, j); place(g, 'rose', 8, 3); place(g, 'corn', 10, 4); upgrade(g, g.plants.at(-1));
+  g.dew = 1000; for (let j = 0; j < 7; j++) place(g, 'pumpkin', 9, j); place(g, 'rose', 8, 3); place(g, 'pepper', 10, 4); upgrade(g, g.plants.at(-1));
   tm.observe(g); g.events.length = 0;
   startWave(g);
   for (let n = 0; n < 60 * 90 && g.phase === 'wave'; n++) { step(g, 1 / 60); tm.tick(1 / 60, 2, false); tm.observe(g); g.events.length = 0; }

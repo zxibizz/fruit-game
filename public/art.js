@@ -499,10 +499,11 @@ function hdBug(c, kind, x, y, a = 0, s = 1, o = {}) {
 }
 
 // ---------- plants: side view, base at x,y ----------
-// Levels 1..3 differ by count, size and gold accents, so they read at a glance.
+// Levels 1 and 2 differ by count and size; at 3 and 4 the branch (o.br) gives a plant a look of its own, and the top
+// (level 4) adds gold and more of it, so the branch and the level read at a glance.
 // At s = 1 every plant of any level stays inside x -36..36, y -72..12 around its base point.
 const GOLD = '#ffc928';
-const LVL_K = [1, 1.1, 1.2];
+const LVL_K = [1, 1.08, 1.16, 1.24];
 function rosette(c, x, y, r, col) {
   hdBall(c, x, y, r, r * .92, col);
   c.save(); c.strokeStyle = alpha(darken(col, .35), .85); c.lineWidth = 1.2; c.beginPath();
@@ -530,14 +531,6 @@ function iceCrystal(c, x, y, u) {
   const g = c.createLinearGradient(-4, -8, 4, 7); g.addColorStop(0, '#ffffff'); g.addColorStop(.5, '#bfeaff'); g.addColorStop(1, '#5fbcf0'); c.fillStyle = g; c.fill();
   c.lineJoin = 'round'; c.lineWidth = 1.3; c.strokeStyle = '#2f86bd'; c.stroke();
   c.beginPath(); c.moveTo(-4.8, -2.5); c.lineTo(4.8, -2.5); c.moveTo(-1.6, -2.5); c.lineTo(0, 7); c.moveTo(1.6, -2.5); c.lineTo(0, -8); c.strokeStyle = 'rgba(255,255,255,.85)'; c.lineWidth = .8; c.stroke();
-  c.restore();
-}
-function healCross(c, x, y, u, glow) {
-  c.save(); c.translate(x, y);
-  if (glow) { const g = c.createRadialGradient(0, 0, 1, 0, 0, 8.5 * u); g.addColorStop(0, 'rgba(255,255,255,.85)'); g.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = g; c.beginPath(); c.arc(0, 0, 8.5 * u, 0, TAU); c.fill(); }
-  c.scale(u, u); c.fillStyle = '#ffffff'; c.strokeStyle = glow ? '#d0343c' : '#3f9a5a'; c.lineWidth = 1.5; c.lineJoin = 'round';
-  c.beginPath(); rrect(c, -1.8, -5, 3.6, 10, 1.4); rrect(c, -5, -1.8, 10, 3.6, 1.4); c.stroke(); c.fill();
-  if (glow) { c.fillStyle = '#ff5a5f'; c.beginPath(); rrect(c, -.9, -4, 1.8, 8, .8); rrect(c, -4, -.9, 8, 1.8, .8); c.fill(); }
   c.restore();
 }
 function pumpkinOne(c, x, u, o = {}) {
@@ -593,32 +586,46 @@ function trapHead(c, x, y, ang, u, shut, lip) {
   }
   c.restore();
 }
-// One hanging bell: top at (x, y), opening down.
-function bellOne(c, x, y, u, rot, gold) {
-  const col = gold ? '#6f5cf0' : '#7f74f4';
-  const rim = cc => { cc.moveTo(-7.8, 12); cc.quadraticCurveTo(-4.4, 10.2, -2.6, 13.6); cc.quadraticCurveTo(0, 11.4, 2.6, 13.6); cc.quadraticCurveTo(4.4, 10.2, 7.8, 12); };
-  c.save(); c.translate(x, y); c.rotate(rot); c.scale(u, u);
-  hdLine(c, [0, 10, 0, 15], '#c98a10', 1.6); hdBall(c, 0, 15.6, 1.9, 1.9, '#ffd84a', { noSpec: true, olk: .6, noBounce: true });
-  hdBlob(c, cc => { rim(cc); cc.bezierCurveTo(5, 7.5, 4.4, 2, 2.6, 0); cc.lineTo(-2.6, 0); cc.bezierCurveTo(-4.4, 2, -5, 7.5, -7.8, 12); }, col, 0, 6, 10);
-  c.save(); c.beginPath(); rim(c); c.lineCap = 'round'; c.lineJoin = 'round';
-  if (gold) { c.lineWidth = 3; c.strokeStyle = '#8a5a10'; c.stroke(); c.lineWidth = 1.7; c.strokeStyle = GOLD; c.stroke(); } else { c.lineWidth = 1.2; c.strokeStyle = alpha(lighten(col, .55), .9); c.stroke(); }
-  c.restore();
-  hdSpec(c, -2.2, 4.5, 1.1, 3, .25, .9);
-  hdBall(c, 0, -.4, 3, 1.9, '#4fae3a', { noSpec: true, olk: .7, noBounce: true });
-  c.restore();
+// A thorny vine from (x0, y0) curling out to (x1, y1), with thorns along it (and berries on a top one).
+function vine(c, x0, y0, x1, y1, bend, berries) {
+  const mx = (x0 + x1) / 2 + bend, my = (y0 + y1) / 2 - Math.abs(bend) * .6;
+  hdCurve(c, [x0, y0, mx, my, x1, y1], '#4a6a22', 3.4); hdCurve(c, [x0, y0, mx, my, x1, y1], '#7aa83a', 1.6);
+  for (let t = .2; t < 1; t += .2) {
+    const px = (1 - t) * (1 - t) * x0 + 2 * (1 - t) * t * mx + t * t * x1, py = (1 - t) * (1 - t) * y0 + 2 * (1 - t) * t * my + t * t * y1;
+    c.beginPath(); c.moveTo(px - 1.6, py); c.lineTo(px, py - 4); c.lineTo(px + 1.6, py); c.closePath(); c.fillStyle = '#f2e6b0'; c.fill(); c.lineWidth = .6; c.strokeStyle = '#6a5020'; c.stroke();
+    if (berries && t > .5) hdBall(c, px + 2, py + 2.5, 2.4, 2.4, '#4a1a5a', { olk: .6, noBounce: true });
+  }
 }
-function tinyNote(c, x, y, u) {
-  c.save(); c.translate(x, y); c.scale(u, u); c.lineCap = 'round'; c.lineJoin = 'round';
-  for (const [col, w, g] of [['#8a5a10', 2.6, .8], [GOLD, 1.3, 0]]) {
-    c.strokeStyle = col; c.fillStyle = col; c.lineWidth = w;
-    c.beginPath(); c.moveTo(1.6, 2); c.lineTo(1.6, -5); c.lineTo(5, -3.6); c.stroke();
-    c.beginPath(); c.ellipse(0, 2.2, 2 + g, 1.5 + g, -.3, 0, TAU); c.fill();
+// Steel plates over a pumpkin (the shell branch); gold rims on the top one.
+function shellPlates(c, u, gold) {
+  c.save(); c.scale(u, u);
+  for (const [dx, w, h] of [[-10, 7, 15], [0, 8, 17], [10, 7, 15]]) {
+    hdBlob(c, (cc) => { cc.moveTo(dx - w, -8); cc.quadraticCurveTo(dx - w, -8 - h * 1.05, dx, -9 - h); cc.quadraticCurveTo(dx + w, -8 - h * 1.05, dx + w, -8); cc.closePath(); }, '#8fa8c8', dx, -14, 10);
+    if (gold) hdLine(c, [dx - w + 1, -9, dx + w - 1, -9], GOLD, 2);
+    for (const q of [-.5, .5]) { c.beginPath(); c.arc(dx + q * w * .9, -12, 1.1, 0, TAU); c.fillStyle = gold ? GOLD : '#dfe8f4'; c.fill(); }
   }
   c.restore();
 }
-// o: { lvl: 1..3 (0 or none = 1), stage: 0 | 1 for a freshly planted or regrowing sprout, frame: 0 | 1, noShadow }.
+// A glow of colour around a plant (fire, frost, nectar).
+function glow(c, x, y, r, rgb, a) { c.save(); const g = c.createRadialGradient(x, y, 2, x, y, r); g.addColorStop(0, `rgba(${rgb},${a})`); g.addColorStop(1, `rgba(${rgb},0)`); c.fillStyle = g; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill(); c.restore(); }
+// A little target (the hunter rose's mark).
+function markSign(c, x, y, r) {
+  c.save(); c.strokeStyle = '#e8336a'; c.lineWidth = 1.6; c.beginPath(); c.arc(x, y, r, 0, TAU); c.stroke();
+  c.beginPath(); c.moveTo(x - r * 1.4, y); c.lineTo(x - r * .5, y); c.moveTo(x + r * .5, y); c.lineTo(x + r * 1.4, y); c.moveTo(x, y - r * 1.4); c.lineTo(x, y - r * .5); c.moveTo(x, y + r * .5); c.lineTo(x, y + r * 1.4); c.stroke();
+  c.beginPath(); c.arc(x, y, r * .3, 0, TAU); c.fillStyle = '#e8336a'; c.fill(); c.restore();
+}
+// An icicle hanging from (x, y), len long.
+function icicle(c, x, y, len, w, gold) {
+  c.save(); c.beginPath(); c.moveTo(x - w, y); c.quadraticCurveTo(x - w * .6, y + len * .5, x, y + len); c.quadraticCurveTo(x + w * .6, y + len * .5, x + w, y); c.closePath();
+  const g = c.createLinearGradient(x, y, x, y + len); g.addColorStop(0, '#ffffff'); g.addColorStop(.5, '#c8f0ff'); g.addColorStop(1, '#5fbcf0'); c.fillStyle = g; c.fill();
+  c.lineWidth = 1.3; c.strokeStyle = gold ? '#c08a10' : '#2f86bd'; c.stroke();
+  hdLine(c, [x - w * .35, y + 2, x - w * .1, y + len * .6], 'rgba(255,255,255,.9)', 1.2); c.restore();
+}
+// o: { lvl: 1..4 (0 or none = 1), br: 'a' | 'b' (levels 3 and 4), stage: 0 | 1 for a freshly planted or regrowing
+// sprout, frame: 0 | 1, noShadow }.
 function hdPlant(c, kind, x, y, s = 1, o = {}) {
-  const L = Math.max(1, Math.min(3, o.lvl | 0)), young = o.stage === 0 || o.stage === 1, k = young ? 1 : LVL_K[L - 1];
+  const L = Math.max(1, Math.min(4, o.lvl | 0)), young = o.stage === 0 || o.stage === 1, k = young ? 1 : LVL_K[L - 1];
+  const br = L > 2 ? o.br || 'a' : null, top = L === 4;
   c.save(); c.translate(x, y); if (!o.noShadow) hdShadow(c, 0, 1, 15 * s * k, 5 * s * k); c.scale(s * k, s * k);
   if (o.stage === 0) { hdBall(c, 0, -3, 10, 5, '#8a5a34', { specA: .3 }); hdLeaf(c, 0, -6, 8, -2.3, '#7fd05a'); hdLeaf(c, 0, -6, 8, -.8, '#5fbf45'); c.restore(); return; }
   if (o.stage === 1) { hdLine(c, [0, 0, 0, -12], '#4a9a32', 2.6); hdLeaf(c, 0, -11, 12, -2.6, '#5fbf45'); hdLeaf(c, 0, -11, 12, -.5, '#7fd05a'); c.restore(); return; }
@@ -626,141 +633,105 @@ function hdPlant(c, kind, x, y, s = 1, o = {}) {
     case 'pumpkin': {
       if (L === 1) pumpkinOne(c, 0, .78);
       else if (L === 2) { pumpkinOne(c, -5, .93); pumpkinOne(c, 13.5, .5, { bare: true }); }
-      else { pumpkinOne(c, 0, 1.06, { face: true, crown: true, rich: true }); }
+      else if (br === 'a') { // the shell: plates of armor; its top keeps a ward (a golden halo and a face)
+        if (top) glow(c, 0, -14, 26, '255,236,150', .55);
+        pumpkinOne(c, 0, 1.04, { rich: true, face: top, crown: top }); shellPlates(c, 1.04, top);
+        if (top) { sparkle(c, -17, -30, 3, GOLD); sparkle(c, 16, -33, 2.6, GOLD); }
+      } else { // thorny vines out to both sides; the top bears blackberries
+        vine(c, -6, -6, -24, -20, -6, top); vine(c, 6, -6, 24, -22, 6, top); vine(c, -2, -12, -14, -34, -8, top); vine(c, 2, -12, 15, -36, 8, top);
+        pumpkinOne(c, 0, .96, { rich: top });
+      }
       break;
     }
     case 'rose': {
-      const bu = [.72, .92, 1.06][L - 1], red = L === 3 ? '#cc1440' : '#ee3d60';
-      bush(c, L === 3 ? '#37902f' : '#3f9a36', bu);
-      for (const [dx, dy, a] of [[-14, -8, 3.3], [14, -10, -.1], [-12, -22, 3.6], [13, -24, -.4]]) hdLeaf(c, dx * .6 * bu, dy * bu, 9 * bu, a, '#56b346');
-      if (L > 1) for (const [tx, ty, a] of [[-17, -8, 3.3], [17, -9, -.15], [-14, -21, 3.75], [15, -22, -.6]].concat(L === 3 ? [[-8, -31, 4.1], [9, -32, -1]] : [])) {
-        c.save(); c.translate(tx * bu, ty * bu); c.rotate(a); hdBlob(c, cc => { cc.moveTo(0, -1.9); cc.lineTo(5, 0); cc.lineTo(0, 1.9); cc.closePath(); }, '#fff0b8', 2, 0, 4, { olk: .45 }); c.restore();
-      }
-      for (const [lx, ly, sg, u] of [[[9, -9, 1, .85]], [[14, -12, 1, 1]], [[16, -13, 1, 1.15], [-16, -15, -1, 1.15]]][L - 1]) {
-        c.save(); c.translate(lx, ly); c.scale(sg * u, u); c.rotate(-.18);
-        hdBlob(c, cc => { cc.moveTo(0, -3.6); cc.quadraticCurveTo(5, -3.2, 10, 0); cc.quadraticCurveTo(5, 3.2, 0, 3.6); cc.closePath(); }, L === 3 ? '#ffd95a' : '#f6e6b0', 4, 0, 6, { olk: .7 });
-        hdBall(c, -.5, 0, 2.6, 3.4, '#3f8f2c', { noSpec: true, olk: .7, noBounce: true }); c.restore();
-      }
-      for (const [bx, by, r] of [[[0, -17, 8]], [[-8, -15, 7.6], [7, -24, 8]], [[-10, -17, 8.4], [10, -20, 8.4], [0, -32, 9]]][L - 1]) {
-        rosette(c, bx, by, r, red);
-        if (L === 3) hdBall(c, bx, by, r * .26, r * .26, GOLD, { olk: .6, noBounce: true });
-      }
-      if (L === 3) { sparkle(c, -17, -30, 3.2, GOLD); sparkle(c, 14, -35, 2.6, GOLD); } else sparkle(c, -12 * bu, -29 * bu, 2.6, '#ffffff');
-      break;
-    }
-    case 'corn': {
-      const H = [33, 40, 44][L - 1], rich = L === 3;
-      const cob = (cx, cy, rot, len) => {
-        const q = len / 11.5; c.save(); c.translate(cx, cy); c.rotate(rot);
-        if (rich) for (const dx of [-1, 0, 1]) hdCurve(c, [0, -len + 1, dx * 2, -len - 3, dx * 3.4, -len - 6], '#ffe07a', 1.4);
-        hdBall(c, 0, 0, 5.6 * q, len, rich ? '#ffc21a' : '#ffd23f', { specA: .3 });
-        for (let i = -3; i <= 3; i++) for (const dx of [-2.4, 0, 2.4]) { c.beginPath(); c.arc(dx * q, i * 3 * q, 1.15 * q, 0, TAU); c.fillStyle = 'rgba(200,130,10,.55)'; c.fill(); }
-        hdSpec(c, -2.4 * q, -4 * q, 1.4 * q, 4 * q, 0);
-        hdLeaf(c, -1, len - 2.5, 13 * q, -1.9, '#8ccf5a', { w: .3 }); hdLeaf(c, 1, len - 2.5, 13 * q, -1.25, '#7cc44e', { w: .3 });
-        c.restore();
+      const rose = (l, red, gold) => { // the plant as it was drawn at three levels: a bush with blooms, thorns and leaves
+        const bu = [.72, .92, 1.06][l - 1];
+        bush(c, l === 3 ? '#37902f' : '#3f9a36', bu);
+        for (const [dx, dy, a] of [[-14, -8, 3.3], [14, -10, -.1], [-12, -22, 3.6], [13, -24, -.4]]) hdLeaf(c, dx * .6 * bu, dy * bu, 9 * bu, a, '#56b346');
+        if (l > 1) for (const [tx, ty, a] of [[-17, -8, 3.3], [17, -9, -.15], [-14, -21, 3.75], [15, -22, -.6]].concat(l === 3 ? [[-8, -31, 4.1], [9, -32, -1]] : [])) {
+          c.save(); c.translate(tx * bu, ty * bu); c.rotate(a); hdBlob(c, cc => { cc.moveTo(0, -1.9); cc.lineTo(5, 0); cc.lineTo(0, 1.9); cc.closePath(); }, '#fff0b8', 2, 0, 4, { olk: .45 }); c.restore();
+        }
+        for (const [bx, by, r] of [[[0, -17, 8]], [[-8, -15, 7.6], [7, -24, 8]], [[-10, -17, 8.4], [10, -20, 8.4], [0, -32, 9]]][l - 1]) {
+          rosette(c, bx, by, r, red);
+          if (gold) hdBall(c, bx, by, r * .26, r * .26, GOLD, { olk: .6, noBounce: true });
+        }
       };
-      hdLine(c, [0, 0, 0, -H], '#3f8f2c', 5); hdLine(c, [0, 0, 0, -H], '#6cc04a', 2.5);
-      hdLeaf(c, 0, -6, 19 + L * 1.5, -2.75, '#4fae3a', { w: .25 }); hdLeaf(c, 0, -12, 19 + L * 1.5, -.35, '#5fbf45', { w: .25 });
-      if (L < 3) { hdLeaf(c, 0, -H + 3, 13, -2.25, '#6cc04a', { w: .28 }); hdLeaf(c, 0, -H + 3, 13, -.9, '#6cc04a', { w: .28 }); }
-      if (L === 1) cob(5, -21, .22, 10.5);
-      else if (L === 2) { cob(-6.5, -27, -.26, 10.5); cob(6.5, -21, .26, 11.5); }
-      else { cob(0, -40, 0, 11); cob(-8, -26, -.32, 11.5); cob(8, -21, .32, 11.5); sparkle(c, -13, -43, 3, GOLD); sparkle(c, 15, -37, 2.4, GOLD); }
+      if (L <= 2) { rose(L, '#ee3d60', false); sparkle(c, -12 * [.72, .92][L - 1], -29 * [.72, .92][L - 1], 2.6, '#ffffff'); }
+      else if (br === 'a') { // the hunter: deep crimson, with its mark over it (two at the top: the mark goes on)
+        rose(3, '#c0103a', top); markSign(c, 16, -38, 4.2); if (top) { markSign(c, -17, -36, 3.4); sparkle(c, 1, -44, 2.8, GOLD); }
+      } else { // the far shot: one tall stem with a pale rose high up, seeds of fluff around it
+        hdCurve(c, [0, 0, 3, -24, 0, -46], '#2f6f22', 4.6); hdCurve(c, [0, 0, 3, -24, 0, -46], '#62b344', 2.4);
+        hdLeaf(c, 1, -14, 14, -2.6, '#4fae3a', { w: .3 }); hdLeaf(c, 2, -24, 13, -.4, '#5fbf45', { w: .3 });
+        for (let n = 0; n < (top ? 10 : 6); n++) { const a = n / (top ? 10 : 6) * TAU; c.save(); c.globalAlpha = .9; c.beginPath(); c.arc(Math.cos(a) * 15, -46 + Math.sin(a) * 12, 1.6, 0, TAU); c.fillStyle = '#ffffff'; c.fill(); c.restore(); hdLine(c, [Math.cos(a) * 9, -46 + Math.sin(a) * 7, Math.cos(a) * 14, -46 + Math.sin(a) * 11], 'rgba(220,215,200,.9)', .8); }
+        rosette(c, 0, -46, top ? 10 : 9, '#ff8aa8'); if (top) { hdBall(c, 0, -46, 2.6, 2.6, GOLD, { olk: .6, noBounce: true }); sparkle(c, 14, -58, 2.8, GOLD); }
+      }
       break;
     }
     case 'pepper': {
-      const bu = [.72, .92, 1.06][L - 1];
-      bush(c, '#3f9a36', bu);
-      const pep = (dx, dy, r, u, flame) => {
+      const bu = [.72, .92, 1.06, 1.1][L - 1];
+      const pep = (dx, dy, r, u, flame, col = '#ee3a24', fl = '#ff8a14') => {
         c.save(); c.translate(dx, dy); c.rotate(r); c.scale(u, u);
         if (flame) {
-          hdBlob(c, cc => { cc.moveTo(-2.6, 12.5); cc.bezierCurveTo(-4.4, 16, -.5, 17.5, 1.5, 22.5); cc.bezierCurveTo(3, 18.5, 5.6, 16, 3.6, 12.5); cc.closePath(); }, '#ff8a14', 1, 16, 6, { olk: .7 });
+          hdBlob(c, cc => { cc.moveTo(-2.6, 12.5); cc.bezierCurveTo(-4.4, 16, -.5, 17.5, 1.5, 22.5); cc.bezierCurveTo(3, 18.5, 5.6, 16, 3.6, 12.5); cc.closePath(); }, fl, 1, 16, 6, { olk: .7 });
           c.beginPath(); c.moveTo(-.4, 13.5); c.quadraticCurveTo(-.4, 16.5, 1.4, 19); c.quadraticCurveTo(2.6, 16, 2, 13.5); c.closePath(); c.fillStyle = '#fff07a'; c.fill();
         }
-        hdBlob(c, cc => { cc.moveTo(-3.6, -2); cc.bezierCurveTo(-5, 6, -1, 12, 1.5, 14); cc.bezierCurveTo(4, 8, 4.5, 3, 3.6, -2); cc.closePath(); }, flame ? '#e3261c' : '#ee3a24', 0, 5, 7);
+        hdBlob(c, cc => { cc.moveTo(-3.6, -2); cc.bezierCurveTo(-5, 6, -1, 12, 1.5, 14); cc.bezierCurveTo(4, 8, 4.5, 3, 3.6, -2); cc.closePath(); }, col, 0, 5, 7);
         hdSpec(c, -1.4, 3, 1.1, 4, 0); hdBall(c, 0, -2.5, 3.6, 2, '#3f8f2c', { noSpec: true, olk: .7 });
         c.restore();
       };
+      if (br === 'a') glow(c, 0, -16, top ? 30 : 24, '255,150,40', top ? .55 : .4); // heat: a ring of fire around it
+      bush(c, br === 'b' ? '#356a3a' : '#3f9a36', bu);
       if (L === 1) pep(-1, -17, .12, 1.2);
       else if (L === 2) { pep(-9, -12, .38, 1.05); pep(8, -14, -.32, 1.05); pep(-1, -24, .08, 1.05); }
-      else { pep(-11, -13, Math.PI - .5, 1.15, true); pep(11, -13, Math.PI + .5, 1.15, true); pep(-4.5, -21, Math.PI - .2, 1.3, true); pep(5.5, -22, Math.PI + .22, 1.3, true); }
+      else if (br === 'a') { pep(-11, -13, Math.PI - .5, 1.15, true); pep(11, -13, Math.PI + .5, 1.15, true); pep(-4.5, -21, Math.PI - .2, 1.3, true); pep(5.5, -22, Math.PI + .22, 1.3, true); if (top) { pep(0, -30, Math.PI, 1.35, true); sparkle(c, -16, -34, 3, GOLD); } }
+      else { // burn-through: dark violet peppers with blue-hot tips, hanging down; the top cracks armor (sparks)
+        const col = '#7a2ad0', fl = '#5ab8ff';
+        pep(-10, -12, .35, 1.15, true, col, fl); pep(9, -14, -.3, 1.15, true, col, fl); pep(-1, -25, .06, 1.2, true, col, fl);
+        if (top) { pep(-15, -24, .6, 1, true, col, fl); pep(14, -26, -.55, 1, true, col, fl); sparkle(c, 0, -40, 3.2, '#cfe8ff'); sparkle(c, -18, -38, 2.4, GOLD); }
+      }
       if (L < 3) sparkle(c, -12 * bu, -29 * bu, 2.6, '#ffffff');
       break;
     }
     case 'mint': {
-      const gr = [20, 23, 25][L - 1], gy = [-10, -13, -18][L - 1];
-      c.save(); const g = c.createRadialGradient(0, gy, 2, 0, gy, gr); g.addColorStop(0, 'rgba(190,245,255,.6)'); g.addColorStop(1, 'rgba(190,245,255,0)'); c.fillStyle = g; c.beginPath(); c.arc(0, gy, gr, 0, TAU); c.fill(); c.restore();
-      const leaves = [
+      const leavesOf = (l) => [
         [[-2, -2, -2.55, 15], [2, -2, -.6, 15], [0, -5, -1.57, 15]],
         [[-2, -2, -2.7, 15], [2, -2, -.45, 15], [-2, -10, -2.2, 14], [2, -11, -.95, 14], [0, -14, -1.57, 13]],
         [[-3, -1, -2.95, 18], [3, -1, -.2, 18], [-2, -5, -2.5, 18], [2, -5, -.65, 18], [-2, -13, -2.1, 17], [2, -13, -1.05, 17], [0, -17, -1.57, 15]],
-      ][L - 1];
-      for (const [dx, dy, a, l] of leaves) hdLeaf(c, dx, dy, l, a, a === -1.57 ? '#a6efd6' : L === 3 && dy > -10 ? '#55c9a2' : '#72d6b4', { w: .55 });
-      if (L === 1) snowflake(c, 9, -24, 4);
-      else if (L === 2) { snowflake(c, -13, -26, 4); snowflake(c, 13, -25, 4); }
-      else { iceCrystal(c, 0, -38, 1.05); snowflake(c, -19, -27, 4.2); snowflake(c, 19, -26, 4.2); snowflake(c, 11, -41, 3.4); }
-      break;
-    }
-    case 'aloe': {
-      // thick pointed leaves in a fan with pale spots; the healing cross grows with the level
-      const leaf = (ang, len, col, w = 4.6) => {
-        c.save(); c.translate(0, -3); c.rotate(ang);
-        hdBlob(c, cc => { cc.moveTo(-w, 0); cc.quadraticCurveTo(-w - .4, -len * .55, 0, -len); cc.quadraticCurveTo(w + .4, -len * .55, w, 0); cc.closePath(); }, col, 0, -len * .45, len * .6);
-        for (const t of [.25, .45, .65]) { c.beginPath(); c.arc(t > .4 && t < .5 ? 1.4 : -1.2, -len * t, 1.05, 0, TAU); c.fillStyle = 'rgba(235,255,225,.8)'; c.fill(); }
-        c.restore();
-      };
-      if (L === 1) { leaf(-.85, 17, '#3f9f6a'); leaf(.85, 17, '#3f9f6a'); leaf(0, 23, '#62c98a'); }
-      else if (L === 2) { leaf(-1.25, 19, '#3f9f6a'); leaf(1.25, 19, '#3f9f6a'); leaf(-.68, 25, '#4bb478'); leaf(.68, 25, '#4bb478'); leaf(0, 30, '#62c98a'); }
-      else { leaf(-1.32, 22, '#35966a', 5.6); leaf(1.32, 22, '#35966a', 5.6); leaf(-.72, 29, '#45b078', 5.6); leaf(.72, 29, '#45b078', 5.6); leaf(0, 26, '#62c98a', 5.6); }
-      hdBall(c, 0, -3, 7, 4, '#3a8f5e', { noSpec: true, olk: .7 });
-      if (L === 3) {
-        // flower spike
-        hdCurve(c, [0, -10, 2.5, -30, 0, -50], '#7a3a1c', 4); hdCurve(c, [0, -10, 2.5, -30, 0, -50], '#d98a4a', 2.2);
-        for (let i = 0; i < 8; i++) { const sd = i % 2 ? 1 : -1, fy = -35 - i * 2.4; hdBall(c, .8 + sd * (3.4 - i * .22), fy, 2.1, 3.5, i > 5 ? '#ffb23a' : i > 2 ? '#ff7a2a' : '#f2482a', { rot: sd * -.55, olk: .65, noSpec: i % 3 > 0, noBounce: true }); }
-        hdBall(c, .4, -55.5, 1.9, 2.6, '#ffc94a', { olk: .65, noBounce: true });
+      ][l - 1];
+      const leaves = (l, frosty) => { for (const [dx, dy, a, len] of leavesOf(l)) hdLeaf(c, dx, dy, len, a, a === -1.57 ? '#a6efd6' : frosty ? (dy > -10 ? '#7fd8c8' : '#b8f2e6') : l === 3 && dy > -10 ? '#55c9a2' : '#72d6b4', { w: .55 }); };
+      if (L <= 2) {
+        glow(c, 0, [-10, -13][L - 1], [20, 23][L - 1], '190,245,255', .6); leaves(L, false);
+        if (L === 1) snowflake(c, 9, -24, 4); else { snowflake(c, -13, -26, 4); snowflake(c, 13, -25, 4); }
+      } else if (br === 'a') { // cold: a frosty bush in a wide cold glow; the top (rime) crowned with crystals
+        glow(c, 0, -18, top ? 34 : 29, '170,235,255', top ? .75 : .65); leaves(3, true);
+        iceCrystal(c, 0, -38, 1.05); snowflake(c, -19, -27, 4.2); snowflake(c, 19, -26, 4.2);
+        if (top) { iceCrystal(c, -12, -36, .8); iceCrystal(c, 12, -37, .8); sparkle(c, 0, -50, 3, '#ffffff'); }
+        else snowflake(c, 11, -41, 3.4);
+      } else { // icicle: a bush with a bent stalk holding a heavy icicle over the trail (two, gold, at the top)
+        leaves(2, false);
+        hdCurve(c, [0, -10, 12, -40, 20, -34], '#2f6f22', 4); hdCurve(c, [0, -10, 12, -40, 20, -34], '#62b344', 2);
+        icicle(c, 20, -35, top ? 22 : 18, top ? 5.2 : 4.4, top);
+        if (top) { hdCurve(c, [0, -10, -10, -38, -17, -32], '#2f6f22', 3.4); hdCurve(c, [0, -10, -10, -38, -17, -32], '#62b344', 1.7); icicle(c, -17, -33, 16, 3.8, true); }
       }
-      if (L === 1) healCross(c, 9.5, -25, .8); else if (L === 2) healCross(c, 12, -32, 1.05); else healCross(c, 16, -35, 1.5, true);
-      break;
-    }
-    case 'dandelion': {
-      const head = (hx, hy, r, gold) => {
-        c.save(); const q = r * 1.28, g = c.createRadialGradient(hx, hy, 1, hx, hy, q); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(.6, gold ? 'rgba(255,248,214,.88)' : 'rgba(255,255,255,.85)'); g.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = g; c.beginPath(); c.arc(hx, hy, q, 0, TAU); c.fill();
-        for (let i = 0; i < 24; i++) { const a = i / 24 * TAU; c.beginPath(); c.moveTo(hx, hy); c.lineTo(hx + Math.cos(a) * r * .95, hy + Math.sin(a) * r * .95); c.strokeStyle = gold ? 'rgba(214,170,70,.9)' : 'rgba(210,205,190,.9)'; c.lineWidth = .8; c.stroke(); c.beginPath(); c.arc(hx + Math.cos(a) * r, hy + Math.sin(a) * r, 1.2, 0, TAU); c.fillStyle = '#ffffff'; c.fill(); }
-        c.restore();
-        if (gold) hdBall(c, hx, hy, r * .4, r * .4, GOLD, { olk: .7, noBounce: true }); else hdBall(c, hx, hy, 3, 3, '#cdbf90', { noSpec: true, olk: .6 });
-      };
-      const heads = [[[0, -36, 11.5]], [[-10, -29, 10.5], [8, -42, 11.5]], [[-14, -29, 10.5], [14, -32, 10.5], [0, -44, 11.5]]][L - 1];
-      for (const [hx, hy] of heads) hdCurve(c, [0, 0, hx * .15, hy * .6, hx, hy + 5], '#4a9a32', 2.4);
-      hdLeaf(c, 0, -2, 14 + L, -2.8, '#4fae3a', { w: .25 }); hdLeaf(c, 0, -2, 14 + L, -.35, '#5fbf45', { w: .25 });
-      for (const [hx, hy, r] of heads) head(hx, hy, r, L === 3);
       break;
     }
     case 'flytrap': {
       // open jaws wait for a bug; frame 1 = shut and chewing
-      const shut = o.frame === 1, lip = L === 3 ? '#a8102e' : '#ff5c80';
-      const heads = [
-        [[-4, -21, -.62, .95]],
-        [[9, -10, -.05, .66], [-6, -25, -.72, 1.12]],
-        [[-6, -13, -2.55, .82], [9, -10, 0, .8], [-1, -28, -.9, 1.1]],
-      ][L - 1];
+      const shut = o.frame === 1, lip = L >= 3 ? '#a8102e' : '#ff5c80';
+      const heads = L === 1 ? [[-4, -21, -.62, .95]] : L === 2 ? [[9, -10, -.05, .66], [-6, -25, -.72, 1.12]]
+        : br === 'a' ? (top ? [[-11, -24, -2.2, 1.25], [11, -26, -.9, 1.25]] : [[9, -10, -.05, .7], [-2, -28, -.9, 1.35]]) // the glutton: one big mouth, two at the top
+        : [[-9, -14, -2.5, .85], [9, -12, -.2, .85]];
+      if (br === 'b') { // the lure: a nectar flower high in the middle, glowing
+        glow(c, 0, -38, top ? 26 : 19, '255,214,90', top ? .7 : .5);
+        hdCurve(c, [0, 0, 1, -20, 0, -36], '#2f6f22', 4); hdCurve(c, [0, 0, 1, -20, 0, -36], '#62b344', 2);
+        for (let n = 0; n < 6; n++) { const a = n / 6 * TAU; hdBall(c, Math.cos(a) * 5, -38 + Math.sin(a) * 5, 3.6, 3.2, '#ff7aa8', { rot: a, noSpec: true, olk: .6, noBounce: true }); }
+        hdBall(c, 0, -38, 3.2, 3.2, '#ffd84a', { olk: .6, noBounce: true }); c.beginPath(); c.arc(4, -30, 1.8, 0, TAU); c.fillStyle = '#ffe680'; c.fill();
+        if (top) { sparkle(c, -12, -48, 2.8, GOLD); sparkle(c, 13, -46, 2.4, GOLD); }
+      }
       for (const [hx, hy] of heads) { hdCurve(c, [0, 0, hx * .1, hy * .7, hx, hy], '#2f6f22', 5); hdCurve(c, [0, 0, hx * .1, hy * .7, hx, hy], '#62b344', 2.8); }
       hdLeaf(c, 0, -1, 12 + L, -2.9, '#4fae3a', { w: .4 }); hdLeaf(c, 0, -1, 12 + L, -.25, '#5fbf45', { w: .4 });
       for (const [hx, hy, a, u] of heads) trapHead(c, hx, hy, a, u, shut, lip);
-      break;
-    }
-    case 'bell': {
-      const gold = L === 3;
-      const bells = [
-        [[8, -29, 1.25, -.12]],
-        [[-13, -21, 1, .28], [13, -24, 1, -.25], [0, -37, 1.08, 0]],
-        [[-16, -17, .95, .3], [16, -19, .95, -.3], [-10, -31, 1, .2], [10, -33, 1, -.2], [0, -45, 1.1, 0]],
-      ][L - 1];
-      for (const [bx, by] of bells) { const mx = bx * .25 - Math.sign(bx || -1) * 3, my = by - 9; hdCurve(c, [0, 0, mx, my, bx, by], '#2f6f22', 3.6); hdCurve(c, [0, 0, mx, my, bx, by], '#62b344', 1.8); }
-      hdLeaf(c, 0, -1, 13 + L, -2.85, '#4fae3a', { w: .34 }); hdLeaf(c, 0, -1, 13 + L, -.3, '#5fbf45', { w: .34 });
-      if (L === 1) hdLeaf(c, 0, -4, 11, -2.1, '#5fbf45', { w: .34 });
-      for (const [bx, by, u, r] of bells) bellOne(c, bx, by, u, r, gold);
-      if (L === 1) { sparkle(c, -6, -26, 2.6, GOLD); tinyNote(c, -9, -14, .9); }
-      else if (L === 2) { sparkle(c, -12, -34, 2.6, GOLD); tinyNote(c, 14, -37, .95); sparkle(c, 1, -14, 2.2, GOLD); }
-      else { sparkle(c, -15, -43, 3, GOLD); tinyNote(c, 16, -44, 1.05); sparkle(c, 0, -22, 2.4, GOLD); tinyNote(c, -22, -36, .9); sparkle(c, 23, -35, 2.4, GOLD); }
+      if (br === 'a' && top) sparkle(c, 0, -44, 3, GOLD);
       break;
     }
   }

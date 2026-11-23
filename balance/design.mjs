@@ -15,7 +15,7 @@
 import { writeFileSync, readFileSync, mkdtempSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir, homedir, setPriority } from 'node:os';
 import { join, dirname } from 'node:path';
-import { LEVELS, PLANTS, makeWaves } from '../public/data.js';
+import { LEVELS, PLANTS, makeWaves, statOf } from '../public/data.js';
 import { exportData } from '../sim/js/export.mjs';
 import { createGame, place, placeProblem, trails, COLS, ROWS } from '../public/game.js';
 import { play } from '../sim/js/play.mjs';
@@ -51,22 +51,21 @@ rmSync(dir, { recursive: true });
 // the garden a plan ends in: cell → { kind, lvl }, and the trail through it as the game lays it
 function study(plan) {
   const cells = new Map();
-  for (const [k, i, j] of plan) { if (k === 'up') { const c = cells.get(K(i, j)); if (c && c.lvl < 3) c.lvl++; } else cells.set(K(i, j), { kind: k, lvl: 1, i, j }); }
+  for (const [k, i, j] of plan) { if (k === 'up') { const c = cells.get(K(i, j)); if (c && c.lvl < 4) c.lvl++; } else cells.set(K(i, j), { kind: k, lvl: 1, i, j }); }
   const g = createGame(level, 1, {}); g.dew = 1e9;
   for (const c of cells.values()) if (!placeProblem(g, c.i, c.j)) place(g, c.kind, c.i, c.j);
   const trail = []; const seen = new Set(); for (const tr of trails(g)) for (const [i, j] of tr) if (!seen.has(K(i, j))) { seen.add(K(i, j)); trail.push([i, j]); }
   return { cells, g, trail, on: seen };
 }
-const reach = (kind, lvl = 3) => { const p = PLANTS[kind]; return p.range ? Math.min(p.range[lvl - 1], p.groundRange ?? 9) : 0; };
+const reach = (kind, lvl = 2) => { const r = statOf(PLANTS[kind], 'range', lvl, null); return kind === 'pumpkin' ? 0 : r || 0; };
 const within = (a, b, i, j, r) => (a - i) ** 2 + (b - j) ** 2 <= r * r + 1e-9;
-const hurts = (kind) => { const p = PLANTS[kind]; return !!(p.dmg || p.chomp); };
+const hurts = (kind) => { const p = PLANTS[kind]; return !!(p.dmg || p.eat); };
 // what a kind is worth on a cell, roughly: the cells of the trail it reaches; for a mint, the plants reaching the
-// cells it slows; for a bell, the plants around it
+// cells it slows
 function worth(s, kind, i, j) {
   const r = reach(kind); if (!r) return 0;
-  if (PLANTS[kind].buff) return [...s.cells.values()].filter((c) => hurts(c.kind) && (c.i !== i || c.j !== j) && within(c.i, c.j, i, j, r)).length;
   const near = s.trail.filter(([a, b]) => within(a, b, i, j, r));
-  if (PLANTS[kind].slow) return near.reduce((t, [a, b]) => t + [...s.cells.values()].filter((c) => hurts(c.kind) && within(a, b, c.i, c.j, reach(c.kind))).length, 0);
+  if (PLANTS[kind].frost) return near.reduce((t, [a, b]) => t + [...s.cells.values()].filter((c) => hurts(c.kind) && within(a, b, c.i, c.j, reach(c.kind))).length, 0);
   return near.length;
 }
 const swapCells = (plan, a, b) => plan.map(([k, i, j]) => (i === a.i && j === a.j ? [k, b.i, b.j] : i === b.i && j === b.j ? [k, a.i, a.j] : [k, i, j]));
@@ -84,7 +83,7 @@ function mutate(plan) {
     return to.length ? swapCells(plan, a, pick(to)) : null;
   }
   if (t < .45 && all.length) { // a plant becomes another kind
-    const a = pick(all), k = pick(kinds.filter((x) => x !== a.kind && x !== 'aloe')), at = lastPlace(plan, a);
+    const a = pick(all), k = pick(kinds.filter((x) => x !== a.kind)), at = lastPlace(plan, a);
     return plan.map((st, n) => (n === at ? [k, a.i, a.j] : st));
   }
   if (t < .6 && others.length) { // a plant off the trail moves to a free cell by the trail
@@ -103,7 +102,7 @@ function mutate(plan) {
   }
   if (t < .88 && all.length) { // a plant is grown once more, or once less
     const a = pick(all), ups = plan.map((st, n) => (st[0] === 'up' && st[1] === a.i && st[2] === a.j ? n : -1)).filter((n) => n >= 0);
-    if (rnd() < .6 && a.lvl < 3) { const p = plan.slice(), after = Math.max(lastPlace(plan, a), ...ups) + 1; p.splice(after + Math.floor(rnd() * (p.length - after + 1)), 0, ['up', a.i, a.j]); return p; }
+    if (rnd() < .6 && a.lvl < 4) { const p = plan.slice(), after = Math.max(lastPlace(plan, a), ...ups) + 1; p.splice(after + Math.floor(rnd() * (p.length - after + 1)), 0, ['up', a.i, a.j]); return p; }
     return ups.length ? plan.filter((_, n) => n !== ups.at(-1)) : null;
   }
   if (rnd() < .5) { // a pumpkin on the trail: the trail goes round it

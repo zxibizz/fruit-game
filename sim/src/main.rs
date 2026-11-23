@@ -48,7 +48,7 @@ fn load(file: &str) -> Party {
         match a[0].str() {
             "s" => Op::Step(a[1].num() as u32),
             "place" => Op::Place(data.plant(a[1].str()), n(2), n(3)),
-            "up" => Op::Up(n(1), n(2)),
+            "up" => Op::Up(n(1), n(2), if a.len() > 3 { a[3].num() as u8 } else { 0 }),
             "wave" => Op::Wave,
             "sell" => Op::Sell(n(1), n(2)),
             "power" => Op::Power(if a[1].str() == "frost" { Power::Frost } else { Power::Rain }),
@@ -66,7 +66,7 @@ fn replay(p: &Party, check: bool, dump_at: Option<usize>) -> Option<usize> {
         match *op {
             Op::Step(h) => { g.step(DT); if check && g.hash(&mut buf) != h { return Some(k); } }
             Op::Place(kind, i, j) => { g.place(kind, i, j); }
-            Op::Up(i, j) => { if let Some(pi) = g.plant_at(i, j) { g.upgrade(pi); } }
+            Op::Up(i, j, br) => { if let Some(pi) = g.plant_at(i, j) { g.upgrade(pi, br); } }
             Op::Wave => { g.start_wave(); }
             Op::Sell(i, j) => { if let Cell::Plant(id) = g.grid[game::key(i, j)] { g.remove_plant(id, true); } }
             Op::Power(kind) => { g.use_power(kind); }
@@ -125,7 +125,7 @@ fn ops_json(d: &Data, ops: &[Op]) -> String {
         match op {
             Op::Step(h) => s.push_str(&format!("[\"s\",{}]", h)),
             Op::Place(kind, i, j) => s.push_str(&format!("[\"place\",\"{}\",{},{}]", d.plants[*kind].name, i, j)),
-            Op::Up(i, j) => s.push_str(&format!("[\"up\",{},{}]", i, j)),
+            Op::Up(i, j, br) => s.push_str(&format!("[\"up\",{},{},{}]", i, j, br)),
             Op::Wave => s.push_str("[\"wave\"]"),
             Op::Sell(i, j) => s.push_str(&format!("[\"sell\",{},{}]", i, j)),
             Op::Power(p) => s.push_str(if *p == Power::Frost { "[\"power\",\"frost\"]" } else { "[\"power\",\"rain\"]" }),

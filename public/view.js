@@ -1,11 +1,11 @@
 // Drawing, input, HUD and screens. The game state lives in game.js; this file only shows it and turns taps into actions.
 import * as A from './art.js';
 import {
-  createGame, step, plantOn, plantProblem, blockingCells, previewTrails, trails, upgrade, upgradeCost, removePlant, refund, isFresh,
+  createGame, step, plantOn, plantProblem, blockingCells, previewTrails, trails, upgrade, upgradeCost, branchOpen, removePlant, refund, isFresh,
   startWave, earlyBonus, wavePreview, usePower, stars, stubAt, bugHp, rewardOf, pstat, clearWeed,
   snapshot, restore, digTrails, digHills, COLS, ROWS, BREAK,
 } from './game.js';
-import { PLANTS, BUGS, LEVELS, PERKS, PERK_ORDER, PLANT_ORDER, WEED_COST, FERTILE, TUNE, FLY_HP } from './data.js';
+import { PLANTS, BUGS, LEVELS, PERKS, PERK_ORDER, PLANT_ORDER, WEED_COST, FERTILE, TUNE, FLY_HP, BRANCHES, FALL_T, statOf } from './data.js';
 import { initAudio, applyVolume, sfx, muffleMusic } from './audio.js';
 import { createTelemetry } from './telemetry.js';
 // party analytics (telemetry.js), not from a dev page or a copy run at home: their parties are not players' (?t=1
@@ -14,50 +14,47 @@ const tm = createTelemetry({ enabled: new URLSearchParams(location.search).has('
 
 const T = {
   wave: (n, m) => `Волна ${n} / ${m}`, go: 'В бой!', soon: (n, s) => `Волна ${n} через ${s} с`,
-  plant: { pumpkin: 'Тыква', rose: 'Шиповник', aloe: 'Алоэ', corn: 'Кукуруза', mint: 'Мята', pepper: 'Перец', dandelion: 'Одуванчик', flytrap: 'Мухоловка', bell: 'Колокольчик' },
-  eaten: { pumpkin: 'съедена', rose: 'съеден', aloe: 'съедено', corn: 'съедена', mint: 'съедена', pepper: 'съеден', dandelion: 'съеден', flytrap: 'съедена', bell: 'съеден' },
+  plant: { pumpkin: 'Тыква', rose: 'Роза', pepper: 'Чили', mint: 'Мята', flytrap: 'Мухоловка' },
+  eaten: { pumpkin: 'съедена', rose: 'съедена', pepper: 'съеден', mint: 'съедена', flytrap: 'съедена' },
   // a few words for the card under the plant's name
-  role: { pumpkin: 'Стена', rose: 'Метит шипами', aloe: 'Защищает соседей', corn: 'Бьёт по толпе', mint: 'Замедляет', pepper: 'Жжёт толпу', dandelion: 'Дальний, по летающим', flytrap: 'Глотает ослабленных', bell: 'Помощник' },
+  role: { pumpkin: 'Защита', rose: 'Бьёт одну цель', pepper: 'Огонь', mint: 'Лёд', flytrap: 'Добивает' },
   about: {
-    pumpkin: 'Живая стена. Не стреляет, зато крепкая и дешёвая: из тыкв строят лабиринт, чтобы жуки шли дольше.',
-    rose: 'Колет шипами, и уколотый жук несколько секунд получает больше урона от всех растений. Сам бьёт слабо — ставь рядом с сильными. Достаёт и летающих.',
-    aloe: 'Не воюет: растения вокруг получают меньше урона, и жукам дольше их грызть. Ставь у стен, которые грызут.',
-    corn: 'Кидает початок навесом: зёрна задевают нескольких жуков рядом с целью. Хороша против толпы. Летающих не достаёт.',
-    mint: 'Холодит: жуки рядом ползут медленнее и дольше остаются под обстрелом. Сама не бьёт — ставь рядом со стрелками.',
-    pepper: 'Обжигает сразу всех жуков вокруг себя, сколько бы их ни было, и поджигает. Каждому достаётся немного: хорош против плотной толпы мелких. Огонь не замечает броню.',
-    dandelion: 'Бьёт очень далеко и сильно — первыми сбивает летающих. Ползущих тоже бьёт, но только рядом с собой и слабее. Ставь так, чтобы доставал до яблока: туда летят все.',
-    flytrap: 'Кусает одного жука очень сильно — броня не спасает. А жука, которого другие уже потрепали, глотает целиком, даже толстого. Потом жуёт. Боссов не глотает.',
-    bell: 'Звенит — и растения на соседних клетках стреляют чаще. Сам не бьёт.',
+    pumpkin: 'Живая стена. Соседи рядом с ней получают меньше урона, а жуков на свободных клетках вокруг колют её колючки.',
+    rose: 'Простой и дешёвый стрелок: колет жуков по одному. Достаёт и летающих.',
+    pepper: 'Бросает перчик навесом: он лопается и поджигает нескольких жуков рядом. Только по земле. Против брони огонь слабее.',
+    mint: 'Бросает сосульку: жук получает урон и ненадолго замедляется. Достаёт и летающих. Улиток не замедляет.',
+    flytrap: 'Целого жука не трогает, а потрёпанного глотает целиком. Ставь там, где жуков уже потрепали. Боссов не ест.',
   },
-  // what the third level adds
-  perk: {
-    pumpkin: 'Колючая: кто её грызёт, сам теряет здоровье',
-    rose: 'Стреляет сразу по двум жукам',
-    aloe: 'Защищает соседей сильнее',
-    corn: 'Взрыв зёрен шире и задевает больше жуков',
-    mint: 'Раз в 6 с замораживает жуков вокруг на секунду',
-    pepper: 'Жуки горят в полтора раза дольше',
-    dandelion: 'Пушинка оглушает летающего на полсекунды',
-    flytrap: 'Ловит и летающих',
-    bell: 'Звон слышен намного дальше',
+  // the branches of level 3: a name, what it does, its top (level 4), what the top does, and a few words for the card
+  branch: {
+    pumpkin: { a: ['Панцирь', 'Соседям ещё меньше урона, а кто их кусает — сам колется.', 'Оберег', 'Раз за волну спасает соседа: укус, который съел бы его, оставляет ему каплю здоровья.', 'Броня соседям, кусающий колется'],
+      b: ['Колючие плети', 'Колючки дальше и злее.', 'Ежевичник', 'Колючки достают и летающих.', 'Колючки дальше и злее'] },
+    rose: { a: ['Охотница', 'Колет двоих сразу и метит: уколотый жук 3 с получает больше урона от всех.', 'Цепная метка', 'Помеченный жук, погибая, передаёт метку двум соседям.', 'Колет двоих, метка: урон от всех больше'],
+      b: ['Дальнобойная', 'Бьёт далеко и сильно, первыми — летающих. Ползущих — только рядом и слабее.', 'Сбивает', 'Потрёпанный летающий падает на тропинку и дальше ползёт. Босса — оглушает.', 'Далеко и сильно, первыми летающих'] },
+    pepper: { a: ['Жар', 'Больше не бросает: жжёт всех жуков вокруг себя, сколько бы их ни было.', 'Пожар', 'Горящий жук поджигает соседа.', 'Жжёт всех жуков вокруг'],
+      b: ['Прожиг', 'Бросает в бронированных и толстых. Пока жук горит, брони у него нет — для всех растений.', 'Раскол', 'Каждое попадание снимает броню навсегда.', 'В бронированных; огонь снимает броню'] },
+    mint: { a: ['Холод', 'Больше не бросает: замедляет всех жуков вокруг, и летающих тоже.', 'Иней', 'Раз в 5 с всё вокруг замерзает на секунду — даже улитки.', 'Замедляет всех вокруг'],
+      b: ['Сосулька', 'Тяжёлая сосулька на самого толстого жука рядом: редко, но больно, броня почти не спасает.', 'Промерзание', 'Каждое следующее попадание в того же жука сильнее, до двух раз.', 'Тяжёлая сосулька самому толстому'] },
+    flytrap: { a: ['Обжора', 'Глотает жуков и поздоровее, и быстрее.', 'Две головы', 'Глотает двоих сразу.', 'Глотает крупнее и чаще'],
+      b: ['Ловчая', 'Нектар сманивает летающих: жук сворачивает к ней, нюхает и летит дальше — мимо твоих растений. Потрёпанных глотает.', 'Аромат', 'Сманивает издалека, даже шершня.', 'Нектар сманивает летающих'] },
   },
   bug: { ant: 'Муравей', aphid: 'Тля', beetle: 'Бронзовка', caterpillar: 'Гусеница', grasshopper: 'Кузнечик', snail: 'Улитка', pillbug: 'Мокрица', butterfly: 'Бабочка', wasp: 'Оса', firefly: 'Светлячок', cricket: 'Медведка', rhino: 'Жук-носорог', queen: 'Матка', slugking: 'Король слизней', hornet: 'Шершень', spider: 'Паучиха' },
   bugAbout: {
     ant: 'Обычный, зато их много.',
-    aphid: 'Мелкая и слабая, но идёт толпой. Кукуруза и перец накрывают сразу многих.',
+    aphid: 'Мелкая и слабая, но идёт толпой. Чили накрывает сразу многих.',
     beetle: 'В панцире: слабые удары почти не берут.',
-    caterpillar: 'Грызёт растения рядом с тропинкой. Тыква держится дольше всех.',
+    caterpillar: 'Грызёт растения рядом с тропинкой. Тыква рядом их защищает.',
     grasshopper: 'Быстрый, но хилый.',
     snail: 'Медленная и очень крепкая. Мята её не замедляет.',
-    pillbug: 'Вся в броне: шипы от неё отскакивают. Жги перцем или бей сильными ударами.',
-    butterfly: 'Летит напрямик над лабиринтом и не устаёт. Бьют её шиповник и одуванчик, мята замедляет.',
+    pillbug: 'Вся в броне: слабые удары и огонь её почти не берут. Нужен Прожиг или Сосулька.',
+    butterfly: 'Летит напрямик над лабиринтом. Бьют её роза и мята — ставь их у яблока: туда летят все.',
     wasp: 'Летит напрямик, быстрая и крепче бабочки.',
     firefly: 'Лечит жуков вокруг себя. Бей его первым!',
     cricket: 'Идёт к яблоку напрямик и прогрызает стены на пути — остальные жуки побегут в дыру. Выбирает растения послабее.',
     rhino: 'Босс. Огромный и в броне, время от времени разгоняется и несётся бегом.',
     queen: 'Босс. По пути выпускает муравьёв — чем дольше идёт, тем их больше.',
-    slugking: 'Босс. Мята его не берёт, а когда лопнет — из него вылезут улитки.',
-    hornet: 'Босс. Летит напрямик к яблоку и зовёт ос. Нужны шиповник и одуванчики у яблока.',
+    slugking: 'Босс. Мята его не замедляет, а когда лопнет — из него вылезут улитки.',
+    hornet: 'Босс. Летит напрямик к яблоку и зовёт ос. Нужны розы и мята у яблока.',
     spider: 'Босс. Опутывает паутиной растения рядом: они на время замирают. Дождь смывает паутину.',
   },
   feature: {
@@ -73,9 +70,8 @@ const T = {
   perkAbout: {
     dew: (v) => `+${v} росы в начале уровня`, heart: (v) => `+${v} к здоровью яблока`,
     clouds: (v) => `+${v} мороз и +${v} дождь в начале уровня`, refund: (v) => `За проданное растение возвращается ${Math.round(v * 100)}% росы`,
-    pumpkin: (v) => `Прочность +${Math.round((v - 1) * 100)}%`, rose: (v) => `Урон +${Math.round((v - 1) * 100)}%`, corn: (v) => `Урон +${Math.round((v - 1) * 100)}%`,
-    aloe: (v) => `Соседям урона ещё на ${Math.round(v * 100)}% меньше`, mint: (v) => `Замедляет ещё на ${Math.round(v * 100)}%`, pepper: (v) => `Огонь жжёт на ${Math.round((v - 1) * 100)}% сильнее`,
-    dandelion: (v) => `Урон +${Math.round((v - 1) * 100)}%`, flytrap: (v) => `Жуёт на ${Math.round((1 - v) * 100)}% быстрее`, bell: (v) => `Соседи стреляют ещё на ${Math.round(v * 100)}% чаще`,
+    pumpkin: (v) => `Прочность +${Math.round((v - 1) * 100)}%`, rose: (v) => `Урон +${Math.round((v - 1) * 100)}%`, pepper: (v) => `Огонь жжёт на ${Math.round((v - 1) * 100)}% сильнее`,
+    mint: (v) => `Замедляет ещё на ${Math.round(v * 100)}%`, flytrap: (v) => `Глотает на ${Math.round((1 - v) * 100)}% чаще`,
   },
   fresh: (list) => `Новое: ${list.join(', ')}. Зажми, чтобы узнать подробнее`, freshBug: (list) => `Новый жук: ${list.join(', ')}. Зажми его, чтобы узнать подробнее`,
   boss: (name) => `Босс: ${name}!`,
@@ -87,9 +83,9 @@ const T = {
   holdHint: 'Зажми растение или жука — узнаешь, кто это',
   dragHint: 'Сначала выбери растение на полке — или просто перетащи его на поле',
   hint2: 'Роса приходит за каждую пройденную волну. Дальше волны придут сами. Нажмёшь ▶ раньше — получишь ещё',
-  digHint: 'Сверчки прогрызают растения насквозь. «!» над растением — здесь они пройдут. Нажми на сверчка в волне — покажу их путь. Выращенную тыкву грызть долго, и она колется',
-  belled: (v) => `Звенит колокольчик: на ${Math.round(v * 100)}% чаще`,
-  guarded: (v) => `Алоэ рядом: урона на ${Math.round(v * 100)}% меньше`,
+  digHint: 'Сверчки прогрызают растения насквозь. «!» над растением — здесь они пройдут. Нажми на сверчка в волне — покажу их путь. Тыква рядом защищает стену',
+  guarded: (v) => `Тыква рядом: урона на ${Math.round(v * 100)}% меньше`, warded: 'Оберег тыквы на эту волну',
+  flyHint: 'Летающие летят напрямик к яблоку. Поставь розы и мяту рядом с яблоком — мимо них пролетят все',
   trailHint: 'Чем длиннее и извилистее тропинка, тем дольше жуки ползут мимо твоих растений. Ставь стрелков там, где тропинка проходит рядом несколько раз',
   upHint: 'Улучшения дорогие — копи росу и усиливай те растения, мимо которых жуки ползут дольше всего',
   growNote: `Жуки крепнут: каждая волна добавляет им ${Math.round(TUNE.hpGrowth * 100)}% начального здоровья (летающим — ${Math.round(TUNE.hpGrowth * FLY_HP * 100)}%), на всех уровнях одинаково.`,
@@ -98,7 +94,7 @@ const T = {
   won: 'Яблоко спасено!', lost: 'Жуки съели яблоко', retry: 'Ещё раз', levels: 'Уровни', nextLevel: 'Дальше', resume: 'Продолжить',
   pause: 'Пауза', restart: 'Заново', waveDone: (b) => `Волна пройдена  +${b}`, early: (b) => `+${b} за смелость`,
   screams: ['Ай!', 'Ой-ой!', 'Больно!', 'Кусь?!', 'Ай-ай!'],
-  up: 'Улучшить', sell: 'Продать', max: 'Максимум', lvl3: 'На 3 уровне', webbed: 'В паутине!', onFertile: 'На грядке: +30%', fullRefund: 'вернётся вся роса',
+  up: 'Улучшить', sell: 'Продать', max: 'Максимум', lvl3: 'На 3 уровне', top: 'На 4 уровне', pick: 'Выбери ветку', opensAt: (n) => `откроется на ${n} уровне`, branches: 'Ветки на 3 уровне', newBranch: 'Новая ветка', webbed: 'В паутине!', onFertile: 'На грядке: +30%', fullRefund: 'вернётся вся роса',
   weed: 'Убрать куст', perks: 'Улучшения', guide: 'Справочник', sound: 'Звук', music: 'Музыка', close: 'Закрыть', ok: 'Понятно', reset: 'Сбросить',
   newPlant: 'Новое растение', levelFeature: 'Особенность уровня', cont: (name, w) => `Продолжить: ${name}, волна ${w}`,
   starsFree: (free, all) => `Свободно <b>★ ${free}</b> из ${all}`, perksHint: 'Звёзды дают за уровни. Улучшения можно сбросить и раздать заново.',
@@ -326,7 +322,7 @@ const trail = (e = 0) => trails(game)[e];
 // ---------- sprites ----------
 // plants: a 76×92 box with the plant's base at (38, 76); frame 1 is the flytrap with its jaws shut
 const PW = 76, PH = 92, PBX = 38, PBY = 76;
-const plantSprite = (type, lvl, frame = 0) => sprite(`p:${type}:${lvl}:${frame}`, PW, PH, (x) => A.hdPlant(x, type, PBX, PBY, 1, { noShadow: true, lvl, frame }));
+const plantSprite = (type, lvl, frame = 0, br = null) => sprite(`p:${type}:${lvl}:${br}:${frame}`, PW, PH, (x) => A.hdPlant(x, type, PBX, PBY, 1, { noShadow: true, lvl, br, frame }));
 const BUG_SIZE = { rhino: 1.3, queen: 1.25, spider: 1.25, slugking: 1.3, hornet: 1.2, snail: 1.25, beetle: 1.15, cricket: 1.2, pillbug: 1.1, caterpillar: 1 }, BUG_K = .78;
 const isBoss = (kind) => !!BUGS[kind].boss;
 // Walking bugs keep a small fixed offset from the trail's middle, so a faster bug visibly passes a slower one.
@@ -347,7 +343,7 @@ function pic(key, w, h, draw, k = 3) {
   if (!pics.has(key)) { const cnv = document.createElement('canvas'); cnv.width = w * k; cnv.height = h * k; const x = cnv.getContext('2d'); x.scale(k, k); draw(x); pics.set(key, cnv.toDataURL()); }
   return pics.get(key);
 }
-const plantPic = (type, lvl = 1) => pic(`p:${type}:${lvl}`, PW, PH, (x) => { A.setTheme('meadow'); A.hdPlant(x, type, PBX, PBY - 4, 1, { lvl }); });
+const plantPic = (type, lvl = 1, br = null) => pic(`p:${type}:${lvl}:${br}`, PW, PH, (x) => { A.setTheme('meadow'); A.hdPlant(x, type, PBX, PBY - 4, 1, { lvl, br }); });
 const bugPic = (kind) => pic(`b:${kind}`, 72, 72, (x) => { const s = isBoss(kind) ? .95 : kind === 'caterpillar' ? 1 : 1.25; A.hdBug(x, kind, kind === 'caterpillar' ? 48 : 36, 36, -Math.PI / 2 + (kind === 'caterpillar' ? Math.PI / 2 : 0), s, { noShadow: true }); });
 
 // ---------- game flow ----------
@@ -362,7 +358,12 @@ function startLevel(n) {
   dropSave(); enterLevel(createGame(n, Date.now() & 0xffff, metaNow()));
   // what is new on this level: plants never had before, and the ground of the level
   const cards = [], L = LEVELS[n], had = new Set(LEVELS.slice(0, n).flatMap((q) => q.plants)), hadF = new Set(LEVELS.slice(0, n).map((q) => q.feature));
-  for (const p of L.plants) if (!had.has(p) && n > 0) cards.push({ tag: T.newPlant, title: T.plant[p], img: pic(`hero:${p}`, 110, 110, (x) => { A.setTheme('meadow'); A.hdPlant(x, p, 55, 98, 1.45, { lvl: 1 }); }), text: T.about[p], extra: `${T.lvl3}: ${T.perk[p].toLowerCase()}` });
+  for (const p of L.plants) if (!had.has(p) && n > 0) cards.push({ tag: T.newPlant, title: T.plant[p], img: pic(`hero:${p}`, 110, 110, (x) => { A.setTheme('meadow'); A.hdPlant(x, p, 55, 98, 1.45, { lvl: 1 }); }), text: T.about[p], extra: `${T.branches}: ${branchNames(p)}` });
+  // the branches that open here: the threat and the answer come together
+  for (const p of L.plants) for (const br of BRANCHES) if (PLANTS[p][br].from === n + 1) {
+    const [name, about, top, topAbout] = T.branch[p][br];
+    cards.push({ tag: T.newBranch, title: `${T.plant[p]}: ${name}`, img: pic(`hero:${p}:${br}`, 110, 110, (x) => { A.setTheme('meadow'); A.hdPlant(x, p, 55, 98, 1.3, { lvl: 3, br }); }), text: about, extra: `${T.top}: ${top} — ${topAbout.toLowerCase()}` });
+  }
   if (L.feature && !hadF.has(L.feature)) cards.push({ tag: T.levelFeature, title: T.feature[L.feature][0], img: featurePic(L.feature), text: T.feature[L.feature][1] });
   // each card is shown once, not on every retry
   const unseen = cards.filter((q) => !progress.cards[q.title]);
@@ -407,24 +408,27 @@ function bugStats(kind, b) {
   return out;
 }
 // The numbers of a plant: [label, value at this level, value at the next one or null]. On the field (p given) they
-// include the soil and the player's perks.
+// include the soil and the player's perks. At level 2 the next one is a branch: br (none: no next column).
 const num = (v) => String(Math.round(v * 10) / 10);
-function statRows(type, lvl, p = null) {
-  const P = PLANTS[type], g = game || { meta: metaNow(), tiles: [] }, at = (l) => ({ type, lvl: l, i: p ? p.i : -1, j: p ? p.j : -1 });
-  // a plant on the field shows its stats as they are: a bell nearby makes it shoot (or bite) that much more often
-  const quick = 1 + (p?.buff || 0), v = (name, l) => { const x = pstat(g, at(l), name); return name === 'rate' ? x * quick : name === 'eat' ? x / quick : x; }, rows = [], nx = lvl < 3 ? lvl + 1 : null;
-  const add = (label, name, f = num) => { if (P[name] == null) return; const a = v(name, lvl), b = nx ? v(name, nx) : null; if (!a && !b) return; rows.push([label, f(a), b != null && f(b) !== f(a) ? f(b) : null, quick > 1 && (name === 'rate' || name === 'eat')]); };
-  add('Урон', 'dmg'); add('Уколотый получает', 'mark', (s) => `+${Math.round(s * 100)}%`); add('Целей', 'multi'); add('Огонь/с', 'burn');
+const pct = (v) => `${Math.round(v * 100)}%`;
+function statRows(type, lvl, br = null, p = null) {
+  const g = game || { meta: metaNow(), tiles: [] }, at = (l, b) => ({ type, lvl: l, br: l > 2 ? b : null, i: p ? p.i : -1, j: p ? p.j : -1 });
+  const nx = lvl === 1 ? [2, null] : lvl === 2 ? (br ? [3, br] : null) : lvl === 3 ? [4, br] : null, rows = [];
+  const add = (label, name, f = num) => { const a = pstat(g, at(lvl, br), name), b = nx ? pstat(g, at(...nx), name) : null; if (!a && !b) return; rows.push([label, a ? f(a) : '—', b != null && f(b) !== f(a) ? (b ? f(b) : '—') : null]); };
+  add('Урон', 'dmg'); add('Уколотый получает', 'mark', (s) => `+${pct(s)}`); add('Целей', 'multi'); add('Огонь/с', 'burn');
   add('Выстрелов/с', 'rate', (r) => num(r));
-  add('Укус', 'chomp'); add('Глотает, если здоровья', 'gulp', (s) => `до ${Math.round(s * 100)}%`); add('Кусает раз в', 'eat', (s) => `${num(s)} с`);
-  add('Замедление', 'slow', (s) => `${Math.round(s * 100)}%`);
-  add('Соседям урона меньше на', 'guard', (s) => `${Math.round(s * 100)}%`);
-  add('Соседи чаще на', 'buff', (s) => `${Math.round(s * 100)}%`);
-  add('Взрыв', 'splash'); add('Задевает жуков', 'hits'); add('Дальность', 'range');
+  add('Глотает, если здоровья', 'gulp', (s) => `до ${pct(s)}`); add('Глотает раз в', 'eat', (s) => `${num(s)} с`); add('Голов', 'heads');
+  add('Замедляет всех на', 'slow', pct); add('Замедляет цель на', 'frost', pct);
+  add('Соседям урона меньше на', 'guard', pct); add('Колючки, здоровья/с', 'thorns', (s) => `${num(s * 100)}%`);
+  add('Нектар манит за', 'lure', (s) => `${num(s)} кл.`);
+  add('Задевает жуков', 'hits'); add('Дальность', 'range');
   add('Прочность', 'hp');
   return rows;
 }
-const statLine = (type, l = 1) => statRows(type, l).map(([a, b]) => `${a.toLowerCase()} ${b}`).concat(PLANTS[type].dmg ? [PLANTS[type].ground ? 'ползущих — рядом и слабее' : PLANTS[type].air ? 'бьёт и летающих' : 'летающих не бьёт'] : []);
+// what a plant (at a level or on a branch) is like against flyers
+const airNote = (type, lvl = 1, br = null) => { const P = PLANTS[type]; if (!statOf(P, 'dmg', lvl, br) && !statOf(P, 'eat', lvl, br)) return []; return [statOf(P, 'ground', lvl, br) ? 'ползущих — рядом и слабее' : statOf(P, 'air', lvl, br) || statOf(P, 'eatAir', lvl, br) ? 'достаёт и летающих' : 'летающих не трогает']; };
+const statLine = (type, l = 1, br = null) => statRows(type, l, br).map(([a, b]) => `${a.toLowerCase()} ${b}`).concat(airNote(type, l, br));
+const branchNames = (type) => `${T.branch[type].a[0]} или ${T.branch[type].b[0]}`;
 // A hint (top) is short and stays a few seconds, a tap puts it away; most of them come once ever (hintOnce).
 function banner(text, life = 2, top = false) {
   if (top) { if (banners.some((b) => b.top && b.text === text)) return; life = Math.min(life, 3 + text.split(' ').length * .28); }
@@ -498,20 +502,25 @@ function handleEvents() {
       case 'eat': { const [x, y] = cellCenter(e.p.i, e.p.j); bump(e.p, .5, true); if (e.whole) fx.push({ k: 'note', x, y: y - 34, t: 0, life: .8, txt: 'Ам!' }); sfx.chomp(); break; }
       case 'chill': { const [x, y] = cellCenter(e.p.i, e.p.j); fx.push({ k: 'chill', x, y, t: 0, life: .5, r: pstat(game, e.p, 'range') * CELL }); bump(e.p, .25); sfx.frost(); break; }
       case 'weed': { dust({ i: e.i, j: e.j }); terrainDirty = true; pop = null; sfx.sell(); break; }
-      case 'splash': { const [x, y] = sp(e.x, e.y); for (let n = 0; n < 8; n++) fx.push({ k: 'kern', x, y, vx: (Math.random() - .5) * 90 * e.r, vy: -30 - Math.random() * 50, t: 0, life: .4 }); break; }
+      case 'splash': { const [x, y] = sp(e.x, e.y); fx.push({ k: 'fire', x, y, t: 0, life: .4, r: e.r * CELL }); for (let n = 0; n < 6; n++) fx.push({ k: 'ember', x: x + (Math.random() - .5) * 20, y, vx: (Math.random() - .5) * 60, vy: -30 - Math.random() * 40, t: 0, life: .4 }); sfx.fire(); break; }
+      case 'fall': { const [x, y] = bugPos(e.b); dust({ i: Math.floor(e.b.x), j: Math.floor(e.b.y) }); fx.push({ k: 'note', x, y: y - 24, t: 0, life: .9, txt: 'Бум!' }); sfx.chomp(); break; }
+      case 'lure': { const [x, y] = bugPos(e.b); fx.push({ k: 'note', x, y: y - 14, t: 0, life: .7, txt: '♥' }); break; }
+      case 'ward': { const [x, y] = cellCenter(e.p.i, e.p.j); bump(e.p, .5, true); fx.push({ k: 'ringfx', x, y: y - 6, t: 0, life: .6, r: 26 }); fx.push({ k: 'note', x, y: y - 40, t: 0, life: 1.1, txt: 'Оберег!' }); sfx.upgrade(); break; }
+      case 'spread': { const [x, y] = bugPos(e.o); for (let n = 0; n < 5; n++) fx.push({ k: 'ember', x: x + (Math.random() - .5) * 12, y, vx: 0, vy: -40, t: 0, life: .35 }); break; }
+      case 'chain': { const [x, y] = bugPos(e.b); for (const o of e.to) { const [x2, y2] = bugPos(o); fx.push({ k: 'star', x: x2, y: y2 - 10, t: 0, life: .3, r: 10 }); } fx.push({ k: 'star', x, y: y - 10, t: 0, life: .25, r: 12 }); break; }
       case 'fire': { const [x, y] = cellCenter(e.p.i, e.p.j); fx.push({ k: 'fire', x, y, t: 0, life: .45, r: pstat(game, e.p, 'range') * CELL }); bump(e.p, .2); sfx.fire(); break; }
-      case 'shoot': bump(e.p, .12); sfx.shoot(PLANTS[e.p.type].shot, panOf(cellCenter(e.p.i, e.p.j)[0])); break;
+      case 'shoot': bump(e.p, .12); sfx.shoot(statOf(PLANTS[e.p.type], 'shot', e.p.lvl, e.p.br), panOf(cellCenter(e.p.i, e.p.j)[0])); break;
       case 'bite': { angles.delete(e.b.id); const [x, y] = cellCenter(...game.fruit); fx.push({ k: 'dmg', x: x + 20, y: y - 30, t: 0, life: .9, txt: `-${BUGS[e.b.kind].bite}`, red: true }); appleMood('scream', .9); appleSay(T.screams[Math.floor(Math.random() * T.screams.length)]); sfx.bite(); hpShake = .5; break; }
       case 'place': bump(e.p, .35, true); dust(e.p); terrainDirty = true; sfx.plant(); break;
       case 'regrow': bump(e.p, .35, true); dust(e.p); terrainDirty = true; sfx.regrow(); { const [x, y] = cellCenter(e.p.i, e.p.j); fx.push({ k: 'gain', x, y: y - 26, t: 0, life: 1, txt: T.regrown }); } break;
       case 'upgrade': {
         const [x, y] = cellCenter(e.p.i, e.p.j); for (let n = 0; n < 12; n++) fx.push({ k: 'spark', x: x + (Math.random() - .5) * 34, y: y - 6 - Math.random() * 36, t: n * .04, life: .6 }); bump(e.p, .4, true);
-        sfx.upgrade(); fx.push({ k: 'ringfx', x, y: y - 6, t: 0, life: .5, r: 30 }); fx.push({ k: 'note', x, y: y - 40, t: 0, life: 1.1, txt: e.p.lvl === 3 ? 'Максимум!' : `Уровень ${e.p.lvl}` });
+        sfx.upgrade(); fx.push({ k: 'ringfx', x, y: y - 6, t: 0, life: .5, r: 30 }); fx.push({ k: 'note', x, y: y - 40, t: 0, life: 1.1, txt: e.p.lvl === 4 ? 'Максимум!' : `Уровень ${e.p.lvl}` });
         break;
       }
       case 'sell': case 'plantDead': dust(e.p); terrainDirty = true; if (pop === e.p) pop = null; if (e.t === 'sell') sfx.sell(); else { sfx.eaten(); banner(`${T.plant[e.p.type]} ${T.eaten[e.p.type]}!`, 1.4); if (!localStorage.getItem('fruit.rootsHint2')) { banner(T.rootsHint, 8, true); localStorage.setItem('fruit.rootsHint2', '1'); } } break;
       case 'chew': { const [x, y] = cellCenter(e.p.i, e.p.j); for (let n = 0; n < 6; n++) fx.push({ k: 'crumb', x, y: y - 6, vx: (Math.random() - .5) * 50, vy: -20 - Math.random() * 30, t: 0, life: .5, col: e.p.type === 'pumpkin' ? '#f7a23a' : '#6cc04a' }); bump(e.p, .2); sfx.chew(); break; }
-      case 'wave': banner(T.wave(e.n, game.waves), 1.4); sfx.waveStart(); { const nb = newBugs(e.n).filter((k) => !isBoss(k)); if (nb.length && !(levelIdx === 0 && e.n === 1)) banner(T.freshBug(nb.map((k) => T.bug[k].toLowerCase())), 7, true); } if (AP.mood === 'happy') appleMood('idle', 0); break;
+      case 'wave': banner(T.wave(e.n, game.waves), 1.4); sfx.waveStart(); { const nb = newBugs(e.n).filter((k) => !isBoss(k)); if (nb.length && !(levelIdx === 0 && e.n === 1)) banner(T.freshBug(nb.map((k) => T.bug[k].toLowerCase())), 7, true); if (nb.some((k) => BUGS[k].fly)) hintOnce('fly', T.flyHint, 9); } if (AP.mood === 'happy') appleMood('idle', 0); break;
       case 'waveDone': appleMood('happy', 2.6); appleCheer(); banner(T.waveDone(e.bonus), 1.8); sfx.waveDone(); if (e.powers) hintOnce('powers', T.powersBack, 4); if (levelIdx === 0 && e.n === 1) { hintOnce('early', T.hint2, 6); hintOnce('trail', T.trailHint, 10); } if (levelIdx === 0 && e.n === 3) hintOnce('up', T.upHint, 9); break;
       case 'early': ufx.push({ k: 'gain', x: GO[0] + 30, y: GO[1] + 26, t: 0, life: 1.2, txt: T.early(e.bonus) }); sfx.early(e.bonus); break;
       case 'power': if (e.kind === 'frost') { ufx.push({ k: 'flash', t: 0, life: .6, col: 'rgba(190,240,255,' }); sfx.frost(); } else { for (let n = 0; n < 70; n++) ufx.push({ k: 'rain', x: Math.random() * UW, y: -Math.random() * UH, t: 0, life: 1.2 }); sfx.rain(); terrainDirty = true; } break;
@@ -563,15 +572,16 @@ function draw(dt) {
   const t = now / 1000;
   if (sel || drag) drawGrid();
   if (pop && !game.plants.includes(pop) && !game.stubs.includes(pop) && game.grid[pop.j]?.[pop.i] !== pop) pop = null;
-  if (pop && pop.type && game.plants.includes(pop) && PLANTS[pop.type].range) { // the reach now, and after the upgrade
-    const r = pstat(game, pop, 'range'), r2 = pop.lvl < 3 ? pstat(game, { ...pop, lvl: pop.lvl + 1 }, 'range') : r;
-    ring(...cellCenter(pop.i, pop.j), r * CELL); if (r2 > r + .01) ring(...cellCenter(pop.i, pop.j), r2 * CELL, true); groundRing(pop.type, ...cellCenter(pop.i, pop.j), r);
+  if (pop && pop.type && game.plants.includes(pop) && pstat(game, pop, 'range')) { // the reach now, and after the upgrade (at level 2: of the branch that reaches further)
+    const r = pstat(game, pop, 'range'), r2 = pop.lvl === 2 ? Math.max(...BRANCHES.map((br) => pstat(game, { ...pop, lvl: 3, br }, 'range'))) : pop.lvl < 4 ? pstat(game, { ...pop, lvl: pop.lvl + 1 }, 'range') : r;
+    ring(...cellCenter(pop.i, pop.j), r * CELL); if (r2 > r + .01) ring(...cellCenter(pop.i, pop.j), r2 * CELL, true); groundRing(pop, ...cellCenter(pop.i, pop.j), r);
   }
 
   drawDigWay(dt);
   // depth-sorted things on the ground
   const items = [];
   for (const p of game.plants) items.push([cellCenter(p.i, p.j)[1] + 14, () => drawPlant(p, t)]);
+  drawThorns();
   for (const st of game.stubs) items.push([cellCenter(st.i, st.j)[1] + 14, () => drawStub(st, t)]);
   for (const b of game.bugs) if (!b.fly) items.push([bugPos(b)[1], () => drawBug(b, t, dt)]);
   const [fxx, fyy] = cellCenter(...game.fruit); items.push([fyy + 12, () => drawApple(fxx, fyy, dt)]);
@@ -640,8 +650,8 @@ function drawDigMarks(t) {
     c.restore();
   }
 }
-// the reach of a plant that hits walkers only close by (the dandelion): an inner ring
-function groundRing(type, x, y, r) { const g = PLANTS[type].groundRange; if (g && g < r) { c.save(); c.beginPath(); c.arc(x, y, g * CELL, 0, A.TAU); c.fillStyle = 'rgba(255,230,150,.16)'; c.fill(); c.lineWidth = 1.5; c.strokeStyle = 'rgba(255,240,190,.75)'; c.stroke(); c.restore(); } }
+// the reach of a plant that hits walkers only close by (a far shot rose): an inner ring
+function groundRing(p, x, y, r) { const g = pstat(game, p, 'groundRange'); if (g && g < r) { c.save(); c.beginPath(); c.arc(x, y, g * CELL, 0, A.TAU); c.fillStyle = 'rgba(255,230,150,.16)'; c.fill(); c.lineWidth = 1.5; c.strokeStyle = 'rgba(255,240,190,.75)'; c.stroke(); c.restore(); } }
 function ring(x, y, r, next = false) { c.save(); c.beginPath(); c.arc(x, y, r, 0, A.TAU); if (!next) { c.fillStyle = 'rgba(255,255,255,.13)'; c.fill(); } c.setLineDash(next ? [3, 7] : [8, 6]); c.lineWidth = 2.2; c.strokeStyle = next ? 'rgba(150,255,120,.9)' : 'rgba(255,255,255,.85)'; c.stroke(); c.restore(); }
 function drawGrid() {
   if (game.phase === 'wave' && Math.floor(now / 500) !== blockCache?.tick) blockCache = null;
@@ -657,18 +667,34 @@ function drawGrid() {
   c.restore();
 }
 function drawPlant(p, t) {
-  const s = plantSprite(p.type, p.lvl, p.busy > 0 ? 1 : 0), [x, y] = cellCenter(p.i, p.j), base = y + 14;
+  const s = plantSprite(p.type, p.lvl, p.busy > 0 ? 1 : 0, p.br), [x, y] = cellCenter(p.i, p.j), base = y + 14;
   let sx = 1, sy = 1; const a = anim.get(p.id);
   if (a) { a.t += 1 / 60; const e = Math.exp(-a.t * 9) * Math.cos(a.t * 26); sx = 1 + a.k * e * (a.grow ? .6 : -.4); sy = 1 - a.k * e * (a.grow ? -.8 : .5); if (a.t > .8) anim.delete(p.id); }
   if (p.hit > 0) { sx *= 1.08; sy *= .9; }
   if (p.busy > 0) { const q = Math.sin(t * 16) * .05; sx += q; sy -= q; }
   if (digShake.has(`${p.i},${p.j}`)) { const q = Math.sin(t * 34) * .035; sx += q; sy -= q * .5; } // the diggers will eat it
   const sway = p.web > 0 ? 0 : Math.sin(t * 1.7 + p.id * 1.3) * .035;
-  if (p.buff > 0) { c.save(); c.globalAlpha = .5 + Math.sin(t * 5 + p.id) * .2; A.fxStar(c, x + 13, y - 26 + Math.sin(t * 3 + p.id) * 2, 4, '#ffe680'); c.restore(); }
-  const pk = plantK(p.type, p.lvl);
+  const pk = plantK(p.type, p.lvl, p.br);
   c.save(); c.translate(x, base); c.transform(sx * pk, 0, sway * pk, sy * pk, 0, 0); if (p.web > 0) c.globalAlpha = .8; blit(s, -PBX, -PBY); c.restore();
   if (p.web > 0) A.hdWeb(c, x, y, 19);
-  if (p.lvl === 3) { const q = (t * .8 + p.id * .37) % 1; c.save(); c.globalAlpha = Math.sin(q * Math.PI) * .9; A.fxStar(c, x - 12 + ((p.id * 7) % 24), y - 30 + q * 14, 3.2, '#fff6b0'); c.restore(); }
+  if (p.lvl === 4) { const q = (t * .8 + p.id * .37) % 1; c.save(); c.globalAlpha = Math.sin(q * Math.PI) * .9; A.fxStar(c, x - 12 + ((p.id * 7) % 24), y - 30 + q * 14, 3.2, '#fff6b0'); c.restore(); }
+}
+// The thorns of the pumpkins on the free cells around them: a few small brambles, brighter where they reach flyers too.
+const thornSprite = () => sprite('thorns', CELL, CELL, (x) => {
+  x.lineCap = 'round'; x.lineJoin = 'round';
+  for (const [cx, cy, r] of [[10, 12, 1], [31, 9, .8], [21, 31, 1.1], [7, 32, .7], [34, 30, .9]]) {
+    x.save(); x.translate(cx, cy); x.rotate(r * 2); x.scale(r, r);
+    x.beginPath(); x.moveTo(-6, 2); x.quadraticCurveTo(0, -4, 6, 1); x.strokeStyle = 'rgba(110,70,30,.7)'; x.lineWidth = 1.8; x.stroke();
+    for (const q of [-3.5, 0, 3.5]) { x.beginPath(); x.moveTo(q - 1.2, -1.2 + Math.abs(q) * .2); x.lineTo(q, -4.2 + Math.abs(q) * .3); x.lineTo(q + 1.2, -1 + Math.abs(q) * .2); x.fillStyle = 'rgba(230,220,180,.95)'; x.fill(); }
+    x.restore();
+  }
+});
+function drawThorns() {
+  const s = thornSprite();
+  for (let k = 0; k < game.thorn.length; k++) {
+    if (!game.thorn[k]) continue; const i = k % COLS, j = (k - i) / COLS, [x, y] = cellCenter(i, j);
+    c.save(); c.globalAlpha = game.thornAir[k] ? .95 : .7; blit(s, x - CELL / 2, y - CELL / 2); c.restore();
+  }
 }
 // Roots of an eaten plant: a sprout in the soil in a dashed ring; it grows back after the wave.
 const stubSprite = () => sprite('stub', PW, PH, (x) => A.hdPlant(x, 'pumpkin', PBX, PBY, 1, { noShadow: true, stage: 0 }));
@@ -682,7 +708,10 @@ function drawStub(st, t) {
 // coming out of the anthill: small and faint at its hole, full size a step later
 const emerge = (b) => (b.fly || b.brood ? 1 : clamp((HILL_X - b.x) / .55, 0, 1));
 function drawBug(b, t, dt) {
-  const [x, y] = bugPos(b), target = screenAngle(b.vx, b.vy);
+  let [x, y] = bugPos(b); const target = screenAngle(b.vx, b.vy);
+  // a flyer shot down drops from where it was hit onto the trail, spinning
+  const falling = b.fall > 0 && b.fx != null, fk = falling ? 1 - b.fall / FALL_T : 1;
+  if (falling) { const [x0, y0] = sp(b.fx, b.fy); x = x0 + (x - x0) * fk; y = y0 + (y - y0) * fk - Math.sin(fk * Math.PI) * 14; }
   let a = angles.get(b.id); if (a == null) a = target;
   let d = target - a; while (d > Math.PI) d -= A.TAU; while (d < -Math.PI) d += A.TAU; a += d * Math.min(1, dt * 10); angles.set(b.id, a);
   const moving = !(b.frozen > 0) && !(b.chew > 0 || b.gnaw), fr = moving ? Math.floor(t * (b.fly ? 10 : b.rush > 0 ? 14 : 7) + b.id) % 2 : 0;
@@ -692,11 +721,15 @@ function drawBug(b, t, dt) {
   if (b.slow < 1 && !b.fly) { c.save(); c.beginPath(); c.ellipse(x, y + 4, 17 * sc, 10 * sc, 0, 0, A.TAU); c.fillStyle = 'rgba(170,235,255,.35)'; c.fill(); c.restore(); }
   if (b.rush > 0) { c.save(); c.globalAlpha = .5; for (let n = 1; n <= 3; n++) { c.beginPath(); c.ellipse(x - Math.cos(a) * n * 9, y - Math.sin(a) * n * 9, 12 * sc / n, 7 * sc / n, a, 0, A.TAU); c.fillStyle = 'rgba(255,255,255,.35)'; c.fill(); } c.restore(); }
   const em = emerge(b); if (em <= 0) return;
-  c.save(); c.globalAlpha = em; c.translate(x, y - (b.fly ? Math.sin(t * 6 + b.id) * 3 : 0)); c.rotate(a + (b.chew > 0 || b.gnaw ? Math.sin(t * 30) * .12 : 0)); if (em < 1) c.scale(.4 + em * .6, .4 + em * .6);
+  if (b.melt > 0) { c.save(); c.globalAlpha = .45 + Math.sin(t * 12 + b.id) * .15; c.beginPath(); c.ellipse(x, y + 2, 16 * sc, 11 * sc, 0, 0, A.TAU); c.lineWidth = 2.4; c.strokeStyle = '#b44aff'; c.stroke(); c.restore(); } // no armor while it burns
+  c.save(); c.globalAlpha = em; c.translate(x, y - (b.fly ? Math.sin(t * 6 + b.id) * 3 : 0)); c.rotate(a + (falling ? fk * 9 : 0) + (b.chew > 0 || b.gnaw ? Math.sin(t * 30) * .12 : 0)); if (em < 1) c.scale(.4 + em * .6, .4 + em * .6);
   if (b.hit > 0 || b.sting > 0) c.filter = 'brightness(1.8)';
   blit(s, -s.w / 2, -s.h / 2); c.restore();
   if (b.mark > 0) { c.save(); c.globalAlpha = Math.min(1, b.mark) * .9; c.translate(x + 9 * sc, y - 11 * sc); c.rotate(.5); c.beginPath(); c.moveTo(0, -6); c.lineTo(3, 3); c.lineTo(-3, 3); c.closePath(); c.fillStyle = '#e8336a'; c.fill(); c.lineWidth = 1; c.strokeStyle = '#7a1030'; c.stroke(); c.restore(); } // pricked by a rose
   if (b.frozen > 0) A.fxIced(c, x, y, 13 * sc);
+  if (b.cracks) { c.save(); c.strokeStyle = 'rgba(60,30,10,.85)'; c.lineWidth = 1.3; c.lineCap = 'round'; for (let n = 0; n < Math.min(4, b.cracks); n++) { const q = n * 1.7 + b.id; c.beginPath(); c.moveTo(x + Math.cos(q) * 3, y + Math.sin(q) * 3); c.lineTo(x + Math.cos(q) * 9 * sc, y + Math.sin(q + .4) * 8 * sc); c.stroke(); } c.restore(); } // armor cracked for good
+  if (b.sniff > 0) { c.save(); c.globalAlpha = .9; A.hdText(c, '♥', x + 8, y - 14, 11, '#ff6aa0', { stroke: '#7a1040', sw: 2 }); c.restore(); } // at the nectar
+  if (b.slowT > 0 && b.fly) { c.save(); c.globalAlpha = .5; c.beginPath(); c.arc(x, y, 12 * sc, 0, A.TAU); c.fillStyle = 'rgba(170,235,255,.5)'; c.fill(); c.restore(); }
   if (b.mended > 0 && Math.random() < .15) fx.push({ k: 'spark', x: x + (Math.random() - .5) * 12, y: y - 6, t: 0, life: .4 });
   if (b.burn > 0 && Math.random() < .4) fx.push({ k: 'ember', x: x + (Math.random() - .5) * 14, y: y - 4, vx: 0, vy: -30, t: 0, life: .35 });
 }
@@ -782,7 +815,17 @@ function drawShot(s) {
   }
   const ang = Math.atan2(ty - y, tx - x);
   if (s.kind === 'thorn') A.fxThorn(c, x, y, ang, 22);
-  else if (s.kind === 'kernel') { const tot = Math.hypot(s.tx - s.sx, s.ty - s.sy) || 1, done = 1 - Math.hypot(s.tx - s.x, s.ty - s.y) / tot; A.hdBall(c, x, y - Math.sin(Math.max(0, Math.min(1, done)) * Math.PI) * 34, 4.4, 4.4, '#ffd23f', { olk: .7 }); }
+  else if (s.kind === 'pepper') { // a pepper lobbed high, turning over
+    const tot = Math.hypot(s.tx - s.sx, s.ty - s.sy) || 1, done = clamp(1 - Math.hypot(s.tx - s.x, s.ty - s.y) / tot, 0, 1);
+    c.save(); c.translate(x, y - Math.sin(done * Math.PI) * 34); c.rotate(done * 7);
+    A.hdBlob(c, (cc) => { cc.moveTo(-3, -5); cc.bezierCurveTo(-4.5, 1, -1, 6, 1, 7); cc.bezierCurveTo(3.4, 3, 3.6, -1, 3, -5); cc.closePath(); }, s.melt ? '#7a2ad0' : '#ee3a24', 0, 1, 6);
+    A.hdBall(c, 0, -5, 2.6, 1.5, '#3f8f2c', { noSpec: true, olk: .7 }); c.restore();
+  } else if (s.kind === 'icicle' || s.kind === 'icicleBig') { // an icicle; the big one drops on the bug from above
+    const big = s.kind === 'icicleBig', u = big ? 1.8 : 1, tot = Math.hypot(s.tx - s.sx, s.ty - s.sy) || 1, done = clamp(1 - Math.hypot(s.tx - s.x, s.ty - s.y) / tot, 0, 1);
+    c.save(); c.translate(x, y - (big ? (1 - done) * 40 : 0)); c.rotate(big ? 0 : ang - Math.PI / 2); c.scale(u, u);
+    c.beginPath(); c.moveTo(-3, -6); c.lineTo(3, -6); c.lineTo(0, 7); c.closePath();
+    const gr = c.createLinearGradient(0, -6, 0, 7); gr.addColorStop(0, '#ffffff'); gr.addColorStop(1, '#6cc8f4'); c.fillStyle = gr; c.fill(); c.lineWidth = 1 / u; c.strokeStyle = '#2f86bd'; c.stroke(); c.restore();
+  }
   else { c.save(); c.translate(x, y); c.rotate(ang); c.strokeStyle = 'rgba(255,255,255,.9)'; c.lineWidth = 1.2; for (let k = 0; k < 7; k++) { c.beginPath(); c.moveTo(0, 0); c.lineTo(Math.cos(k) * 6, Math.sin(k) * 6); c.stroke(); } A.hdLine(c, [0, 0, -12, 0], 'rgba(230,225,210,.9)', 1.4); c.restore(); }
 }
 // A plant dragged from the shelf: over the field it snaps to the cell under the finger (a little above it on a touch
@@ -809,7 +852,7 @@ function drawDrag() {
   const [i, j] = drag.cell, ok = !drag.problem, [x, y] = cellCenter(i, j);
   if (ok && drag.trails) drag.trails.forEach((tr, e) => { const pts = tr.map(([a, b]) => cellCenter(a, b)); pts.unshift(hillPos(e)); c.save(); c.shadowColor = 'rgba(255,200,40,.9)'; c.shadowBlur = 8; A.strokePts(c, A.chaikin(pts, 3), 4, '#ffd23a', { dash: [10, 7] }); c.restore(); });
   c.save(); c.beginPath(); A.rrect(c, x - 19, y - 19, 38, 38, 10); c.fillStyle = ok ? 'rgba(140,255,120,.35)' : 'rgba(255,80,70,.4)'; c.fill(); c.lineWidth = 3; c.strokeStyle = ok ? '#ffffff' : '#ff4a3a'; c.stroke(); c.restore();
-  if (PLANTS[drag.type].range) { const r = pstat(game, { type: drag.type, lvl: 1, i, j }, 'range'); ring(x, y, r * CELL); groundRing(drag.type, x, y, r); }
+  { const q = { type: drag.type, lvl: 1, i, j }, r = pstat(game, q, 'range'); if (r) { ring(x, y, r * CELL); groundRing(q, x, y, r); } }
   const pk = plantK(drag.type, 1); c.save(); c.globalAlpha = ok ? .9 : .45; c.translate(x, y + 14); c.scale(pk, pk); blit(plantSprite(drag.type, 1), -PBX, -PBY); c.restore();
   if (game.tiles[j][i] === 'fertile' && ok) A.hdText(c, '+30%', x, y + 26, 11 * Math.max(1, .8 / ws), '#eaffd8', { stroke: '#2a6a1a', sw: 3.5 });
 }
@@ -822,10 +865,10 @@ function drawDragFree() {
 // ---------- the shelf of plants ----------
 // The drawn part of a plant's picture inside its box (x0, y0, x1, y1), for fitting it on a card. Measured once.
 const boxes = new Map();
-function plantBox(type, lvl = 1) {
-  const key = type + lvl;
+function plantBox(type, lvl = 1, br = null) {
+  const key = type + lvl + br;
   if (!boxes.has(key)) {
-    const cv = document.createElement('canvas'); cv.width = PW; cv.height = PH; const x = cv.getContext('2d'); A.hdPlant(x, type, PBX, PBY, 1, { noShadow: true, lvl });
+    const cv = document.createElement('canvas'); cv.width = PW; cv.height = PH; const x = cv.getContext('2d'); A.hdPlant(x, type, PBX, PBY, 1, { noShadow: true, lvl, br });
     const d = x.getImageData(0, 0, PW, PH).data; let x0 = PW, y0 = PH, x1 = 0, y1 = 0;
     for (let j = 0; j < PH; j++) for (let i = 0; i < PW; i++) if (d[(j * PW + i) * 4 + 3] > 40) { x0 = Math.min(x0, i); x1 = Math.max(x1, i + 1); y0 = Math.min(y0, j); y1 = Math.max(y1, j + 1); }
     boxes.set(key, x1 > x0 ? [x0, y0, x1, y1] : [0, 0, PW, PH]); free(cv);
@@ -835,9 +878,9 @@ function plantBox(type, lvl = 1) {
 // How much a plant is shrunk on the field, so a grown one does not hide its neighbours: it stays within about a cell
 // (a little more at every level, so the level still shows in the size).
 const fieldK = new Map();
-function plantK(type, lvl) {
-  const key = type + lvl;
-  if (!fieldK.has(key)) { const [x0, y0, x1] = plantBox(type, lvl), mw = CELL * (.85 + .1 * (lvl - 1)), mh = CELL * (1 + .15 * (lvl - 1)); fieldK.set(key, Math.min(1, mw / (x1 - x0), mh / (PBY - y0))); }
+function plantK(type, lvl, br = null) {
+  const key = type + lvl + br;
+  if (!fieldK.has(key)) { const [x0, y0, x1] = plantBox(type, lvl, br), mw = CELL * (.85 + .08 * (lvl - 1)), mh = CELL * (1 + .12 * (lvl - 1)); fieldK.set(key, Math.min(1, mw / (x1 - x0), mh / (PBY - y0))); }
   return fieldK.get(key);
 }
 function plantCard(type, x, y, w, h, on, poor) {
@@ -878,7 +921,7 @@ function drawInfo() {
     A.hdText(c, tag, gx + gw / 2, gy + 10.5, 12, '#fff', { stroke: null });
   }
   const [cx, cy, cw, ch] = cardRect(k), w = Math.min(300, UW - LX - RX - 12 - (TRAY.mode === 'col' ? TRAY.w + 8 : 0)), tw = w - 22;
-  c.save(); c.font = '800 12px Nunito'; const lines = wrap(T.about[type], tw); c.font = '900 11px Nunito'; const st = wrap(statLine(type).join(' · '), tw), pk = wrap(`★ ${T.lvl3}: ${T.perk[type].toLowerCase()}`, tw); c.restore();
+  c.save(); c.font = '800 12px Nunito'; const lines = wrap(T.about[type], tw); c.font = '900 11px Nunito'; const st = wrap(statLine(type).join(' · '), tw), pk = wrap(`★ ${T.branches}: ${branchNames(type)}`, tw); c.restore();
   const h = 32 + lines.length * 15 + st.length * 14 + pk.length * 14 + 10;
   let x, y;
   if (TRAY.mode === 'row') { x = clamp(cx + cw / 2 - w / 2, LX + 6, UW - RX - w - 6); y = TRAY.y - h - 10; }
@@ -1075,14 +1118,14 @@ function wideBtn(x, y, w, h, col, ol, label, price, fn, disabled = false) {
   c.restore();
   ui.push({ x, y: y - 3, w, h: h + 6, fn: disabled ? () => sfx.cant() : fn, s: 'u' });
 }
-// The panel of a plant on the field: what it has now and what the next level gives (green), the trick of the third
-// level, and the buttons: upgrade, sell. Roots and weeds get a small panel of their own.
+// The panel of a plant on the field: what it has now and what the next level gives (green), its branch and the top
+// of it, and the buttons: upgrade (at level 2 a card for each branch), sell. Roots and weeds get a small panel of their own.
 function drawPop() {
   const p = pop, w = Math.min(236, UW - LX - RX - 12);
   const hc0 = CELL / 2 * ws / uk, [fx0, fy0, fw, fh] = faUI(), [ux, y0] = toUI(...cellCenter(p.i, p.j)), uy = clamp(y0, fy0 + hc0, fy0 + fh - hc0);
   // The panel keeps clear of the plant and its reach (the bigger ring, after the upgrade): it goes to the top or the
   // bottom of the field, or beside the ring, wherever it covers least of it; nearer to the plant when all are clear.
-  const P = p.type ? PLANTS[p.type] : null, reach = P?.range && game.plants.includes(p) ? Math.max(pstat(game, p, 'range'), p.lvl < 3 ? pstat(game, { ...p, lvl: p.lvl + 1 }, 'range') : 0) : .5;
+  const P = p.type ? PLANTS[p.type] : null, reach = P?.range && game.plants.includes(p) ? Math.max(pstat(game, p, 'range'), p.lvl !== 2 && p.lvl < 4 ? pstat(game, { ...p, lvl: p.lvl + 1 }, "range") : 0) : .5;
   const rr = reach * CELL * ws / uk + 6, ry = uy - hc0 * .6; // the circle to keep clear, a little raised for the plant's height
   const placeAt = (h) => {
     const top = TOPH + 4, bottom = (TRAY.mode === 'row' ? TRAY.y - 4 : UH - BOTY) - h - 6, minX = TRAY.mode === 'col' ? Math.min(TRAY.x + TRAY.w + 10, UW - RX - w - 6) : LX + 6, maxX = UW - RX - w - 6; // not over the shelf
@@ -1110,29 +1153,55 @@ function drawPop() {
     lines.forEach((l, k) => A.hdText(c, l, x + 12, y + 40 + k * 15, 11.5, '#8a5a32', { stroke: null, align: 'left', weight: 800 }));
     return;
   }
-  const rows = statRows(p.type, p.lvl, p), up = upgradeCost(p), fresh = isFresh(game, p), fert = game.tiles[p.j][p.i] === 'fertile';
-  c.save(); c.font = '900 11px Nunito'; const perk = wrap(`${p.lvl === 3 ? '★' : `${T.lvl3}:`} ${T.perk[p.type]}`, w - 24); c.restore();
-  const notes = (fert ? 1 : 0) + (p.web > 0 ? 1 : 0) + (p.buff > 0 ? 1 : 0) + (p.guard > 0 ? 1 : 0), h = 34 + rows.length * 16 + 6 + perk.length * 13 + notes * 14 + 8 + 30 + 10;
+  const B = p.br ? T.branch[p.type][p.br] : null, pick = p.lvl === 2;
+  const rows = statRows(p.type, p.lvl, p.br, p), up = upgradeCost(p), fresh = isFresh(game, p), fert = game.tiles[p.j][p.i] === 'fertile';
+  // under the numbers: the branch it is on and its top, or (below level 3) the two branches to come
+  c.save(); c.font = '900 11px Nunito';
+  const perk = B ? wrap(`${B[0]}. ${p.lvl === 4 ? '★' : `${T.top}:`} ${B[2]} — ${B[3].toLowerCase()}`, w - 24) : pick ? [T.pick] : wrap(`${T.branches}: ${branchNames(p.type)}`, w - 24);
+  // level 2: a card for each branch, with what it does
+  c.font = '800 10.5px Nunito'; const cardW = (w - 26) / 2, cardText = BRANCHES.map((br) => wrap(branchOpen(game, p.type, br) ? T.branch[p.type][br][4] : T.opensAt(P[br].from), cardW - 12));
+  const cardH = pick ? 46 + Math.max(...cardText.map((l) => l.length)) * 12 : 0;
+  c.restore();
+  const notes = (fert ? 1 : 0) + (p.web > 0 ? 1 : 0) + (p.guard > 0 ? 1 : 0) + (p.ward && !p.ward.warded ? 1 : 0);
+  const h = 34 + rows.length * 16 + 6 + perk.length * 13 + notes * 14 + 8 + (pick ? cardH + 8 : 0) + 30 + 10;
   const [x, y] = placeAt(h);
   A.hdText(c, T.plant[p.type], x + 12, y + 18, 15, '#6a3e1c', { stroke: null, align: 'left' });
-  // the level: three pips after the name
+  // the level: four pips after the name (the top one a star)
   c.save(); c.font = '900 15px Nunito'; const nw = c.measureText(T.plant[p.type]).width; c.restore();
-  for (let k = 0; k < 3; k++) { c.beginPath(); c.arc(x + 22 + nw + k * 13, y + 18, 4.6, 0, A.TAU); c.fillStyle = k < p.lvl ? '#ffb81a' : '#e4d2ac'; c.fill(); c.lineWidth = 1.4; c.strokeStyle = k < p.lvl ? '#a06a00' : '#c0a878'; c.stroke(); }
+  for (let k = 0; k < 4; k++) { c.beginPath(); c.arc(x + 22 + nw + k * 13, y + 18, 4.6, 0, A.TAU); c.fillStyle = k < p.lvl ? (k === 3 ? '#ff8a1a' : '#ffb81a') : '#e4d2ac'; c.fill(); c.lineWidth = 1.4; c.strokeStyle = k < p.lvl ? '#a06a00' : '#c0a878'; c.stroke(); }
   close(x, y);
   let yy = y + 42;
-  for (const [label, cur, next, rung] of rows) { // rung: faster by a bell, in its colour
+  for (const [label, cur, next] of rows) {
     A.hdText(c, label, x + 12, yy, 12, '#8a5a32', { stroke: null, align: 'left', weight: 800 });
-    if (next) { A.hdText(c, next, x + w - 12, yy, 12.5, '#2f9a1f', { stroke: null, align: 'right' }); c.save(); c.font = '900 12.5px Nunito'; const nw2 = c.measureText(next).width; c.restore(); A.hdText(c, `${cur}  →`, x + w - 18 - nw2, yy, 12, rung ? '#3a6ab0' : '#6a3e1c', { stroke: null, align: 'right' }); }
-    else A.hdText(c, cur, x + w - 12, yy, 12.5, rung ? '#3a6ab0' : '#6a3e1c', { stroke: null, align: 'right' });
+    if (next) { A.hdText(c, next, x + w - 12, yy, 12.5, '#2f9a1f', { stroke: null, align: 'right' }); c.save(); c.font = '900 12.5px Nunito'; const nw2 = c.measureText(next).width; c.restore(); A.hdText(c, `${cur}  →`, x + w - 18 - nw2, yy, 12, '#6a3e1c', { stroke: null, align: 'right' }); }
+    else A.hdText(c, cur, x + w - 12, yy, 12.5, '#6a3e1c', { stroke: null, align: 'right' });
     yy += 16;
   }
   yy += 4;
-  for (const l of perk) { A.hdText(c, l, x + 12, yy, 11, p.lvl === 3 ? '#c07a10' : '#a08060', { stroke: null, align: 'left' }); yy += 13; }
+  for (const l of perk) { A.hdText(c, l, x + 12, yy, 11, p.lvl === 4 ? '#c07a10' : pick ? '#3f8a2a' : '#a08060', { stroke: null, align: 'left' }); yy += 13; }
   if (fert) { A.hdText(c, T.onFertile, x + 12, yy + 1, 11, '#3f8a2a', { stroke: null, align: 'left' }); yy += 14; }
   if (p.web > 0) { A.hdText(c, T.webbed, x + 12, yy + 1, 11, '#7a4ab0', { stroke: null, align: 'left' }); yy += 14; }
-  if (p.buff > 0) { A.hdText(c, T.belled(p.buff), x + 12, yy + 1, 11, '#3a6ab0', { stroke: null, align: 'left' }); yy += 14; } // (the stats above already count it)
   if (p.guard > 0) { A.hdText(c, T.guarded(p.guard), x + 12, yy + 1, 11, '#3f8a2a', { stroke: null, align: 'left' }); yy += 14; }
+  if (p.ward && !p.ward.warded) { A.hdText(c, T.warded, x + 12, yy + 1, 11, '#3f8a2a', { stroke: null, align: 'left' }); yy += 14; }
   yy += 6;
+  if (pick) { // two branch cards: a picture, the name, what it does, the price; one tap grows it
+    BRANCHES.forEach((br, k) => {
+      const open = branchOpen(game, p.type, br), cost = upgradeCost(p, br), cx = x + 10 + k * (cardW + 6), poor = game.dew < cost, [name] = T.branch[p.type][br];
+      c.save(); if (!open) c.globalAlpha = .55;
+      A.uiPanel(c, cx, yy, cardW, cardH, 12, open ? '#f4ffe6' : '#ece4d0', { ol: open ? '#3f8a2a' : '#b0a080', olw: 2 });
+      c.save(); c.translate(cx + 20, yy + 40); c.scale(.42, .42); blit(plantSprite(p.type, 3, 0, br), -PBX, -PBY); c.restore();
+      c.save(); c.font = '900 12px Nunito'; const fs = Math.min(12, 12 * (cardW - 44) / c.measureText(name).width); c.restore();
+      A.hdText(c, name, cx + 40, yy + 14, fs, '#3a5a1a', { stroke: null, align: 'left' });
+      if (open) { A.hdDrop(c, cx + 44, yy + 30, 4.2); A.hdText(c, String(cost), cx + 51, yy + 30.5, 12, poor ? '#c0402a' : '#6a3e1c', { stroke: null, align: 'left' }); }
+      cardText[k].forEach((l, n) => A.hdText(c, l, cx + 6, yy + 50 + n * 12, 10.5, '#6a5a3a', { stroke: null, align: 'left', weight: 800 }));
+      c.restore();
+      ui.push({ x: cx, y: yy, w: cardW, h: cardH, fn: !open || poor ? () => sfx.cant() : () => { if (!upgrade(game, p, br)) sfx.cant(); }, s: 'u' });
+    });
+    yy += cardH + 8;
+    wideBtn(x + 10, yy, w - 20, 28, '#e0884a', '#7a3a10', `${T.sell} +${refund(game, p)}`, null, () => { removePlant(game, p); pop = null; });
+    if (fresh) A.hdText(c, T.fullRefund, x + w / 2, yy - 4, 9, '#a08060', { stroke: null });
+    return;
+  }
   const bw = (w - 26) / 2;
   if (up == null) wideBtn(x + 10, yy, bw, 28, '#c8b070', '#8a6a10', T.max, null, () => {}, true);
   else wideBtn(x + 10, yy, bw, 28, '#5cc23e', '#1f5a14', T.up, up, () => { if (!upgrade(game, p)) sfx.cant(); }, game.dew < up);
@@ -1144,7 +1213,11 @@ function drawPop() {
 // Holding a finger on a plant (on the field or in the plant menu) or on a bug (on the field or in the next-wave list)
 // shows what it is; letting go hides it.
 let tip = null, lpTimer = 0;
-const plantInfo = (type, p) => ({ title: T.plant[type] + (p ? ` · ${T.lvl(p.lvl)}` : ''), text: T.about[type], stats: statLine(type, p ? p.lvl : 1).join(' · ') + ` · ★ ${T.lvl3.toLowerCase()}: ${T.perk[type].toLowerCase()}` });
+const plantInfo = (type, p) => {
+  const br = p?.lvl > 2 ? p.br : null, B = br && T.branch[type][br];
+  return { title: T.plant[type] + (B ? ` · ${B[0]}` : '') + (p ? ` · ${T.lvl(p.lvl)}` : ''), text: B ? B[1] : T.about[type],
+    stats: statLine(type, p ? p.lvl : 1, br).join(' · ') + (B ? ` · ★ ${B[2]}: ${B[3].toLowerCase()}` : ` · ★ ${T.branches.toLowerCase()}: ${branchNames(type)}`) };
+};
 const bugInfo = (kind, b) => ({ title: T.bug[kind], text: T.bugAbout[kind], stats: bugStats(kind, b).join(' · ') });
 function infoAt(px, py) {
   const u = hit(ui.filter((q) => q.s === 'u'), px / uk, py / uk);
@@ -1342,8 +1415,12 @@ let guideTab = 'plants';
 function openGuide() {
   const plant = (k) => {
     if (!plantOpen(k)) return `<div class="item off"><img src="${plantPic(k, 1)}" alt=""><div class="tx"><h3>${T.plant[k]}</h3><p>${T.locked}</p></div></div>`;
-    const lv = [1, 2, 3].map((l) => `<div><img src="${plantPic(k, l)}" alt=""><b>${l === 1 ? `${PLANTS[k].cost} росы` : `+${PLANTS[k].up[l - 2]} росы`}</b>${statRows(k, l).filter(([, , ]) => true).slice(0, 4).map(([a, v]) => `${a.toLowerCase()} ${v}`).join('<br>')}${l === 3 ? `<u>★ ${T.perk[k]}</u>` : ''}</div>`).join('');
-    return `<div class="item" style="display:block"><h3>${T.plant[k]} <span class="tag" style="margin:0 0 0 4px">${T.role[k]}</span></h3><p>${T.about[k]}</p><div class="lvls">${lv}</div></div>`;
+    const P = PLANTS[k], nums = (l, br) => statRows(k, l, br).slice(0, 3).map(([a, v]) => `${a.toLowerCase()} ${v}`).join('<br>');
+    const lv = [1, 2].map((l) => `<div><img src="${plantPic(k, l)}" alt=""><b>${l === 1 ? `${P.cost} росы` : `+${P.up[0]} росы`}</b>${nums(l)}</div>`).join('');
+    // the branches: what each does and its top, or the level of the campaign where it opens
+    const brs = BRANCHES.map((br) => { const [name, about, top, topAbout] = T.branch[k][br], open = levelOpen(P[br].from - 1);
+      return `<div><img src="${plantPic(k, 3, br)}" alt=""><b>${name}</b>${open ? `+${P[br].up[0]} / +${P[br].up[1]} росы<br>${about}<u>★ ${top}: ${topAbout.toLowerCase()}</u>` : T.opensAt(P[br].from)}</div>`; }).join('');
+    return `<div class="item" style="display:block"><h3>${T.plant[k]} <span class="tag" style="margin:0 0 0 4px">${T.role[k]}</span></h3><p>${T.about[k]}</p><div class="lvls">${lv}</div><div class="lvls brs">${brs}</div></div>`;
   };
   const bug = (k) => (progress.bugs[k]
     ? `<div class="item"><img src="${bugPic(k)}" alt=""><div class="tx"><h3>${T.bug[k]}${isBoss(k) ? ' <span class="tag" style="margin:0;background:#ffd0d8;color:#a01838">босс</span>' : ''}</h3><p>${T.bugAbout[k]}</p><div class="st">${bugStats(k).slice(1).join(' · ')}</div></div></div>`

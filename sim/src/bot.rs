@@ -48,7 +48,7 @@ pub struct Res {
 }
 // what the bot did, for a replay by the JS simulation (sim/js/replay.mjs)
 #[derive(Clone, Debug)]
-pub enum Op { Step(u32), Place(usize, i32, i32), Up(i32, i32), Wave, Sell(i32, i32), Power(Power), Dew(f64) }
+pub enum Op { Step(u32), Place(usize, i32, i32), Up(i32, i32, u8), Wave, Sell(i32, i32), Power(Power), Dew(f64) }
 
 // A strategy: the weights of what a player sees in a cell (NF numbers, feat()) for every kind of plant, the weight
 // of growing every kind, and the weights of what is seen in a maze (routes::pool), if it picks its own.
@@ -56,12 +56,14 @@ pub const NF: usize = 9;
 #[derive(Clone, Debug)]
 pub struct Policy { pub place: Vec<[f64; NF]>, pub up: Vec<f64>, pub maze: Option<[f64; NM]> }
 fn hurts(d: &Data, kind: usize) -> bool { let p = &d.plants[kind]; p.has[Stat::Dmg as usize] || p.has[Stat::Eat as usize] }
+// a plant's reach for walkers (a far shot reaches them only next to it)
+fn reach_g(g: &Game, p: &BP) -> f64 { let r = g.pstat(p.kind, p.lvl, p.br, p.i, p.j, Stat::Range); let gr = g.pstat(p.kind, p.lvl, p.br, p.i, p.j, Stat::GroundRange); if gr != 0.0 { r.min(gr) } else { r } }
 // For every cell of the trail: how many plants that deal damage reach it, and whether a mint slows it.
 fn heat_map(g: &Game, s: &Study, tr: &Tr) -> (Vec<f64>, Vec<bool>) {
     let d = g.d; let mut hits = vec![0.0; tr.len()]; let mut slow = vec![false; tr.len()];
     for p in &s.plants {
-        let pd = &d.plants[p.kind]; let r = g.pstat(p.kind, p.lvl, p.i, p.j, Stat::Range); if r == 0.0 { continue; }
-        let rg = if pd.ground_range != 0.0 { r.min(pd.ground_range) } else { r };
+        let pd = &d.plants[p.kind]; let r = g.pstat(p.kind, p.lvl, p.br, p.i, p.j, Stat::Range); if r == 0.0 { continue; }
+        let rg = reach_g(g, p);
         for (k, &(a, b, _)) in tr.iter().enumerate() {
             if hurts(d, p.kind) && within((a - p.i) as f64, (b - p.j) as f64, rg) { hits[k] += 1.0; }
             if pd.has[Stat::Slow as usize] && within((a - p.i) as f64, (b - p.j) as f64, r) { slow[k] = true; }
@@ -80,7 +82,7 @@ fn heat_map(g: &Game, s: &Study, tr: &Tr) -> (Vec<f64>, Vec<bool>) {
 //   7 1 on fertile ground
 //   8 1 on the trail or in a wall of the maze (the plant changes the trail)
 fn feat(g: &Game, s: &Study, tr: &Tr, heat: &(Vec<f64>, Vec<bool>), far: f64, kind: usize, i: i32, j: i32, wall: bool) -> [f64; NF] {
-    let d = g.d; let pd = &d.plants[kind]; let r = pd.st[Stat::Range as usize][0]; let rg = if pd.ground_range != 0.0 { r.min(pd.ground_range) } else { r };
+    let d = g.d; let pd = &d.plants[kind]; let r = pd.st[Stat::Range as usize][0]; let rg = r;
     let (mut n, mut runs, mut hot, mut sl, mut prog, mut prev) = (0.0, 0.0, 0.0, 0.0, 0.0, false);
     if r > 0.0 {
         for (k, &(a, b, step)) in tr.iter().enumerate() {
@@ -97,7 +99,7 @@ fn bias(p: &[f64; NF], f: &[f64; NF]) -> f64 { let z: f64 = (0..NF).map(|k| p[k]
 
 // a plant as the bot weighs it: one that stands, or one it thinks of planting or growing
 #[derive(Clone, Copy, Debug)]
-struct BP { kind: usize, lvl: usize, i: i32, j: i32 }
+struct BP { kind: usize, lvl: usize, br: u8, i: i32, j: i32 }
 // the coming waves as the bot sees them
 #[derive(Clone, Copy, Default)]
 struct Soon { set: bool, armor: f64, crowd: f64, n_g: f64, n_a: f64, hp_g: f64, hp_a: f64 }
@@ -150,26 +152,33 @@ pub fn layout(d: &Data, level: usize, terrain: bool) -> Vec<(i32, i32)> {
 // the plants that reach it, times the time a bug spends there (longer by a mint, longer in mud).
 // study() does the part shared by all plants (the time in every cell); term() is one plant's share. A candidate that
 // changes neither the trail nor the time or the buff of others (not a mint, not a bell) adds only its own share.
-struct Study { plants: Vec<BP>, time: Vec<f64>, bells: Vec<(i32, i32, f64, f64)> }
+struct Study { plants: Vec<BP>, time: Vec<f64> }
 
-#[inline] fn st(g: &Game, _o: &Soon, terrain: bool, p: &BP, s: Stat) -> f64 { if terrain { g.pstat(p.kind, p.lvl, p.i, p.j, s) } else { g.pstat(p.kind, p.lvl, -1, -1, s) } }
+#[inline] fn st(g: &Game, _o: &Soon, terrain: bool, p: &BP, s: Stat) -> f64 { if terrain { g.pstat(p.kind, p.lvl, p.br, p.i, p.j, s) } else { g.pstat(p.kind, p.lvl, p.br, -1, -1, s) } }
 
 // ovr: a plant taken as standing on its cell (in place of what stands there, if anything)
 fn study(g: &Game, tr: &Tr, o: &Soon, terrain: bool, ovr: Option<BP>) -> Study {
     let d = g.d;
     let mut cells: [Option<BP>; N] = [None; N];
-    for p in &g.plants { cells[key(p.i, p.j)] = Some(BP { kind: p.kind, lvl: p.lvl, i: p.i, j: p.j }); }
+    for p in &g.plants { cells[key(p.i, p.j)] = Some(BP { kind: p.kind, lvl: p.lvl, br: p.br, i: p.i, j: p.j }); }
     if let Some(q) = ovr { cells[key(q.i, q.j)] = Some(q); }
     let plants: Vec<BP> = cells.iter().filter_map(|c| *c).collect();
     let s = |p: &BP, name: Stat| st(g, o, terrain, p, name);
-    let has = |p: &BP, name: Stat| d.plants[p.kind].has[name as usize];
-    let mints: Vec<(i32, i32, f64, f64)> = plants.iter().filter(|p| has(p, Stat::Slow)).map(|p| (p.i, p.j, s(p, Stat::Range), s(p, Stat::Slow) + (if s(p, Stat::Chill) != 0.0 { 0.06 } else { 0.0 }))).collect();
-    let bells: Vec<(i32, i32, f64, f64)> = plants.iter().filter(|p| has(p, Stat::Buff)).map(|p| (p.i, p.j, s(p, Stat::Range), s(p, Stat::Buff))).collect();
+    // a cold mint slows every bug in its reach (rime: now and then frozen too); an icicle mint the bugs it hits, for
+    // the share of the crowd it keeps slowed (what it hits in frostT seconds over the bugs in its reach)
+    let reach_n = |p: &BP, r: f64| tr.iter().filter(|&&(a, b, _)| within((a - p.i) as f64, (b - p.j) as f64, r)).count();
+    let mints: Vec<(i32, i32, f64, f64)> = plants.iter().filter_map(|p| {
+        let r = s(p, Stat::Range);
+        if s(p, Stat::Slow) != 0.0 { return Some((p.i, p.j, r, s(p, Stat::Slow) + (if s(p, Stat::Rime) != 0.0 { 0.06 } else { 0.0 }))); }
+        let f = s(p, Stat::Frost); if f == 0.0 { return None; }
+        Some((p.i, p.j, r, f * (1.0f64).min(s(p, Stat::Rate) * s(p, Stat::FrostT) / (1.0f64).max(o.crowd * reach_n(p, r) as f64))))
+    }).collect();
     // a rose marks the bugs it pricks: all the damage they take on the cells it reaches is that much more, for the
     // share of the crowd it keeps marked (what it pricks in MARK_T seconds over the walkers in its reach)
-    let roses: Vec<(i32, i32, f64, f64)> = plants.iter().filter(|p| has(p, Stat::Mark)).map(|p| {
-        let r = s(p, Stat::Range); let n = tr.iter().filter(|&&(a, b, _)| within((a - p.i) as f64, (b - p.j) as f64, r)).count();
-        let multi = s(p, Stat::Multi);
+    // (a chain of marks keeps more of a crowd marked)
+    let roses: Vec<(i32, i32, f64, f64)> = plants.iter().filter(|p| s(p, Stat::Mark) != 0.0).map(|p| {
+        let r = s(p, Stat::Range); let n = reach_n(p, r);
+        let multi = s(p, Stat::Multi) + s(p, Stat::Chain);
         (p.i, p.j, r, s(p, Stat::Mark) * (1.0f64).min((if multi != 0.0 { multi } else { 1.0 }) * s(p, Stat::Rate) * d.mark_t / (1.0f64).max(o.crowd * n as f64)))
     }).collect();
     let time: Vec<f64> = tr.iter().map(|&(a, b, _)| {
@@ -178,7 +187,7 @@ fn study(g: &Game, tr: &Tr, o: &Soon, terrain: bool, ovr: Option<BP>) -> Study {
         let free = g.grid[key(a, b)] == Cell::Empty && ovr.map_or(true, |q| (q.i, q.j) != (a, b));
         (1.0 + mark) / ((1.0 - slow) * (if terrain && g.tiles[key(a, b)] == Tile::Mud && free { d.mud } else { 1.0 }))
     }).collect();
-    Study { plants, time, bells }
+    Study { plants, time }
 }
 // cells a flyer spends in reach of plant p: the chord of its circle along its straight way to the fruit. Flyers set
 // off from any row past the right edge (game.rs spawn), so the chord is averaged over a few starting rows.
@@ -198,27 +207,36 @@ fn fly_time(g: &Game, p: &BP, r: f64) -> f64 {
 // stand on one cell of the trail in the coming waves. Flyers cross the field in a straight line from the anthill to
 // the fruit.
 fn term(g: &Game, s_: &Study, tr: &Tr, o: &Soon, terrain: bool, p: &BP) -> (f64, f64) {
-    let d = g.d; let pd = &d.plants[p.kind];
     let s = |name: Stat| st(g, o, terrain, p, name);
-    let hit = |x: f64| (x - o.armor).max(1.0);
-    let dps = if pd.has[Stat::Eat as usize] { (if o.hp_g != 0.0 { o.hp_g } else { f64::INFINITY }).min(s(Stat::Chomp) + s(Stat::Gulp) * o.hp_g) / s(Stat::Eat) } // a bite, or a worn bug swallowed
-        else if p.kind == d.pepper { hit(s(Stat::Dmg)) * s(Stat::Rate) + s(Stat::Burn) * (1.0f64).min(s(Stat::BurnT) * s(Stat::Rate)) } // to every bug in its reach
-        else if pd.has[Stat::Dmg as usize] { hit(s(Stat::Dmg)) * s(Stat::Rate) * (if s(Stat::Stun) != 0.0 { 1.1 } else { 1.0 }) }
-        else { 0.0 };
-    if dps == 0.0 { return (0.0, 0.0); }
-    let mut buff = 0.0f64; for &(qi, qj, r, v) in &s_.bells { if (qi, qj) != (p.i, p.j) && within((qi - p.i) as f64, (qj - p.j) as f64, r) { buff = buff.max(v); } }
-    let r = s(Stat::Range); let rg = if pd.ground_range != 0.0 { r.min(pd.ground_range) } else { r }; // the dandelion: walkers only next to it, and weaker
+    let armor = |melt: bool| if melt { 0.0 } else { o.armor };
+    let hit = |x: f64, melt: bool| (x - armor(melt)).max(1.0);
+    let burn = |melt: bool| (s(Stat::Burn) - armor(melt)).max(0.0) * (1.0f64).min(s(Stat::BurnT) * s(Stat::Rate)); // to every bug it sets burning
+    let melt = s(Stat::Melt) != 0.0; let eat = s(Stat::Eat); let thorns = s(Stat::Thorns);
+    let air_too = s(Stat::Air) != 0.0;
+    // (gr, ar): what it deals per second to a walker in its reach, to a flyer
+    let (dps, adps) = if eat != 0.0 { // a worn bug swallowed whole
+        let heads = { let h = s(Stat::Heads); if h != 0.0 { h } else { 1.0 } };
+        (s(Stat::Gulp) * o.hp_g * heads / eat, if s(Stat::EatAir) != 0.0 { s(Stat::Gulp) * o.hp_a / eat * (1.0 + s(Stat::Lure) / 3.0) } else { 0.0 })
+    } else if thorns != 0.0 { (thorns * o.hp_g, if s(Stat::ThornAir) != 0.0 { thorns * o.hp_a } else { 0.0 }) } // the thorns of a pumpkin
+    else if s(Stat::Blaze) != 0.0 { (hit(s(Stat::Dmg), false) * s(Stat::Rate) + burn(false), 0.0) } // to every bug in its reach
+    else if s(Stat::Dmg) != 0.0 {
+        let k = if s(Stat::Stack) != 0.0 { 1.4 } else { 1.0 };
+        let d0 = hit(s(Stat::Dmg), melt) * s(Stat::Rate) * k + (if s(Stat::Burn) != 0.0 { burn(melt) } else { 0.0 });
+        (d0, if air_too { s(Stat::Dmg) * s(Stat::Rate) * (if s(Stat::Down) != 0.0 { 1.25 } else { 1.0 }) } else { 0.0 })
+    } else { (0.0, 0.0) };
+    if dps == 0.0 && adps == 0.0 { return (0.0, 0.0); }
+    let r = s(Stat::Range); let rg = { let gr = s(Stat::GroundRange); if gr != 0.0 { r.min(gr) } else { r } }; // a far shot: walkers only next to it, and weaker
     let mut n = 0.0; let mut cells = 0usize;
     for (k, &(a, b, _)) in tr.iter().enumerate() { if within((a - p.i) as f64, (b - p.j) as f64, rg) { n += s_.time[k]; cells += 1; } }
     let crowd = o.crowd; let in_reach = (1.0f64).max(crowd * cells as f64); // walkers in its reach at once
-    let per = if p.kind == d.pepper { 1.0 } // fire hits all of them
+    let per = if thorns != 0.0 || s(Stat::Blaze) != 0.0 { 1.0 } // thorns and fire hit all of them
         else {
             let multi = { let m = s(Stat::Multi); if m != 0.0 { m } else { 1.0 } };
-            let many = if pd.has[Stat::Splash as usize] { let h = s(Stat::Hits); (if h != 0.0 { h } else { f64::INFINITY }).min(1.0 + 2.0 * s(Stat::Splash) * crowd) } else { 1.0 };
-            (1.0f64).min((multi * many) / in_reach) // a shot's bugs (a cob hits so many at most) over the bugs to share
+            let many = if s(Stat::Splash) != 0.0 { let h = s(Stat::Hits); (if h != 0.0 { h } else { f64::INFINITY }).min(1.0 + 2.0 * s(Stat::Splash) * crowd) } else { 1.0 };
+            (1.0f64).min((multi * many) / in_reach) // a shot's bugs (a pepper hits so many at most) over the bugs to share
         };
-    let k = dps * (1.0 + buff); let gr = k * n * per * (if pd.ground != 0.0 { pd.ground } else { 1.0 });
-    let air = if pd.air || (pd.has[Stat::Eat as usize] && s(Stat::EatAir) != 0.0) { k * fly_time(g, p, r) * (if pd.ground != 0.0 { 1.0 } else { 0.6 }) } else { 0.0 }; // a ground plant has other targets too
+    let ground = s(Stat::Ground); let gr = dps * n * per * (if ground != 0.0 { ground } else { 1.0 });
+    let air = if adps != 0.0 { adps * fly_time(g, p, r) * (if ground != 0.0 { 1.0 } else { 0.6 }) } else { 0.0 }; // a ground plant has other targets too
     (gr, air)
 }
 // What the garden is worth for the coming waves: the bugs it stops. A bug that gets through bites, so walkers and
@@ -231,17 +249,17 @@ fn value(o: &Soon, g_: f64, a: f64) -> f64 { kept(o.n_g, g_ / o.hp_g) + kept(o.n
 fn sums(g: &Game, s: &Study, tr: &Tr, o: &Soon, terrain: bool) -> (f64, f64) { let (mut gs, mut a) = (0.0, 0.0); for p in &s.plants { let (gr, ar) = term(g, s, tr, o, terrain, p); gs += gr; a += ar; } (gs, a) }
 fn worth(g: &Game, tr: &Tr, o: &Soon, terrain: bool, ovr: Option<BP>) -> f64 { let s = study(g, tr, o, terrain, ovr); let (gs, a) = sums(g, &s, tr, o, terrain); value(o, gs, a) }
 // plants that change the others' share: their worth is counted over the whole garden
-fn wide(d: &Data, kind: usize) -> bool { let p = &d.plants[kind]; p.has[Stat::Slow as usize] || p.has[Stat::Buff as usize] || p.has[Stat::Mark as usize] }
+fn wide(g: &Game, p: &BP) -> bool { [Stat::Slow, Stat::Frost, Stat::Mark].iter().any(|&s| g.pstat(p.kind, p.lvl, p.br, -1, -1, s) != 0.0) }
 
 #[derive(Clone, Copy)]
-enum Act { Place(usize, i32, i32), Up(u32), Swap(u32, usize) }
+enum Act { Place(usize, i32, i32), Up(u32, u8), Swap(u32, usize) }
 #[derive(Clone, Copy)]
 struct Offer { gain: f64, cost: f64, act: Act }
 
 struct Bot<'a, 'o> {
     g: Game<'a>, d: &'a Data, lv: &'a Level, opt: &'o Opts, o: Soon, r: i32,
     walls: Vec<Wall>, planned: Vec<(i32, i32)>, keep: [bool; N], kinds: Vec<usize>, others: Vec<usize>, reach: f64, first_digger: i32,
-    aloe: bool, eaten_at: Vec<(i32, i32)>, seen: Option<(usize, Phase, usize, f64)>, need: f64,
+    eaten_at: Vec<(i32, i32)>, seen: Option<(usize, Phase, usize, f64)>, need: f64,
     ops: Option<Vec<Op>>, dew_seen: f64, buf: Vec<f64>,
     done: Vec<bool>, // the steps of the plan that are done with
 }
@@ -252,11 +270,19 @@ impl<'a, 'o> Bot<'a, 'o> {
     fn rec(&mut self, op: Op) { self.sync(); if let Some(ops) = self.ops.as_mut() { ops.push(op); } }
     fn step(&mut self, dt: f64) { self.sync(); self.g.step(dt); if self.ops.is_some() { let h = self.g.hash(&mut self.buf); self.ops.as_mut().unwrap().push(Op::Step(h)); } self.dew_seen = self.g.dew; }
     fn place(&mut self, kind: usize, i: i32, j: i32) -> bool { self.rec(Op::Place(kind, i, j)); let r = self.g.place(kind, i, j); self.dew_seen = self.g.dew; r }
-    fn upgrade(&mut self, pi: usize) -> bool { let (i, j) = (self.g.plants[pi].i, self.g.plants[pi].j); self.rec(Op::Up(i, j)); let r = self.g.upgrade(pi); self.dew_seen = self.g.dew; r }
+    fn upgrade(&mut self, pi: usize, br: u8) -> bool { let (i, j) = (self.g.plants[pi].i, self.g.plants[pi].j); self.rec(Op::Up(i, j, br)); let r = self.g.upgrade(pi, br); self.dew_seen = self.g.dew; r }
     fn start_wave(&mut self) { self.rec(Op::Wave); self.g.start_wave(); self.dew_seen = self.g.dew; }
     fn sell(&mut self, pi: usize) { let p = &self.g.plants[pi]; let (id, i, j) = (p.id, p.i, p.j); self.rec(Op::Sell(i, j)); self.g.remove_plant(id, true); self.dew_seen = self.g.dew; }
     fn use_power(&mut self, kind: Power) { self.rec(Op::Power(kind)); self.g.use_power(kind); self.dew_seen = self.g.dew; }
 
+    // the branch a plant at level 2 takes (the one that pays more now, of those open here); its own after that
+    fn branch_for(&mut self, pi: usize) -> u8 {
+        let g = &self.g; let p = &g.plants[pi]; if p.lvl != 2 { return p.br; }
+        self.look_ahead(); let (o, terrain) = (self.o, self.opt.terrain); let g = &self.g; let p = &g.plants[pi];
+        let tr = trail_of(g, &g.dist); let mut top = (f64::NEG_INFINITY, 1u8);
+        for br in [1u8, 2] { if !g.branch_open(p.kind, br) { continue; } let v = worth(g, &tr, &o, terrain, Some(BP { kind: p.kind, lvl: 3, br, i: p.i, j: p.j })); if v > top.0 { top = (v, br); } }
+        top.1
+    }
     fn room(&self) -> bool { ((self.g.plants.len() + self.g.stubs.len()) as f64) < self.opt.max_plants }
 
     // the coming waves: how many walkers stand on a cell of the trail (from their pace: speed and gap), weighed by
@@ -295,10 +321,10 @@ impl<'a, 'o> Bot<'a, 'o> {
         // reach a cell a mint slows against a cell of the trail at large (over 1: the mints stand where the damage is)
         let mut hits = vec![0usize; tr.len()]; let mut slow = vec![false; tr.len()];
         let (mut reach, mut peppers, mut burnt) = (0usize, 0usize, 0usize);
-        for p in &s.plants { let pd = &d.plants[p.kind]; let r = g.pstat(p.kind, p.lvl, p.i, p.j, Stat::Range);
-            if pd.has[Stat::Slow as usize] { for (k, &(x, y, _)) in tr.iter().enumerate() { if within((x - p.i) as f64, (y - p.j) as f64, r) { slow[k] = true; } } }
-            if !(pd.has[Stat::Dmg as usize] || pd.has[Stat::Eat as usize]) { continue; }
-            let rg = if pd.ground_range != 0.0 { r.min(pd.ground_range) } else { r }; let mut n = 0;
+        for p in &s.plants { let r = g.pstat(p.kind, p.lvl, p.br, p.i, p.j, Stat::Range); let has = |x: Stat| g.pstat(p.kind, p.lvl, p.br, -1, -1, x) != 0.0;
+            if has(Stat::Slow) || has(Stat::Frost) { for (k, &(x, y, _)) in tr.iter().enumerate() { if within((x - p.i) as f64, (y - p.j) as f64, r) { slow[k] = true; } } }
+            if !(has(Stat::Dmg) || has(Stat::Eat)) { continue; }
+            let rg = reach_g(g, p); let mut n = 0;
             for (k, &(x, y, _)) in tr.iter().enumerate() { if within((x - p.i) as f64, (y - p.j) as f64, rg) { hits[k] += 1; n += 1; } }
             reach += n; if p.kind == d.pepper { peppers += 1; burnt += n; } }
         let under: usize = (0..tr.len()).filter(|&k| slow[k]).map(|k| hits[k]).sum(); let cells = slow.iter().filter(|&&x| x).count();
@@ -334,17 +360,34 @@ impl<'a, 'o> Bot<'a, 'o> {
         let lean = |kind: usize, i: i32, j: i32| -> f64 { match pol { None => 1.0, Some(p) => bias(&p.place[kind], &feat(g, &s, &tr, &heat, far, kind, i, j, on[key(i, j)] || planned.contains(&(i, j)))) } };
         let lean_up = |kind: usize| -> f64 { pol.map_or(1.0, |p| p.up[kind].max(-8.0).min(8.0).exp()) };
         let allowed_at = |i: i32, j: i32, kind: usize| kind == d.pumpkin || wh == Where::Best || wh == Where::Spread || seg.iter().any(|&(a, b)| hyp((a - i) as f64, (b - j) as f64) <= d.plants[kind].st[Stat::Range as usize][0] + 0.01);
+        // what a plant would add standing on its cell as q
+        let gain_of = |q: BP, i: i32, j: i32| -> f64 {
+            if on[key(i, j)] {
+                let mut grid = g.grid; grid[key(i, j)] = Cell::Rock;
+                let tr2 = trail_of(g, &compute_dist(&grid, g.fruit, -1));
+                worth(g, &tr2, &o, terrain, Some(q)) - now + (tr2.len() as f64 - tr.len() as f64) * 1e-3 * o.n_g
+            } else if wide(g, &q) { worth(g, &tr, &o, terrain, Some(q)) - now }
+            else { add(term(g, &s, &tr, &o, terrain, &q), (0.0, 0.0)) } // only its own share: the others do not change
+        };
+        // a plant is planted (and grown from level 1) for what it will be too: its best branch open here at level 3,
+        // for all the dew to get there, when that pays more for the dew than the plant as it is (a mint is planted
+        // for the cold it grows into, as a player does)
+        let ahead = |kind: usize, i: i32, j: i32, now_gain: f64, now_cost: f64, spent: f64| -> f64 {
+            let pd = &d.plants[kind]; let mut top = now_gain;
+            for br in [1u8, 2] {
+                if !g.branch_open(kind, br) { continue; }
+                let total = pd.cost + pd.up[0] + pd.up[if br == 1 { 1 } else { 3 }] - spent;
+                let v = gain_of(BP { kind, lvl: 3, br, i, j }, i, j) * now_cost / total;
+                if v > top { top = v; }
+            }
+            top
+        };
         let try_cell = |i: i32, j: i32, kinds: &[usize], offer: &mut dyn FnMut(f64, f64, Act, bool)| {
             if g.grid[key(i, j)] != Cell::Empty || g.stub_at(i, j).is_some() || g.place_problem(i, j) { return; }
             for &kind in kinds {
                 if !allowed_at(i, j, kind) { continue; }
-                let q = BP { kind, lvl: 1, i, j };
-                let gain = if on[key(i, j)] {
-                    let mut grid = g.grid; grid[key(i, j)] = Cell::Rock;
-                    let tr2 = trail_of(g, &compute_dist(&grid, g.fruit, -1));
-                    worth(g, &tr2, &o, terrain, Some(q)) - now + (tr2.len() as f64 - tr.len() as f64) * 1e-3 * o.n_g
-                } else if wide(d, kind) { worth(g, &tr, &o, terrain, Some(q)) - now }
-                else { add(term(g, &s, &tr, &o, terrain, &q), (0.0, 0.0)) }; // only its own share: the others do not change
+                let gain = gain_of(BP { kind, lvl: 1, br: 0, i, j }, i, j);
+                let gain = if kind == d.pumpkin { gain } else { ahead(kind, i, j, gain, d.plants[kind].cost, 0.0) };
                 offer(gain * lean(kind, i, j), d.plants[kind].cost, Act::Place(kind, i, j), false);
             }
         };
@@ -354,20 +397,37 @@ impl<'a, 'o> Bot<'a, 'o> {
                 if !self.keep[key(i, j)] && !on[key(i, j)] && tr.iter().any(|&(a, b, _)| hyp((a - i) as f64, (b - j) as f64) <= self.reach) { try_cell(i, j, &self.others, &mut offer); }
             } }
         }
-        for p in &g.plants {
-            let bp = BP { kind: p.kind, lvl: p.lvl, i: p.i, j: p.j };
-            let c = if upgrades == Upgrades::None || p.lvl >= 3 { None } else { Some(d.plants[p.kind].up[p.lvl - 1]) };
-            if let Some(c) = c {
-                let up = BP { lvl: p.lvl + 1, ..bp };
-                let gain = if wide(d, p.kind) { worth(g, &tr, &o, terrain, Some(up)) - now } else { let was = term(g, &s, &tr, &o, terrain, &bp); add(term(g, &s, &tr, &o, terrain, &up), was) };
+        for (pi, p) in g.plants.iter().enumerate() {
+            let bp = BP { kind: p.kind, lvl: p.lvl, br: p.br, i: p.i, j: p.j };
+            // growing: one way, or at level 2 either branch open here
+            let ways: &[u8] = if p.lvl == 2 { &[1, 2] } else { &[0] };
+            for &br in ways {
+                if upgrades == Upgrades::None || p.lvl >= 4 || (p.lvl == 2 && !g.branch_open(p.kind, br)) { continue; }
+                let Some(c) = g.upgrade_cost(pi, br) else { continue };
+                let up = BP { lvl: p.lvl + 1, br: if p.lvl == 2 { br } else { p.br }, ..bp };
+                let gain = if wide(g, &up) || wide(g, &bp) { worth(g, &tr, &o, terrain, Some(up)) - now } else { let was = term(g, &s, &tr, &o, terrain, &bp); add(term(g, &s, &tr, &o, terrain, &up), was) };
+                // from level 1 a plant is grown for its branch too (what it adds at level 3 over now, for the dew to get there)
+                let gain = if p.lvl == 1 && p.kind != d.pumpkin {
+                    let mut top = gain;
+                    for b3 in [1u8, 2] {
+                        if !g.branch_open(p.kind, b3) { continue; }
+                        let q3 = BP { lvl: 3, br: b3, ..bp }; let pd = &d.plants[p.kind];
+                        let v3 = if wide(g, &q3) || wide(g, &bp) { worth(g, &tr, &o, terrain, Some(q3)) - now } else { let was = term(g, &s, &tr, &o, terrain, &bp); add(term(g, &s, &tr, &o, terrain, &q3), was) };
+                        let v = v3 * c / (pd.up[0] + pd.up[if b3 == 1 { 1 } else { 3 }]); if v > top { top = v; }
+                    }
+                    top
+                } else { gain };
+                // a pumpkin guards the walls: a shell where plants keep being eaten, a sturdier one where diggers come
+                let guard = if p.kind == d.pumpkin && up.br == 1 { self.eaten_at.iter().filter(|q| within((q.0 - p.i) as f64, (q.1 - p.j) as f64, d.guard_r)).count() as f64 * 0.01 * o.n_g } else { 0.0 };
+                let gain = gain + guard;
                 let gain = if gain != 0.0 { gain } else if p.kind == d.pumpkin && g.wave as i32 >= self.first_digger - 2 { 1e-3 * o.n_g } else { 0.0 };
-                offer(gain * lean_up(p.kind), c, Act::Up(p.id), true);
+                offer(gain * lean_up(p.kind), c, Act::Up(p.id, br), true);
             }
             if p.kind == d.pumpkin && p.lvl == 1 && g.phase == Phase::Build {
                 for &kind in &self.others {
                     if !allowed_at(p.i, p.j, kind) { continue; }
                     let q = BP { kind, ..bp };
-                    let gain = if wide(d, kind) { worth(g, &tr, &o, terrain, Some(q)) - now } else { add(term(g, &s, &tr, &o, terrain, &q), (0.0, 0.0)) };
+                    let gain = if wide(g, &q) { worth(g, &tr, &o, terrain, Some(q)) - now } else { add(term(g, &s, &tr, &o, terrain, &q), (0.0, 0.0)) };
                     offer(gain * lean(kind, p.i, p.j), d.plants[kind].cost - g.refund_of(p) + 0.01, Act::Swap(p.id, kind), false);
                 }
             }
@@ -381,7 +441,7 @@ impl<'a, 'o> Bot<'a, 'o> {
     fn run(&mut self, a: Act) {
         match a {
             Act::Place(kind, i, j) => { self.place(kind, i, j); }
-            Act::Up(id) => { if let Some(pi) = self.g.pidx(id) { self.upgrade(pi); } }
+            Act::Up(id, br) => { if let Some(pi) = self.g.pidx(id) { self.upgrade(pi, br); } }
             Act::Swap(id, kind) => { if let Some(pi) = self.g.pidx(id) { let (i, j) = (self.g.plants[pi].i, self.g.plants[pi].j); self.sell(pi); self.place(kind, i, j); } }
         }
     }
@@ -419,37 +479,14 @@ impl<'a, 'o> Bot<'a, 'o> {
                     None => {
                         // a plant not there yet: its own step is still to come (left for later), or it never will
                         let Some(pi) = self.g.plant_at(i, j) else { if (0..n).any(|m| !self.done[m] && plan[m].0.is_some() && (plan[m].1, plan[m].2) == (i, j)) { left = true; } else { self.done[n] = true; } continue };
-                        let Some(c) = self.g.upgrade_cost(pi) else { self.done[n] = true; continue };
+                        let br = self.branch_for(pi);
+                        let Some(c) = self.g.upgrade_cost(pi, br) else { self.done[n] = true; continue };
                         if self.g.dew < c { left = true; break; }
-                        self.upgrade(pi); self.done[n] = true;
+                        self.upgrade(pi, br); self.done[n] = true;
                     }
                 }
             }
             if left { return; }
-        }
-        // an aloe where the plants keep being eaten (it guards them): by two eaten ones that no aloe reaches yet, as
-        // near to all of them as a free cell off the trail gets; an aloe with many eaten around it is grown
-        if self.aloe {
-            let g = &self.g;
-            let cover = |q: &(i32, i32)| g.plants.iter().any(|p| p.kind == d.aloe && within((p.i - q.0) as f64, (p.j - q.1) as f64, g.pstat(p.kind, p.lvl, p.i, p.j, Stat::Range)));
-            let bare: Vec<(i32, i32)> = self.eaten_at.iter().filter(|q| !cover(q)).cloned().collect(); let r0 = d.plants[d.aloe].st[Stat::Range as usize][0];
-            if bare.len() >= 2 && self.room() && g.plants.iter().filter(|p| p.kind == d.aloe).count() < 6 && g.dew >= d.plants[d.aloe].cost + 50.0 { // with some dew left for the rest
-                let mut top = None; let mut top_n = 1;
-                for i in 0..COLS { for j in 0..ROWS {
-                    if g.grid[key(i, j)] != Cell::Empty || g.stub_at(i, j).is_some() || self.keep[key(i, j)] || tr[key(i, j)] || self.planned.iter().any(|&c| c == (i, j)) { continue; }
-                    let n = bare.iter().filter(|q| within((q.0 - i) as f64, (q.1 - j) as f64, r0)).count();
-                    if n > top_n && !g.place_problem(i, j) { top_n = n; top = Some((i, j)); }
-                } }
-                if let Some((i, j)) = top { self.place(d.aloe, i, j); }
-            }
-            if self.opt.upgrades != Upgrades::None {
-                for pi in 0..self.g.plants.len() {
-                    let p = &self.g.plants[pi]; if p.kind != d.aloe { continue; }
-                    let r = self.g.pstat(p.kind, p.lvl, p.i, p.j, Stat::Range);
-                    let n = self.eaten_at.iter().filter(|q| within((p.i - q.0) as f64, (p.j - q.1) as f64, r)).count();
-                    if let Some(c) = self.g.upgrade_cost(pi) { if n >= 4 * p.lvl && self.g.dew >= c + 50.0 { self.upgrade(pi); } }
-                }
-            }
         }
         // the maze grows with the level: two walls at once and one more every wave: first-level pumpkins are cheap, and
         // a long trail keeps a pack under the plants longer, with pumpkins where nothing stands yet
@@ -508,9 +545,9 @@ pub fn play_level<'a>(d: &'a Data, level: usize, opt: &Opts, layouts: &dyn Fn(us
         let all = if opt.route > 0.0 { layouts(level, opt.terrain) } else { Vec::new() };
         all[..round(all.len() as f64 * opt.route) as usize].iter().map(|&(col, gap)| (0..ROWS).filter(|&j| j != gap).map(|j| (col, j)).collect()).collect()
     };
-    let kinds: Vec<usize> = lv.plants.iter().cloned().filter(|&k| k != d.aloe && opt.plants.as_ref().map_or(true, |a| a.contains(&k))).collect();
+    let kinds: Vec<usize> = lv.plants.iter().cloned().filter(|&k| opt.plants.as_ref().map_or(true, |a| a.contains(&k))).collect();
     let others: Vec<usize> = kinds.iter().cloned().filter(|&k| k != d.pumpkin).collect();
-    let reach = others.iter().fold(f64::NEG_INFINITY, |m, &k| m.max(d.plants[k].st[Stat::Range as usize][2])) + 0.6;
+    let reach = others.iter().fold(f64::NEG_INFINITY, |m, &k| m.max(d.plants[k].st[Stat::Range as usize][1])) + 0.6;
     let planned: Vec<(i32, i32)> = if let Some(plan) = &opt.plan { plan.iter().filter(|s| s.0.is_some()).map(|s| (s.1, s.2)).collect() } else { walls.iter().flatten().cloned().collect() };
     let first_digger = lv.waves.iter().position(|w| w.iter().any(|gr| d.bugs[gr.kind].dig != 0.0)).map_or(0, |k| k as i32 + 1);
     // where the trail will run when the walls stand: nothing but the walls is planted on it; without a maze, the trail as it is
@@ -520,10 +557,9 @@ pub fn play_level<'a>(d: &'a Data, level: usize, opt: &Opts, layouts: &dyn Fn(us
         for &(i, j) in &planned { if grid[key(i, j)] == Cell::Empty && f.tiles[key(i, j)] != Tile::Nettle { grid[key(i, j)] = Cell::Rock; } }
         for (i, j, _) in trail_of(&f, &compute_dist(&grid, f.fruit, -1)) { keep[key(i, j)] = true; }
     }
-    let aloe = lv.plants.contains(&d.aloe) && opt.plants.as_ref().map_or(true, |a| a.contains(&d.aloe));
     let dew0 = g.dew;
     let mut b = Bot { g, d, lv, opt, o: Soon::default(), r: (opt.seed as i32).wrapping_mul(7919).wrapping_add(13), walls, planned, keep, kinds, others, reach, first_digger,
-        aloe, eaten_at: Vec::new(), seen: None, need: 0.0, ops: if record { Some(Vec::new()) } else { None }, dew_seen: dew0, buf: Vec::new(), done: vec![false; opt.plan.as_ref().map_or(0, |p| p.len())] };
+        eaten_at: Vec::new(), seen: None, need: 0.0, ops: if record { Some(Vec::new()) } else { None }, dew_seen: dew0, buf: Vec::new(), done: vec![false; opt.plan.as_ref().map_or(0, |p| p.len())] };
     if let Some(bank) = opt.bank { b.g.dew = bank; }
     let (mut t, mut income, mut eaten, mut powers_used) = (0.0, 0.0, 0usize, 0usize);
     let mut bites: Vec<((usize, usize, bool), usize)> = Vec::new();
@@ -553,7 +589,7 @@ pub fn play_level<'a>(d: &'a Data, level: usize, opt: &Opts, layouts: &dyn Fn(us
     for k in g.plants.iter().map(|p| p.kind).chain(g.stubs.iter().map(|s| s.kind)) { if let Some(x) = kinds.iter_mut().find(|x| x.0 == k) { x.1 += 1; } else { kinds.push((k, 1)); } }
     let res = Res {
         worth: if b.o.set { round(worth(g, &tr, &b.o, opt.terrain, None) * 100.0) / 100.0 } else { 0.0 }, trail: tr.len(), won: g.phase == Phase::Won, hp: g.hp, max_hp: g.max_hp, wave: g.wave, waves: g.waves,
-        plants: g.plants.len(), grown: g.plants.iter().filter(|p| p.lvl > 1).count(), maxed: g.plants.iter().filter(|p| p.lvl == 3).count(), dew: g.dew, eaten, income, kinds, bites, powers_used, time: round(t), gauge,
+        plants: g.plants.len(), grown: g.plants.iter().filter(|p| p.lvl > 1).count(), maxed: g.plants.iter().filter(|p| p.lvl == 4).count(), dew: g.dew, eaten, income, kinds, bites, powers_used, time: round(t), gauge,
     };
     (res, b.ops)
 }
@@ -564,7 +600,7 @@ pub fn play_level<'a>(d: &'a Data, level: usize, opt: &Opts, layouts: &dyn Fn(us
 pub fn play_random<'a>(d: &'a Data, level: usize, opt: &Opts) -> Vec<Op> {
     let g = Game::new(d, level, opt.seed, &opt.meta); let lv = &d.levels[level]; let dew0 = g.dew;
     let mut b = Bot { g, d, lv, opt, o: Soon::default(), r: (opt.seed as i32).wrapping_mul(7919).wrapping_add(13), walls: Vec::new(), planned: Vec::new(), keep: [false; N], kinds: Vec::new(), others: Vec::new(), reach: 0.0, first_digger: 0,
-        aloe: false, eaten_at: Vec::new(), seen: None, need: 0.0, ops: Some(Vec::new()), dew_seen: dew0, buf: Vec::new(), done: vec![false; opt.plan.as_ref().map_or(0, |p| p.len())] };
+        eaten_at: Vec::new(), seen: None, need: 0.0, ops: Some(Vec::new()), dew_seen: dew0, buf: Vec::new(), done: vec![false; opt.plan.as_ref().map_or(0, |p| p.len())] };
     let mut r = b.r; let mut rnd = move |n: usize| -> usize { ((js_rng(&mut r) * n as f64).floor() as usize).min(n.saturating_sub(1)) };
     let rich = rnd(3) != 0; // most of these players have dew to burn: more gets planted
     let mut steps = 0;
@@ -573,7 +609,7 @@ pub fn play_random<'a>(d: &'a Data, level: usize, opt: &Opts) -> Vec<Op> {
         for _ in 0..rnd(4) {
             match rnd(12) {
                 0..=5 => { let kind = if rnd(8) == 0 { rnd(d.plants.len()) } else { lv.plants[rnd(lv.plants.len())] }; let (i, j) = (rnd(COLS as usize + 1) as i32, rnd(ROWS as usize + 1) as i32); if inside(i, j) || rnd(2) == 0 { b.place(kind, i.min(COLS), j.min(ROWS)); } }
-                6 | 7 => { if !b.g.plants.is_empty() { let k = rnd(b.g.plants.len()); b.upgrade(k); } }
+                6 | 7 => { if !b.g.plants.is_empty() { let k = rnd(b.g.plants.len()); let br = rnd(3) as u8; b.upgrade(k, br); } }
                 8 => { if !b.g.plants.is_empty() && rnd(3) == 0 { let k = rnd(b.g.plants.len()); b.sell(k); } }
                 9 => { if !b.g.stubs.is_empty() { let k = rnd(b.g.stubs.len()); let (i, j) = (b.g.stubs[k].i, b.g.stubs[k].j); let kind = lv.plants[rnd(lv.plants.len())]; b.place(kind, i, j); } } // not on roots
                 10 => { if rnd(6) == 0 { b.use_power(if rnd(2) == 0 { Power::Frost } else { Power::Rain }); } }

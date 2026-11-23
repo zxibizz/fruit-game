@@ -7,7 +7,7 @@ use std::collections::VecDeque;
 
 pub const INF: f64 = 1e9;
 pub const DIRS: [(i32, i32); 4] = [(-1, 0), (0, -1), (0, 1), (1, 0)]; // tie order: towards the fruit side first
-const THAW: f64 = 2.5;
+const THAW: f64 = 3.0;
 
 #[inline] pub fn key(i: i32, j: i32) -> usize { (j * COLS + i) as usize }
 #[inline] pub fn inside(i: i32, j: i32) -> bool { i >= 0 && j >= 0 && i < COLS && j < ROWS }
@@ -24,18 +24,22 @@ pub enum Phase { Build, Wave, Won, Lost }
 pub enum Power { Frost, Rain }
 
 #[derive(Clone, Debug)]
-pub struct Plant { pub id: u32, pub kind: usize, pub i: i32, pub j: i32, pub lvl: usize, pub hp: f64, pub max_hp: f64, pub cd: f64, pub spent: f64, pub web: f64, pub buff: f64, pub guard: f64, pub born: i32 }
+// br: the branch at levels 3 and 4 (1: a, 2: b, 0 below); ward: the shell pumpkin that saves it once a wave; tgt, stk: the
+// bug an icicle mint hit last and how many times in a row
+pub struct Plant { pub id: u32, pub kind: usize, pub i: i32, pub j: i32, pub lvl: usize, pub br: u8, pub hp: f64, pub max_hp: f64, pub cd: f64, pub spent: f64, pub web: f64, pub guard: f64, pub spikes: f64, pub ward: Option<u32>, pub warded: bool, pub born: i32, pub tgt: u32, pub stk: f64 }
 #[derive(Clone, Debug)]
-pub struct Stub { pub id: u32, pub kind: usize, pub lvl: usize, pub spent: f64, pub i: i32, pub j: i32 }
+pub struct Stub { pub id: u32, pub kind: usize, pub lvl: usize, pub br: u8, pub spent: f64, pub i: i32, pub j: i32, pub warded: bool }
 #[derive(Clone, Debug)]
 pub struct Bug {
     pub id: u32, pub kind: usize, pub hp: f64, pub max_hp: f64, pub speed: f64, pub fly: bool, pub armor: f64,
     pub x: f64, pub y: f64, pub slow: f64, pub frozen: f64, pub burn: f64, pub burn_dps: f64, pub chew: f64, pub thaw: f64, pub chew_cd: f64,
     pub chew_target: Option<u32>, pub gnaw: Option<u32>, pub gnaw_t: f64, pub dir: (i32, i32), pub has_t: bool, pub ti: i32, pub tj: i32,
     pub skill: f64, pub rush: f64, pub brood: bool, pub e: usize, pub mark: f64, pub mark_v: f64, pub coming: f64, pub gone: bool,
+    pub slow_t: f64, pub slow_v: f64, pub melt: f64, pub spread: bool, pub chain: f64, pub lured: bool, pub lure: Option<u32>, pub sniff: f64, pub fall: f64,
 }
 #[derive(Clone, Debug)]
-pub struct Shot { pub id: u32, pub x: f64, pub y: f64, pub target: u32, pub tx: f64, pub ty: f64, pub speed: f64, pub dmg: f64, pub est: f64, pub splash: f64, pub hits: usize, pub mark: f64, pub stun: f64, pub done: bool }
+pub struct Shot { pub id: u32, pub x: f64, pub y: f64, pub target: u32, pub tx: f64, pub ty: f64, pub speed: f64, pub dmg: f64, pub est: f64, pub splash: f64, pub hits: usize, pub mark: f64, pub chain: f64,
+    pub frost: f64, pub frost_t: f64, pub burn: f64, pub burn_t: f64, pub melt: bool, pub crack: bool, pub down: f64, pub done: bool }
 #[derive(Clone, Debug)]
 pub struct Queued { pub kind: usize, pub at: f64, pub e: usize }
 // what the bot reads of the events of the game
@@ -53,6 +57,7 @@ pub struct Game<'a> {
     pub bugs: Vec<Bug>, pub shots: Vec<Shot>, pub plants: Vec<Plant>, pub stubs: Vec<Stub>, pub events: Vec<Event>, pub queue: VecDeque<Queued>,
     pub time: f64, pub wave_time: f64, pub frost: f64, pub rain: f64, pub power_max: f64, pub next_id: u32, rng: u32,
     pub refund: f64, pub dist: [f64; N], pub dig: [f64; N], pub stats: Stats,
+    pub thorn: [f64; N], pub thorn_air: [f64; N], // the thorns of the pumpkins on every cell
     seen: Vec<(f64, usize)>,
 }
 
@@ -71,7 +76,7 @@ impl<'a> Game<'a> {
             bugs: Vec::new(), shots: Vec::new(), plants: Vec::new(), stubs: Vec::new(), events: Vec::new(), queue: VecDeque::new(),
             time: 0.0, wave_time: 0.0, frost: 1.0 + clouds, rain: 1.0 + clouds, power_max: d.power_max + clouds, next_id: 1, rng: seed,
             refund: if refund != 0.0 { refund } else { d.refund },
-            dist: [INF; N], dig: [INF; N], stats: Stats::default(), seen: Vec::new(),
+            dist: [INF; N], dig: [INF; N], stats: Stats::default(), seen: Vec::new(), thorn: [0.0; N], thorn_air: [0.0; N],
         };
         for &(i, j, weed) in &lv.obstacles { g.grid[key(i, j)] = if weed { Cell::Weed } else { Cell::Rock }; }
         for &(i, j, t) in &lv.tiles { g.tiles[key(i, j)] = t; }
@@ -134,18 +139,28 @@ impl<'a> Game<'a> {
         best
     }
     pub fn refresh(&mut self) { self.dist = self.compute_dist(-1); self.dig = self.compute_dig(); self.auras(); }
-    // What the plants give to the plants around them: a bell makes them shoot more often, a grown aloe guards them.
+    // What the pumpkins give: a guard (and the spikes of a shell, and its ward) to the plants around them, thorns to the
+    // free cells around them. Neither adds up: the strongest counts. A webbed pumpkin gives nothing.
     pub fn auras(&mut self) {
-        for p in self.plants.iter_mut() { p.buff = 0.0; p.guard = 0.0; }
+        for p in self.plants.iter_mut() { p.guard = 0.0; p.spikes = 0.0; p.ward = None; }
+        self.thorn = [0.0; N]; self.thorn_air = [0.0; N];
+        let gr = self.d.guard_r;
         for k in 0..self.plants.len() {
-            let (kind, lvl, i, j, web) = { let p = &self.plants[k]; (p.kind, p.lvl, p.i, p.j, p.web) };
-            if web > 0.0 { continue; } // a webbed plant gives nothing
-            let buff = self.pstat(kind, lvl, i, j, Stat::Buff); let guard = self.pstat(kind, lvl, i, j, Stat::Guard);
-            if buff == 0.0 && guard == 0.0 { continue; }
-            let r = self.pstat(kind, lvl, i, j, Stat::Range);
+            let (kind, lvl, br, i, j, web, id, warded) = { let p = &self.plants[k]; (p.kind, p.lvl, p.br, p.i, p.j, p.web, p.id, p.warded) };
+            if web > 0.0 { continue; }
+            let st = |g: &Self, s: Stat| g.pstat(kind, lvl, br, i, j, s);
+            let guard = st(self, Stat::Guard); if guard == 0.0 { continue; }
+            let spikes = st(self, Stat::Spikes); let ward = st(self, Stat::Ward) != 0.0 && !warded;
             for (n, q) in self.plants.iter_mut().enumerate() {
-                if n != k && within((q.i - i) as f64, (q.j - j) as f64, r) { q.buff = q.buff.max(buff); q.guard = q.guard.max(guard); }
+                if !within((q.i - i) as f64, (q.j - j) as f64, gr) { continue; }
+                q.spikes = q.spikes.max(spikes); if n == k { continue; }
+                q.guard = q.guard.max(guard); if ward && q.ward.is_none() { q.ward = Some(id); }
             }
+            let th = st(self, Stat::Thorns); let air = st(self, Stat::ThornAir) != 0.0; let r = st(self, Stat::Range); let nn = r.ceil() as i32;
+            for jj in j - nn..=j + nn { for ii in i - nn..=i + nn {
+                if !inside(ii, jj) || self.grid[key(ii, jj)] != Cell::Empty || !within((ii - i) as f64, (jj - j) as f64, r) { continue; }
+                let kk = key(ii, jj); self.thorn[kk] = self.thorn[kk].max(th); if air { self.thorn_air[kk] = self.thorn_air[kk].max(th); }
+            } }
         }
     }
 
@@ -198,28 +213,28 @@ impl<'a> Game<'a> {
         false
     }
 
-    // A stat of a plant as it stands: its level, the player's perk for this plant and the soil under it (i < 0: no cell yet).
+    // A stat of a plant as it stands: its level and branch, the player's perk for this plant and the soil under it
+    // (i < 0: no cell yet). 0 when it has no such stat.
     #[inline]
-    pub fn pstat(&self, kind: usize, lvl: usize, i: i32, j: i32, s: Stat) -> f64 {
+    pub fn pstat(&self, kind: usize, lvl: usize, br: u8, i: i32, j: i32, s: Stat) -> f64 {
         let d = self.d; let p = &d.plants[kind];
-        if !p.has[s as usize] { return 0.0; }
-        let mut v = p.st[s as usize][lvl - 1];
+        let mut v = p.st[s as usize][slot(lvl, br)];
         if v == 0.0 { return v; }
         let tier = self.meta[kind];
-        if tier > 0 { if let Some(pk) = &p.perk { if pk.stat == Some(s) { v = if pk.mul { v * pk.v[tier - 1] } else { v + pk.v[tier - 1] }; } } }
+        if tier > 0 { if let Some(pk) = &p.perk { if pk.stat.contains(&s) { v = if pk.mul { v * pk.v[tier - 1] } else { v + pk.v[tier - 1] }; } } }
         if inside(i, j) && self.tiles[key(i, j)] == Tile::Fertile {
-            match s { Stat::Dmg | Stat::Burn | Stat::Chomp | Stat::Hp => v *= d.fertile, Stat::Slow | Stat::Buff | Stat::Guard => v += d.fertile_add, Stat::Eat => v /= d.fertile, _ => {} }
+            match s { Stat::Dmg | Stat::Burn | Stat::Hp | Stat::Thorns => v *= d.fertile, Stat::Slow | Stat::Frost | Stat::Guard => v += d.fertile_add, Stat::Eat => v /= d.fertile, _ => {} }
         }
-        if s == Stat::Slow { v = v.min(0.6); }
+        if s == Stat::Slow || s == Stat::Frost { v = v.min(0.6); }
         if s == Stat::Hp { round(v) } else { v }
     }
-    #[inline] fn ps(&self, pi: usize, s: Stat) -> f64 { let p = &self.plants[pi]; self.pstat(p.kind, p.lvl, p.i, p.j, s) }
+    #[inline] fn ps(&self, pi: usize, s: Stat) -> f64 { let p = &self.plants[pi]; self.pstat(p.kind, p.lvl, p.br, p.i, p.j, s) }
 
-    fn grow(&mut self, kind: usize, i: i32, j: i32, lvl: usize, spent: f64) -> usize {
+    fn grow(&mut self, kind: usize, i: i32, j: i32, lvl: usize, spent: f64, br: u8) -> usize {
         if let Some(k) = self.stub_at(i, j) { self.stubs.remove(k); }
         let id = self.next_id; self.next_id += 1;
-        let hp = self.pstat(kind, lvl, i, j, Stat::Hp);
-        self.plants.push(Plant { id, kind, i, j, lvl, hp, max_hp: hp, cd: 0.3, spent, web: 0.0, buff: 0.0, guard: 0.0, born: -1 });
+        let hp = self.pstat(kind, lvl, br, i, j, Stat::Hp);
+        self.plants.push(Plant { id, kind, i, j, lvl, br, hp, max_hp: hp, cd: 0.3, spent, web: 0.0, guard: 0.0, spikes: 0.0, ward: None, warded: false, born: -1, tgt: 0, stk: 0.0 });
         self.grid[key(i, j)] = Cell::Plant(id); self.refresh();
         self.plants.len() - 1
     }
@@ -227,7 +242,7 @@ impl<'a> Game<'a> {
         let cost = self.d.plants[kind].cost;
         if !self.lv.plants.contains(&kind) || self.dew < cost || self.place_problem(i, j) || self.over() { return false; }
         self.dew -= cost;
-        let k = self.grow(kind, i, j, 1, cost); if self.phase == Phase::Build { self.plants[k].born = self.wave as i32; } // sold before the wave starts, it gives all its dew back
+        let k = self.grow(kind, i, j, 1, cost, 0); if self.phase == Phase::Build { self.plants[k].born = self.wave as i32; } // sold before the wave starts, it gives all its dew back
         true
     }
     // The roots of an eaten plant grow back into the same plant of the same level, for nothing: after the wave, or at
@@ -236,16 +251,23 @@ impl<'a> Game<'a> {
         let Some(k) = self.stubs.iter().position(|s| s.id == id) else { return false };
         let (i, j) = (self.stubs[k].i, self.stubs[k].j);
         if self.grid[key(i, j)] != Cell::Empty || self.blocks(i, j) { return false; }
-        let (kind, lvl, spent) = (self.stubs[k].kind, self.stubs[k].lvl, self.stubs[k].spent);
-        self.grow(kind, i, j, lvl, spent);
+        let (kind, lvl, spent, br, warded) = (self.stubs[k].kind, self.stubs[k].lvl, self.stubs[k].spent, self.stubs[k].br, self.stubs[k].warded);
+        let pi = self.grow(kind, i, j, lvl, spent, br);
+        if warded { self.plants[pi].warded = true; self.auras(); } // a ward used stays used for the wave
         true
     }
-    pub fn upgrade_cost(&self, pi: usize) -> Option<f64> { let p = &self.plants[pi]; if p.lvl < 3 { Some(self.d.plants[p.kind].up[p.lvl - 1]) } else { None } }
-    pub fn upgrade(&mut self, pi: usize) -> bool {
-        let Some(c) = self.upgrade_cost(pi) else { return false };
+    // Growing a plant: to level 3 it takes branch br (1: a, 2: b; one open on this level), after that it keeps its own.
+    pub fn branch_open(&self, kind: usize, br: u8) -> bool { (br == 1 || br == 2) && self.level as f64 + 1.0 >= self.d.plants[kind].from[br as usize - 1] }
+    pub fn upgrade_cost(&self, pi: usize, br: u8) -> Option<f64> {
+        let p = &self.plants[pi]; let up = &self.d.plants[p.kind].up;
+        match p.lvl { 1 => Some(up[0]), 2 => match br { 1 => Some(up[1]), 2 => Some(up[3]), _ => None }, 3 => Some(if p.br == 1 { up[2] } else { up[4] }), _ => None }
+    }
+    pub fn upgrade(&mut self, pi: usize, br: u8) -> bool {
+        let br = if self.plants[pi].lvl != 2 { self.plants[pi].br } else if !self.branch_open(self.plants[pi].kind, br) { return false; } else { br };
+        let Some(c) = self.upgrade_cost(pi, br) else { return false };
         if self.dew < c || self.over() { return false; }
-        self.dew -= c; self.plants[pi].spent += c; self.plants[pi].lvl += 1;
-        let mh = self.ps(pi, Stat::Hp); let p = &mut self.plants[pi]; p.hp += mh - p.max_hp; p.max_hp = mh;
+        self.dew -= c; { let p = &mut self.plants[pi]; p.spent += c; p.lvl += 1; p.br = br; p.cd = p.cd.max(0.3); }
+        let mh = self.ps(pi, Stat::Hp); let p = &mut self.plants[pi]; p.hp = (p.hp + mh - p.max_hp).max(1.0); p.max_hp = mh;
         self.dig = self.compute_dig(); self.auras();
         true
     }
@@ -258,7 +280,7 @@ impl<'a> Game<'a> {
         if sold { self.dew += self.refund_of(&p); }
         else {
             self.stats.eaten += 1.0; let sid = self.next_id; self.next_id += 1;
-            self.stubs.push(Stub { id: sid, kind: p.kind, lvl: p.lvl, spent: p.spent, i: p.i, j: p.j });
+            self.stubs.push(Stub { id: sid, kind: p.kind, lvl: p.lvl, br: p.br, spent: p.spent, i: p.i, j: p.j, warded: p.warded });
             self.events.push(Event::PlantDead { i: p.i, j: p.j });
         }
     }
@@ -305,6 +327,7 @@ impl<'a> Game<'a> {
             id, kind, hp, max_hp: hp, speed: bd.speed, fly: bd.fly, armor: bd.armor, x: COLS as f64 + 0.6, y: en.1 as f64 + 0.5,
             slow: 1.0, frozen: 0.0, burn: 0.0, burn_dps: 0.0, chew: 0.0, thaw: 0.0, chew_cd: 2.0, chew_target: None, gnaw: None, gnaw_t: 0.0,
             dir: (-1, 0), has_t: true, ti: en.0, tj: en.1, skill: 0.0, rush: 0.0, brood: from.is_some(), e, mark: 0.0, mark_v: 0.0, coming: 0.0, gone: false,
+            slow_t: 0.0, slow_v: 1.0, melt: 0.0, spread: false, chain: 0.0, lured: false, lure: None, sniff: 0.0, fall: 0.0,
         };
         if let Some(c) = bd.charge { b.skill = c[0] * 0.6; }
         if let Some(br) = bd.brood { b.skill = br.2; }
@@ -350,6 +373,13 @@ impl<'a> Game<'a> {
         self.bugs[bi].hp = 0.0; self.gain(reward); self.stats.kills += 1.0;
         self.events.push(Event::Kill { reward });
         if let Some((k, n)) = bd.split { if !fly { for _ in 0..n { self.spawn(k, e, Some(bi)); } } }
+        // a mark of a grown hunter rose goes on to the nearest bugs not marked yet
+        let (mark, chain, mv, bx, by) = { let b = &self.bugs[bi]; (b.mark, b.chain, b.mark_v, b.x, b.y) };
+        if mark > 0.0 && chain != 0.0 {
+            let mut next: Vec<(f64, usize)> = self.bugs.iter().enumerate().filter(|&(k, o)| k != bi && o.hp > 0.0 && !(o.mark > 0.0) && within(o.x - bx, o.y - by, 1.5)).map(|(k, o)| (hyp(o.x - bx, o.y - by), k)).collect();
+            next.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap()); next.truncate(chain as usize);
+            for (_, k) in next { let o = &mut self.bugs[k]; o.mark = d.mark_t; o.mark_v = mv; o.chain = chain; }
+        }
     }
     // Health lost for any reason other than a hit (fire, nettles, thorns): no armor, no floor.
     fn lose(&mut self, bi: usize, amount: f64) {
@@ -359,17 +389,34 @@ impl<'a> Game<'a> {
     }
     fn damage(&mut self, bi: usize, amount: f64) {
         let b = &mut self.bugs[bi]; if b.hp <= 0.0 { return; }
-        let dmg = (amount - b.armor).max(1.0) * marked(b);
+        let dmg = (amount - armor_of(b)).max(1.0) * marked(b);
         b.hp -= dmg;
         if b.hp <= 0.0 { self.kill(bi); }
     }
-    // A bug bites a plant: a guarded plant takes less, a thorny one bites back. k: the part of a bite or a second.
+    // A bug bites a plant: a guarded plant takes less, one by a shell pumpkin bites back, and a shell with a ward saves
+    // one plant a wave from being eaten. k: the part of a bite or a second.
     fn hurt_plant(&mut self, pid: u32, amount: f64, bi: usize, k: f64) {
         let Some(pi) = self.pidx(pid) else { return };
         { let p = &mut self.plants[pi]; p.hp -= amount * (1.0 - p.guard); }
-        let th = self.ps(pi, Stat::Thorns);
-        if th != 0.0 { let b = &self.bugs[bi]; let a = b.max_hp * th * k * (if self.d.bugs[b.kind].boss { 0.3 } else { 1.0 }); self.lose(bi, a); }
-        if self.plants[pi].hp <= 0.0 { self.remove_plant(pid, false); }
+        let sp = self.plants[pi].spikes;
+        if sp != 0.0 { let b = &self.bugs[bi]; let a = b.max_hp * sp * k * (if self.d.bugs[b.kind].boss { self.d.thorn_boss } else { 1.0 }); self.lose(bi, a); }
+        if self.plants[pi].hp > 0.0 { return; }
+        if let Some(w) = self.plants[pi].ward { if let Some(wi) = self.pidx(w) { if !self.plants[wi].warded { self.plants[pi].hp = 1.0; self.plants[wi].warded = true; self.auras(); return; } } }
+        self.remove_plant(pid, false);
+    }
+    // A flyer shot down falls onto the cell of the trail nearest to it (not the fruit's) and walks on.
+    fn fall(&mut self, k: usize) {
+        let mut on = [false; N];
+        for e in 0..self.entries.len() { for (i, j) in self.trail(&self.dist, e) { if inside(i, j) { on[key(i, j)] = true; } } }
+        let (bx, by) = (self.bugs[k].x, self.bugs[k].y); let mut best: i32 = -1; let mut bd = INF;
+        for kk in 0..N {
+            if !on[kk] { continue; } let (i, j) = ((kk % COLS as usize) as i32, (kk / COLS as usize) as i32);
+            if self.grid[kk] != Cell::Empty || (i, j) == self.fruit { continue; }
+            let dd = hyp(i as f64 + 0.5 - bx, j as f64 + 0.5 - by); if dd < bd { bd = dd; best = kk as i32; }
+        }
+        if best < 0 { return; }
+        let (i, j) = (best % COLS, best / COLS); let ft = self.d.fall_t;
+        let b = &mut self.bugs[k]; b.fly = false; b.x = i as f64 + 0.5; b.y = j as f64 + 0.5; b.has_t = true; b.ti = i; b.tj = j; b.dir = (-1, 0); b.fall = ft; b.lure = None; b.sniff = 0.0;
     }
     fn progress(&self, b: &Bug) -> f64 {
         if b.fly { return hyp(b.x - self.fruit.0 as f64 - 0.5, b.y - self.fruit.1 as f64 - 0.5); }
@@ -402,14 +449,31 @@ impl<'a> Game<'a> {
 
     fn update_bug(&mut self, bi: usize, dt: f64) {
         let d = self.d; let kind = self.bugs[bi].kind; let bd = &d.bugs[kind];
-        if self.bugs[bi].burn > 0.0 { self.bugs[bi].burn -= dt; let a = self.bugs[bi].burn_dps * dt; self.lose(bi, a); if self.bugs[bi].hp <= 0.0 { return; } } // burn ignores armor and has no 1-damage floor
+        // fire is weak against armor: it comes off the burn every second; there is no 1-damage floor
+        if self.bugs[bi].burn > 0.0 {
+            self.bugs[bi].burn -= dt; let a = (self.bugs[bi].burn_dps - armor_of(&self.bugs[bi])).max(0.0) * dt; self.lose(bi, a); if self.bugs[bi].hp <= 0.0 { return; }
+            if self.bugs[bi].burn <= 0.0 { self.bugs[bi].spread = false; } // a fire out passes nothing on
+            if self.bugs[bi].spread {
+                let (bx, by, burn, dps) = { let b = &self.bugs[bi]; (b.x, b.y, b.burn, b.burn_dps) };
+                for k in 0..self.bugs.len() {
+                    let o = &self.bugs[k];
+                    if k != bi && !o.fly && o.hp > 0.0 && !(o.burn > 0.0) && within(o.x - bx, o.y - by, 0.6) { let o = &mut self.bugs[k]; o.burn = burn; o.burn_dps = dps; self.bugs[bi].spread = false; break; }
+                }
+            }
+        }
+        if self.bugs[bi].melt > 0.0 { self.bugs[bi].melt -= dt; }
         let (ci, cj) = (self.bugs[bi].x.floor() as i32, self.bugs[bi].y.floor() as i32);
         let tile = if self.bugs[bi].fly || !inside(ci, cj) { Tile::None } else { self.tiles[key(ci, cj)] };
         if tile == Tile::Nettle { let a = self.bugs[bi].max_hp * (if bd.boss { d.nettle_boss } else { d.nettle }) * dt; self.lose(bi, a); if self.bugs[bi].hp <= 0.0 { return; } }
+        if inside(ci, cj) {
+            let th = if self.bugs[bi].fly { self.thorn_air[key(ci, cj)] } else { self.thorn[key(ci, cj)] };
+            if th != 0.0 { let a = self.bugs[bi].max_hp * th * (if bd.boss { d.thorn_boss } else { 1.0 }) * dt; self.lose(bi, a); if self.bugs[bi].hp <= 0.0 { return; } }
+        }
         {
             let b = &mut self.bugs[bi];
             if b.thaw > 0.0 { b.thaw -= dt; }
             if b.frozen > 0.0 { b.frozen -= dt; if b.frozen <= 0.0 { b.thaw = THAW; } return; }
+            if b.fall > 0.0 { b.fall -= dt; return; } // a flyer shot down, on its way to the ground
         }
         if bd.mend != 0.0 {
             let (bx, by) = (self.bugs[bi].x, self.bugs[bi].y);
@@ -439,10 +503,13 @@ impl<'a> Game<'a> {
         self.bugs[bi].chew_cd -= dt;
         let rush = if self.bugs[bi].rush > 0.0 { bd.charge.map_or(1.0, |c| c[2]) } else { 1.0 };
         let v = { let b = &self.bugs[bi]; b.speed * (if bd.no_slow || rush > 1.0 { 1.0 } else { b.slow }) * (if tile == Tile::Mud { d.mud } else { 1.0 }) * rush * dt };
-        if self.bugs[bi].fly {
-            let (tx, ty) = (self.fruit.0 as f64 + 0.5, self.fruit.1 as f64 + 0.5);
+        if self.bugs[bi].fly { // straight to the fruit, or first to the nectar of a lure flytrap, where it hangs a moment
+            if self.bugs[bi].sniff > 0.0 { let b = &mut self.bugs[bi]; b.sniff -= dt; if b.sniff <= 0.0 { b.lure = None; } return; }
+            if let Some(l) = self.bugs[bi].lure { let keep = self.pidx(l).map_or(false, |li| !(self.plants[li].web > 0.0)); if !keep { self.bugs[bi].lure = None; } }
+            let lure = self.bugs[bi].lure.map(|l| { let p = &self.plants[self.pidx(l).unwrap()]; (p.i as f64 + 0.5, p.j as f64 + 0.5) });
+            let (tx, ty) = lure.unwrap_or((self.fruit.0 as f64 + 0.5, self.fruit.1 as f64 + 0.5));
             let b = &self.bugs[bi]; let (dx, dy) = (tx - b.x, ty - b.y); let dd = hyp(dx, dy);
-            if dd < 0.45 { self.bite(bi); return; }
+            if lure.is_some() { if dd < 0.4 { self.bugs[bi].sniff = d.sniff; return; } } else if dd < 0.45 { self.bite(bi); return; }
             let b = &mut self.bugs[bi]; b.x += dx / dd * v; b.y += dy / dd * v; return;
         }
         let (ti, tj) = (self.bugs[bi].ti, self.bugs[bi].tj);
@@ -478,77 +545,99 @@ impl<'a> Game<'a> {
     }
 
     fn update_plant(&mut self, pi: usize, dt: f64) {
-        let d = self.d; let (kind, lvl, i, j) = { let p = &self.plants[pi]; (p.kind, p.lvl, p.i, p.j) };
-        let pd = &d.plants[kind]; let (px, py) = (i as f64 + 0.5, j as f64 + 0.5);
+        let d = self.d; let (kind, lvl, br, i, j) = { let p = &self.plants[pi]; (p.kind, p.lvl, p.br, p.i, p.j) };
+        let (px, py) = (i as f64 + 0.5, j as f64 + 0.5);
         if self.plants[pi].web > 0.0 { self.plants[pi].web -= dt; if self.plants[pi].web <= 0.0 { self.auras(); } return; } // caught in a spider's web: does nothing
-        if !pd.has[Stat::Range as usize] || pd.has[Stat::Buff as usize] { return; }
-        let st = |g: &Self, s: Stat| g.pstat(kind, lvl, i, j, s);
-        let range = st(self, Stat::Range);
-        if pd.has[Stat::Guard as usize] { return; } // the aloe only guards (auras)
-        let gr = pd.ground_range;
-        let in_range = |b: &Bug, air: bool| b.hp > 0.0 && (air || !b.fly) && b.x < COLS as f64 + 0.2 && within(b.x - px, b.y - py, if gr != 0.0 && !b.fly { range.min(gr) } else { range });
-        let n = self.bugs.len(); // the bugs there are when it looks round: what is born of its hits is not among them
-        if pd.has[Stat::Slow as usize] {
-            let s = 1.0 - st(self, Stat::Slow); let mut any = false;
-            for b in self.bugs.iter_mut() { if in_range(b, pd.air) { b.slow = b.slow.min(s); any = true; } }
-            let chill = st(self, Stat::Chill); if chill == 0.0 { return; }
+        let st = |g: &Self, s: Stat| g.pstat(kind, lvl, br, i, j, s);
+        let range = st(self, Stat::Range); if range == 0.0 || st(self, Stat::Guard) != 0.0 { return; } // a pumpkin works through auras
+        let air = st(self, Stat::Air) != 0.0; let gr = st(self, Stat::GroundRange);
+        let in_range = |b: &Bug, a: bool| b.hp > 0.0 && (a || !b.fly) && b.x < COLS as f64 + 0.2 && within(b.x - px, b.y - py, if gr != 0.0 && !b.fly { range.min(gr) } else { range });
+        let slow = st(self, Stat::Slow);
+        if slow != 0.0 { // the cold mint: every bug around slower, and with rime frozen now and then
+            let mut any = false;
+            for b in self.bugs.iter_mut() { if in_range(b, air) { b.slow = b.slow.min(1.0 - slow); any = true; } }
+            let rime = st(self, Stat::Rime); if rime == 0.0 { return; }
             let p = &mut self.plants[pi]; p.cd -= dt; if p.cd > 0.0 || !any { return; }
-            p.cd = chill;
-            for b in self.bugs.iter_mut() { if in_range(b, pd.air) { let t = if d.bugs[b.kind].boss { 0.4 } else { 1.0 }; freeze(b, t, false); } }
+            p.cd = rime;
+            for b in self.bugs.iter_mut() { if in_range(b, air) { let t = if d.bugs[b.kind].boss { 0.5 } else { 1.0 }; freeze(b, t, false); } }
             return;
         }
+        let lure = st(self, Stat::Lure);
+        if lure != 0.0 { // the nectar of a lure flytrap: a flyer near turns to it, once
+            let boss = st(self, Stat::LureBoss) != 0.0; let pid = self.plants[pi].id;
+            for b in self.bugs.iter_mut() { if b.fly && b.hp > 0.0 && !b.lured && b.x < COLS as f64 + 0.2 && (boss || !d.bugs[b.kind].boss) && within(b.x - px, b.y - py, lure) { b.lured = true; b.lure = Some(pid); } }
+        }
+        let n = self.bugs.len(); // the bugs there are when it looks round: what is born of its hits is not among them
         { let p = &mut self.plants[pi]; p.cd -= dt; if p.cd > 0.0 { return; } }
-        let quick = 1.0 + self.plants[pi].buff;
-        if pd.has[Stat::Eat as usize] { // bites the strongest bug it reaches, through any armor; what is left with no health is swallowed
-            let air = st(self, Stat::EatAir) != 0.0; let chomp = st(self, Stat::Chomp); let gulp = st(self, Stat::Gulp);
-            let mut best: Option<usize> = None; let mut meal: Option<usize> = None;
-            for k in 0..n {
-                let b = &self.bugs[k]; if !in_range(b, air) { continue; }
-                if best.map_or(true, |q| b.hp > self.bugs[q].hp) { best = Some(k); }
-                if !d.bugs[b.kind].boss && (b.hp <= chomp || b.hp <= gulp * b.max_hp) && meal.map_or(true, |q| b.hp > self.bugs[q].hp) { meal = Some(k); }
-            }
-            let Some(mut best) = best else { return };
-            let whole = meal.is_some(); if let Some(m) = meal { best = m; } // the biggest bug it can swallow, else a bite of the strongest
-            self.plants[pi].cd = st(self, Stat::Eat) / quick;
-            let b = &self.bugs[best]; let a = (if whole { chomp.max(b.hp) } else { chomp * (if d.bugs[b.kind].boss { d.boss_bite } else { 1.0 }) }) + b.armor;
-            self.damage(best, a);
+        let eat = st(self, Stat::Eat);
+        if eat != 0.0 { // swallows the worn bugs whole, the biggest it can first; a healthier bug it leaves alone
+            let eat_air = st(self, Stat::EatAir) != 0.0; let gulp = st(self, Stat::Gulp); let heads = { let h = st(self, Stat::Heads); if h != 0.0 { h as usize } else { 1 } };
+            let mut meals: Vec<usize> = (0..n).filter(|&k| { let b = &self.bugs[k]; in_range(b, eat_air) && !d.bugs[b.kind].boss && b.hp <= gulp * b.max_hp }).collect();
+            meals.sort_by(|&a, &b| self.bugs[b].hp.partial_cmp(&self.bugs[a].hp).unwrap()); meals.truncate(heads);
+            if meals.is_empty() { return; }
+            self.plants[pi].cd = eat;
+            for k in meals { if self.bugs[k].hp > 0.0 { self.kill(k); } } // whole: no sum of health and armor to round
             return;
         }
-        if kind == d.pepper {
-            let hit: Vec<usize> = (0..n).filter(|&k| in_range(&self.bugs[k], pd.air)).collect(); if hit.is_empty() { return; }
-            self.plants[pi].cd = 1.0 / (st(self, Stat::Rate) * quick);
-            let dmg = st(self, Stat::Dmg); let burn = st(self, Stat::Burn); let burn_t = st(self, Stat::BurnT);
-            for k in hit { self.damage(k, dmg); let b = &mut self.bugs[k]; b.burn = burn_t; b.burn_dps = burn; }
+        if st(self, Stat::Blaze) != 0.0 { // the heat chili: every walker around, a little each
+            let hit: Vec<usize> = (0..n).filter(|&k| in_range(&self.bugs[k], air)).collect(); if hit.is_empty() { return; }
+            self.plants[pi].cd = 1.0 / st(self, Stat::Rate);
+            let dmg = st(self, Stat::Dmg); let burn = st(self, Stat::Burn); let burn_t = st(self, Stat::BurnT); let spread = st(self, Stat::Spread) != 0.0;
+            for k in hit { self.damage(k, dmg); let b = &mut self.bugs[k]; if b.hp > 0.0 && ignite(b, burn, burn_t) && spread { b.spread = true; } }
             return;
         }
-        // the bugs nearest to the fruit first; a grown rose shoots at two of them; a plant that is weak against walkers
-        // (the dandelion) takes the flyers first; and not at a bug the shots already on their way will finish
+        // a shooter: the bugs nearest to the fruit first, and not a bug the shots already on their way will finish. A
+        // hunter rose pricks the bugs not marked yet first, a far shot takes the flyers first, an icicle mint the
+        // thickest walker, a burn-through chili the armored and the thick.
         let multi = { let m = st(self, Stat::Multi); if m != 0.0 { m as usize } else { 1 } };
-        let splash = st(self, Stat::Splash); let mark = st(self, Stat::Mark);
+        let splash = st(self, Stat::Splash); let mark = st(self, Stat::Mark); let ground = st(self, Stat::Ground);
+        let heavy = st(self, Stat::Heavy) != 0.0; let melt = st(self, Stat::Melt) != 0.0;
         let mut seen = std::mem::take(&mut self.seen); seen.clear();
         for k in 0..n {
             let b = &self.bugs[k];
-            if in_range(b, pd.air) && (splash != 0.0 || b.coming < b.hp) {
-                seen.push((self.progress(b) + (if pd.ground != 0.0 && !b.fly { 1e3 } else { 0.0 }) + (if mark != 0.0 && b.mark > 0.5 { 500.0 } else { 0.0 }), k));
+            if in_range(b, air) && (splash != 0.0 || b.coming < b.hp) {
+                seen.push((if heavy { -b.hp } else if melt { -(b.armor * 1e6 + b.hp) } else { self.progress(b) + (if ground != 0.0 && !b.fly { 1e3 } else { 0.0 }) + (if mark != 0.0 && b.mark > 0.5 { 500.0 } else { 0.0 }) }, k));
             }
         }
         if seen.is_empty() { self.seen = seen; return; }
         seen.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-        self.plants[pi].cd = 1.0 / (st(self, Stat::Rate) * quick);
+        self.plants[pi].cd = 1.0 / st(self, Stat::Rate);
+        let stack = st(self, Stat::Stack);
         for &(_, k) in seen.iter().take(multi) {
-            let weak = pd.ground != 0.0 && !self.bugs[k].fly;
-            let dmg = st(self, Stat::Dmg) * (if weak { pd.ground } else { 1.0 });
+            let weak = ground != 0.0 && !self.bugs[k].fly;
+            let mut dmg = st(self, Stat::Dmg) * (if weak { ground } else { 1.0 });
+            if stack != 0.0 {
+                let bid = self.bugs[k].id; let p = &mut self.plants[pi];
+                if p.tgt == bid { p.stk = (p.stk + 1.0).min(round(1.0 / stack)); } else { p.tgt = bid; p.stk = 0.0; }
+                dmg *= 1.0 + stack * p.stk;
+            }
             let b = &mut self.bugs[k];
-            let est = if splash != 0.0 { 0.0 } else { (dmg - b.armor).max(1.0) * marked(b) }; b.coming += est; // what it will take
+            let est = if splash != 0.0 { 0.0 } else { (dmg - armor_of(b)).max(1.0) * marked(b) }; b.coming += est; // what it will take
             let (target, tx, ty) = (b.id, b.x, b.y);
             let id = self.next_id; self.next_id += 1;
-            self.shots.push(Shot { id, x: px, y: py - 0.25, target, tx, ty, speed: pd.speed, dmg, est, splash,
-                hits: if pd.has[Stat::Hits as usize] { pd.st[Stat::Hits as usize][lvl - 1] as usize } else { 0 }, mark, stun: if weak { 0.0 } else { st(self, Stat::Stun) }, done: false });
+            let shot = Shot { id, x: px, y: py - 0.25, target, tx, ty, speed: st(self, Stat::Speed), dmg, est, splash, hits: st(self, Stat::Hits) as usize, mark, chain: st(self, Stat::Chain),
+                frost: st(self, Stat::Frost), frost_t: st(self, Stat::FrostT), burn: st(self, Stat::Burn), burn_t: st(self, Stat::BurnT), melt, crack: st(self, Stat::Crack) != 0.0,
+                down: if weak { 0.0 } else { st(self, Stat::Down) }, done: false };
+            self.shots.push(shot);
         }
         self.seen = seen;
     }
+    // What a shot does to a bug it hits.
+    fn strike(&mut self, k: usize, s: &Shot) {
+        let d = self.d;
+        self.damage(k, s.dmg);
+        if s.crack && self.bugs[k].armor > 0.0 { self.bugs[k].armor -= 1.0; } // the burn-through top: armor off for good
+        if self.bugs[k].hp <= 0.0 { return; }
+        { let b = &mut self.bugs[k];
+          if s.burn != 0.0 { ignite(b, s.burn, s.burn_t); if s.melt { b.melt = b.melt.max(s.burn_t); } }
+          if s.mark != 0.0 { let on = b.mark > 0.0; b.mark_v = s.mark.max(if on { b.mark_v } else { 0.0 }); b.chain = if on { b.chain.max(s.chain) } else { s.chain }; b.mark = d.mark_t; } // a mark run out leaves nothing
+          if s.frost != 0.0 { chill(b, 1.0 - s.frost, s.frost_t); } }
+        if s.down != 0.0 && self.bugs[k].fly {
+            if d.bugs[self.bugs[k].kind].boss { freeze(&mut self.bugs[k], 0.5, false); } else if self.bugs[k].hp <= s.down * self.bugs[k].max_hp { self.fall(k); }
+        }
+    }
     fn update_shot(&mut self, si: usize, dt: f64) {
-        let d = self.d; let ti = self.bidx(self.shots[si].target);
+        let ti = self.bidx(self.shots[si].target);
         let alive = ti.map_or(false, |k| self.bugs[k].hp > 0.0 && !self.bugs[k].gone);
         if alive { let b = &self.bugs[ti.unwrap()]; let (bx, by) = (b.x, b.y); let s = &mut self.shots[si]; s.tx = bx; s.ty = by; }
         let s = &mut self.shots[si];
@@ -556,18 +645,13 @@ impl<'a> Game<'a> {
         if dd <= v {
             s.done = true; let s = s.clone();
             if s.est != 0.0 { if let Some(k) = ti { self.bugs[k].coming -= s.est; } }
-            if s.splash != 0.0 { // the kernels hit the bugs closest to where the cob lands, s.hits of them at most
+            if s.splash != 0.0 { // a pepper bursts: the walkers closest to where it lands, s.hits of them at most
                 let mut near: Vec<(f64, usize)> = self.bugs.iter().enumerate().filter(|(_, b)| !b.fly && b.hp > 0.0 && within(b.x - s.tx, b.y - s.ty, s.splash))
                     .map(|(k, b)| (hyp(b.x - s.tx, b.y - s.ty), k)).collect();
                 near.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
                 if s.hits != 0 { near.truncate(s.hits); }
-                for (_, k) in near { self.damage(k, s.dmg); }
-            } else if alive {
-                let k = ti.unwrap(); self.damage(k, s.dmg);
-                let b = &mut self.bugs[k];
-                if s.mark != 0.0 && b.hp > 0.0 { let old = if b.mark > 0.0 { b.mark_v } else { 0.0 }; b.mark = d.mark_t; b.mark_v = s.mark.max(old); } // a mark run out leaves nothing
-                if s.stun != 0.0 && b.hp > 0.0 { let t = s.stun * (if d.bugs[b.kind].boss { 0.3 } else { 1.0 }); freeze(b, t, false); }
-            }
+                for (_, k) in near { self.strike(k, &s); }
+            } else if alive { self.strike(ti.unwrap(), &s); }
             return;
         }
         s.x += dx / dd * v; s.y += dy / dd * v;
@@ -581,7 +665,7 @@ impl<'a> Game<'a> {
             self.wave_time += dt;
             while self.queue.front().map_or(false, |q| q.at <= self.wave_time) { let q = self.queue.pop_front().unwrap(); self.spawn(q.kind, q.e, None); }
         }
-        for b in self.bugs.iter_mut() { b.slow = 1.0; }
+        for b in self.bugs.iter_mut() { b.slow = 1.0; if b.slow_t > 0.0 { b.slow = b.slow_v; b.slow_t -= dt; } }
         for pi in 0..self.plants.len() { self.update_plant(pi, dt); }
         for bi in 0..self.bugs.len() { { let b = &mut self.bugs[bi]; if b.mark > 0.0 { b.mark -= dt; } } if self.bugs[bi].hp > 0.0 { self.update_bug(bi, dt); } }
         for si in 0..self.shots.len() { self.update_shot(si, dt); }
@@ -594,7 +678,8 @@ impl<'a> Game<'a> {
                 // the garden grows back: the eaten plants out of their roots, the bitten ones to full health
                 let ids: Vec<u32> = self.stubs.iter().map(|s| s.id).collect();
                 for id in ids { self.regrow_stub(id); }
-                for p in self.plants.iter_mut() { p.hp = p.max_hp; }
+                for p in self.plants.iter_mut() { p.hp = p.max_hp; p.warded = false; }
+                self.auras();
                 let bonus = self.lv.pay_at[self.wave - 1]; self.phase = Phase::Build; self.next_in = Some(self.d.brk); self.gain(bonus);
                 if (self.wave as f64) % self.d.power_every == 0.0 { self.frost = self.power_max.min(self.frost + 1.0); self.rain = self.power_max.min(self.rain + 1.0); }
                 self.events.push(Event::WaveDone { bonus });
@@ -608,9 +693,10 @@ impl<'a> Game<'a> {
         let ph = match self.phase { Phase::Build => 0.0, Phase::Wave => 1.0, Phase::Won => 2.0, Phase::Lost => 3.0 };
         out.extend_from_slice(&[self.dew, self.hp, self.wave as f64, ph, self.time, self.wave_time, self.next_in.unwrap_or(-1.0), self.frost, self.rain, self.next_id as f64, self.queue.len() as f64, self.stats.kills, self.stats.bites, self.stats.eaten, self.stats.earned]);
         out.push(self.bugs.len() as f64);
-        for b in &self.bugs { out.extend_from_slice(&[b.id as f64, b.hp, b.x, b.y, b.slow, b.frozen, b.burn, b.chew, b.thaw, b.chew_cd, b.skill, b.rush, b.mark, b.coming, if b.has_t { b.ti as f64 } else { -1.0 }, if b.has_t { b.tj as f64 } else { -1.0 }]); }
+        for b in &self.bugs { out.extend_from_slice(&[b.id as f64, b.hp, b.x, b.y, b.slow, b.frozen, b.burn, b.chew, b.thaw, b.chew_cd, b.skill, b.rush, b.mark, b.coming, if b.has_t { b.ti as f64 } else { -1.0 }, if b.has_t { b.tj as f64 } else { -1.0 },
+            b.slow_t, b.melt, b.armor, if b.fly { 1.0 } else { 0.0 }, b.sniff, b.fall, if b.lured { 1.0 } else { 0.0 }]); }
         out.push(self.plants.len() as f64);
-        for p in &self.plants { out.extend_from_slice(&[p.id as f64, p.lvl as f64, p.i as f64, p.j as f64, p.hp, p.cd, p.web, p.buff, p.guard]); }
+        for p in &self.plants { out.extend_from_slice(&[p.id as f64, p.lvl as f64, p.i as f64, p.j as f64, p.hp, p.cd, p.web, p.br as f64, p.guard, p.spikes, if p.warded { 1.0 } else { 0.0 }, p.stk]); }
         out.push(self.stubs.len() as f64);
         for s in &self.stubs { out.extend_from_slice(&[s.id as f64, s.i as f64, s.j as f64]); }
         out.push(self.shots.len() as f64);
@@ -648,3 +734,9 @@ pub fn dist_over(grid: &[Cell; N], fruit: (i32, i32), extra: i32) -> [f64; N] {
 // Stops a bug for t seconds. Stops do not chain: when one ends, the bug cannot be stopped again for THAW seconds
 // (frost, the player's power, always works).
 #[inline] fn freeze(b: &mut Bug, t: f64, force: bool) { if !force && (b.thaw > 0.0 || b.frozen > 0.0) { return; } b.frozen = b.frozen.max(t); }
+// Slows a bug to v of its speed for t seconds; slows do not add up: a weaker one does nothing while a stronger is on.
+#[inline] fn chill(b: &mut Bug, v: f64, t: f64) { if b.slow_t <= 0.0 || v <= b.slow_v { b.slow_v = v; b.slow_t = t; } }
+// Sets a bug burning; burns do not add up: a weaker one does nothing while a stronger is on.
+#[inline] fn ignite(b: &mut Bug, dps: f64, t: f64) -> bool { if b.burn <= 0.0 || dps >= b.burn_dps { b.burn = t; b.burn_dps = dps; b.spread = false; true } else { false } }
+// A bug burning by a burn-through chili has no armor.
+#[inline] fn armor_of(b: &Bug) -> f64 { if b.melt > 0.0 { 0.0 } else { b.armor } }
