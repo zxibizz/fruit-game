@@ -58,14 +58,17 @@ const T = {
     spider: 'Босс. Опутывает паутиной растения рядом: они на время замирают. Дождь смывает паутину.',
   },
   feature: {
-    fertile: ['Плодородная земля', 'На тёмных грядках растения на треть сильнее и крепче.'],
+    fertile: ['Чернозём', 'На чёрной земле растения на треть сильнее и крепче.'],
+    path: ['Каменная дорожка', 'Жуки ползут только по камню. Сажать можно на грядки — растения достают жуков на соседних клетках. Подумай, где поставить кого.'],
+    fork: ['Развилка', 'Дорожка раздваивается, а у входа в короткую ветку — клетка травы. На траве можно сажать, и жуки по ней ходят: посадишь растение — короткий путь закрыт, жуки пойдут длинным.'],
+    meadow: ['Поляна', 'Посреди поля трава: жуки идут по ней напрямик. Сажай на неё растения стенками — тропинка станет длинной и петляющей, и жуки дольше будут ползти мимо твоих растений.'],
     mud: ['Грязь', 'В грязи жуки вязнут и ползут почти вдвое медленнее. Веди тропинку через лужи — а посадишь в грязь растение, лужа пропадёт зря.'],
     water: ['Пруды', 'В воду ничего не посадишь, и жуки её обходят. Летающим пруд не помеха.'],
     nettle: ['Крапива', 'На крапиве ничего не растёт, зато жуков она жалит. Пусть тропинка идёт через неё.'],
     twin: ['Два муравейника', 'Жуки идут с двух сторон. Сведи обе тропинки в одну — и стрелять по ним будут одни и те же растения.'],
     weed: ['Заросли', `Колючие кусты мешают сажать. Тапни по кусту — уберёшь его за ${WEED_COST} росы. А можно оставить стеной.`],
   },
-  featureShort: { fertile: 'грядки', mud: 'грязь', water: 'пруды', nettle: 'крапива', twin: '2 муравейника', weed: 'заросли' },
+  featureShort: { path: 'дорожка', fork: 'развилка', meadow: 'поляна', fertile: 'чернозём', mud: 'грязь', water: 'пруды', nettle: 'крапива', twin: '2 муравейника', weed: 'заросли' },
   perkName: { dew: 'Утренняя роса', heart: 'Крепкое яблоко', clouds: 'Тучи наготове', refund: 'Бережный садовник' },
   perkAbout: {
     dew: (v) => `+${v} росы в начале уровня`, heart: (v) => `+${v} к здоровью яблока`,
@@ -76,10 +79,10 @@ const T = {
   fresh: (list) => `Новое: ${list.join(', ')}. Зажми, чтобы узнать подробнее`, freshBug: (list) => `Новый жук: ${list.join(', ')}. Зажми его, чтобы узнать подробнее`,
   boss: (name) => `Босс: ${name}!`,
   roots: (name) => `${name}: корни`, rootsHint: 'Съеденное отрастёт само после волны, а до тех пор тут дыра — жуки пойдут через неё. Дождь отращивает сразу', powersBack: 'Мороз и дождь снова с тобой', regrown: 'Отросло!', rootsWait: 'Растение отрастёт после волны, а пока здесь ничего не посадить', rootsRain: 'Дождь отрастит сразу', lvl: (n) => `уровень ${n}`,
-  problem: { same: 'Здесь уже такое растение', busy: 'Здесь занято', blocks: 'Нельзя закрыть жукам путь', poor: 'Не хватает росы', nettle: 'На крапиве ничего не растёт', roots: 'Здесь корни: растение отрастёт после волны', outside: '' },
+  problem: { same: 'Здесь уже такое растение', busy: 'Здесь занято', blocks: 'Нельзя закрыть жукам путь', poor: 'Не хватает росы', nettle: 'На крапиве ничего не растёт', stone: 'Это дорожка жуков: сажай на грядки рядом', roots: 'Здесь корни: растение отрастёт после волны', outside: '' },
   swap: (n, lvl) => (lvl > 1 ? `замена ур. ${lvl}, вернётся ${n}` : `замена, вернётся ${n}`), swapAgain: 'Тапни ещё раз — заменить',
   gain: (n) => (n > 0 ? `путь +${n}` : n < 0 ? `путь ${n}` : 'путь тот же'),
-  hint1: 'Перетащи растение с полки на поле. Первый уровень растения дешёвый — строй из них длинную петляющую тропинку. Готов — жми ▶',
+  hint1: 'Жуки ползут по каменной дорожке. Перетащи растение с полки на грядку рядом с дорожкой. Готов — жми ▶',
   holdHint: 'Зажми растение или жука — узнаешь, кто это',
   dragHint: 'Сначала выбери растение на полке — или просто перетащи его на поле',
   hint2: 'Роса приходит за каждую пройденную волну. Дальше волны придут сами. Нажмёшь ▶ раньше — получишь ещё',
@@ -94,7 +97,7 @@ const T = {
   won: 'Яблоко спасено!', lost: 'Жуки съели яблоко', retry: 'Ещё раз', levels: 'Уровни', nextLevel: 'Дальше', resume: 'Продолжить',
   pause: 'Пауза', restart: 'Заново', waveDone: (b) => `Волна пройдена  +${b}`, early: (b) => `+${b} за смелость`,
   screams: ['Ай!', 'Ой-ой!', 'Больно!', 'Кусь?!', 'Ай-ай!'],
-  up: 'Улучшить', sell: 'Продать', max: 'Максимум', lvl3: 'На 3 уровне', top: 'На 4 уровне', pick: 'Выбери ветку', opensAt: (n) => `откроется на ${n} уровне`, branches: 'Ветки на 3 уровне', newBranch: 'Новая ветка', webbed: 'В паутине!', onFertile: 'На грядке: +30%', fullRefund: 'вернётся вся роса',
+  up: 'Улучшить', sell: 'Продать', max: 'Максимум', lvl3: 'На 3 уровне', top: 'На 4 уровне', pick: 'Выбери ветку', opensAt: (n) => `откроется на ${n} уровне`, branches: 'Ветки на 3 уровне', newBranch: 'Новая ветка', webbed: 'В паутине!', onFertile: 'На чернозёме: +30%', fullRefund: 'вернётся вся роса',
   weed: 'Убрать куст', perks: 'Улучшения', guide: 'Справочник', sound: 'Звук', music: 'Музыка', close: 'Закрыть', ok: 'Понятно', reset: 'Сбросить',
   newPlant: 'Новое растение', levelFeature: 'Особенность уровня', cont: (name, w) => `Продолжить: ${name}, волна ${w}`,
   starsFree: (free, all) => `Свободно <b>★ ${free}</b> из ${all}`, perksHint: 'Звёзды дают за уровни. Улучшения можно сбросить и раздать заново.',
@@ -122,11 +125,14 @@ let ufx = []; // effects in UI space
 // What the player keeps: stars per level, bought perks, bugs met; the sound settings; a level in progress.
 const load = (k, d) => { try { return Object.assign(d, JSON.parse(localStorage.getItem(k) || '{}')); } catch { return d; } };
 const progress = load('fruit.progress', { stars: [], perks: {}, bugs: {}, cards: {} });
+// v2: five levels came before «Лужайка» (0.27.0): the stars of the levels a player had move on by five
+if (!progress.v) { if (progress.stars.length) progress.stars = [0, 0, 0, 0, 0, ...progress.stars]; progress.v = 2; localStorage.setItem('fruit.progress', JSON.stringify(progress)); }
 const saveProgress = () => localStorage.setItem('fruit.progress', JSON.stringify(progress));
 const audio = load('fruit.audio', { vol: .6, music: .35 });
 const starsAll = () => progress.stars.reduce((a, b) => a + (b || 0), 0);
 const starsSpent = () => PERK_ORDER.reduce((a, k) => a + PERKS[k].cost.slice(0, progress.perks[k] || 0).reduce((x, y) => x + y, 0), 0);
-const levelOpen = (n) => n === 0 || (progress.stars[n - 1] || 0) > 0 || new URLSearchParams(location.search).has('all');
+// open: the first, one after a level won, and every level before a level won (the levels put in before the old ones)
+const levelOpen = (n) => n === 0 || (progress.stars[n - 1] || 0) > 0 || progress.stars.slice(n).some((s) => s > 0) || new URLSearchParams(location.search).has('all');
 const plantOpen = (type) => LEVELS.some((L, n) => levelOpen(n) && L.plants.includes(type));
 const SAVE = 'fruit.save';
 const readSave = () => { try { return JSON.parse(localStorage.getItem(SAVE) || 'null'); } catch { return null; } };
@@ -303,6 +309,7 @@ function buildTerrain() {
     if (o.obstacle === 'rock') A.hdRock(x, cx, cy + 4, 1);
     else if (o.obstacle === 'stump') A.hdStump(x, cx, cy + 4, 15);
     else if (o.obstacle === 'weed') A.hdWeed(x, cx, cy + 4);
+    else if (o.obstacle === 'bush') A.hdBush(x, cx, cy);
     else if (o.obstacle === 'log' && game.grid[j][i + 1]?.obstacle === 'log') {
       const [nx, ny] = cellCenter(i + 1, j); x.save(); x.translate((cx + nx) / 2, (cy + ny) / 2 + 4); if (PORT) x.rotate(-Math.PI / 2); A.hdLog(x, 0, 0, CELL * 2 - 8); x.restore();
     }
@@ -382,6 +389,9 @@ function featurePic(f) {
     if (f === 'water') { A.hdWater(x, 21, 42, 2); A.hdWater(x, 63, 42, 8); }
     else if (f === 'weed') A.hdWeed(x, 42, 50);
     else if (f === 'twin') { A.hdAnthill(x, 42, 30, .8); A.hdAnthill(x, 42, 68, .8); }
+    else if (f === 'path') { A.hdTile(x, 'stone', 21, 30); A.hdTile(x, 'stone', 63, 30); A.hdTile(x, 'bed', 21, 66); A.hdTile(x, 'bed', 63, 66); A.hdPlant(x, 'rose', 63, 74, .8, { lvl: 1 }); }
+    else if (f === 'fork') { A.hdTile(x, 'stone', 21, 42); A.hdTile(x, 'stone', 63, 21); A.hdTile(x, 'stone', 63, 63); A.hdPlant(x, 'pumpkin', 63, 52, .8, { lvl: 1 }); }
+    else if (f === 'meadow') { A.hdTile(x, 'bed', 21, 21); A.hdTile(x, 'bed', 63, 21); A.hdPlant(x, 'pumpkin', 30, 72, .75, { lvl: 1 }); A.hdPlant(x, 'pumpkin', 58, 72, .75, { lvl: 1 }); }
     else { x.translate(42, 42); x.scale(1.7, 1.7); A.hdTile(x, f, 0, 0); }
   }, 3);
 }
@@ -521,7 +531,7 @@ function handleEvents() {
       case 'sell': case 'plantDead': dust(e.p); terrainDirty = true; if (pop === e.p) pop = null; if (e.t === 'sell') sfx.sell(); else { sfx.eaten(); banner(`${T.plant[e.p.type]} ${T.eaten[e.p.type]}!`, 1.4); if (!localStorage.getItem('fruit.rootsHint2')) { banner(T.rootsHint, 8, true); localStorage.setItem('fruit.rootsHint2', '1'); } } break;
       case 'chew': { const [x, y] = cellCenter(e.p.i, e.p.j); for (let n = 0; n < 6; n++) fx.push({ k: 'crumb', x, y: y - 6, vx: (Math.random() - .5) * 50, vy: -20 - Math.random() * 30, t: 0, life: .5, col: e.p.type === 'pumpkin' ? '#f7a23a' : '#6cc04a' }); bump(e.p, .2); sfx.chew(); break; }
       case 'wave': banner(T.wave(e.n, game.waves), 1.4); sfx.waveStart(); { const nb = newBugs(e.n).filter((k) => !isBoss(k)); if (nb.length && !(levelIdx === 0 && e.n === 1)) banner(T.freshBug(nb.map((k) => T.bug[k].toLowerCase())), 7, true); if (nb.some((k) => BUGS[k].fly)) hintOnce('fly', T.flyHint, 9); } if (AP.mood === 'happy') appleMood('idle', 0); break;
-      case 'waveDone': appleMood('happy', 2.6); appleCheer(); banner(T.waveDone(e.bonus), 1.8); sfx.waveDone(); if (e.powers) hintOnce('powers', T.powersBack, 4); if (levelIdx === 0 && e.n === 1) { hintOnce('early', T.hint2, 6); hintOnce('trail', T.trailHint, 10); } if (levelIdx === 0 && e.n === 3) hintOnce('up', T.upHint, 9); break;
+      case 'waveDone': appleMood('happy', 2.6); appleCheer(); banner(T.waveDone(e.bonus), 1.8); sfx.waveDone(); if (e.powers) hintOnce('powers', T.powersBack, 4); if (levelIdx === 0 && e.n === 1) hintOnce('early', T.hint2, 6); if (game.L.feature === 'meadow' && e.n === 1) hintOnce('trail', T.trailHint, 10); if (levelIdx === 0 && e.n === 3) hintOnce('up', T.upHint, 9); break;
       case 'early': ufx.push({ k: 'gain', x: GO[0] + 30, y: GO[1] + 26, t: 0, life: 1.2, txt: T.early(e.bonus) }); sfx.early(e.bonus); break;
       case 'power': if (e.kind === 'frost') { ufx.push({ k: 'flash', t: 0, life: .6, col: 'rgba(190,240,255,' }); sfx.frost(); } else { for (let n = 0; n < 70; n++) ufx.push({ k: 'rain', x: Math.random() * UW, y: -Math.random() * UH, t: 0, life: 1.2 }); sfx.rain(); terrainDirty = true; } break;
       case 'won': case 'lost': { dropSave(); if (e.t === 'won') appleCheer(); const g = game; setTimeout(() => { if (game === g) endScreen(e.t === 'won'); }, 900); break; }
@@ -659,7 +669,7 @@ function drawGrid() {
   c.save();
   for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) {
     if (game.grid[j][i] || (i === game.fruit[0] && j === game.fruit[1]) || game.entries.some((e) => e[0] === i && e[1] === j)) continue;
-    const bad = blockCache.has(i + ',' + j) || game.tiles[j][i] === 'nettle' || !!stubAt(game, i, j), [cx, cy] = cellCenter(i, j), x = cx - CELL / 2, y = cy - CELL / 2;
+    const bad = blockCache.has(i + ',' + j) || game.tiles[j][i] === 'nettle' || game.tiles[j][i] === 'stone' || !!stubAt(game, i, j), [cx, cy] = cellCenter(i, j), x = cx - CELL / 2, y = cy - CELL / 2;
     c.beginPath(); A.rrect(c, x + 4, y + 4, CELL - 8, CELL - 8, 8);
     if (bad) { c.fillStyle = 'rgba(235,70,70,.1)'; c.fill(); }
     c.lineWidth = 1; c.strokeStyle = bad ? 'rgba(200,40,40,.28)' : 'rgba(255,255,255,.17)'; c.stroke();

@@ -23,8 +23,8 @@ export const PLANTS = {
   //   gnawing); ward (top) — once a wave the bite that would eat a plant it guards leaves it 1 health.
   // b, Thorny vines: thorns further and stronger; thornAir (top) — they reach the flyers over those cells too.
   pumpkin: { cost: 25, up: [60], hp: [150, 220], range: 1.5, guard: [.15, .2], thorns: [.004, .006],
-    a: { from: 5, up: [150, 250], hp: [260, 340], range: 1.5, guard: [.35, .45], thorns: .006, spikes: [.05, .08], ward: [0, 1] },
-    b: { from: 6, up: [150, 250], hp: [200, 250], range: 2.5, guard: .2, thorns: [.007, .009], thornAir: [0, 1] } },
+    a: { from: 4, up: [150, 250], hp: [260, 340], range: 1.5, guard: [.35, .45], thorns: .006, spikes: [.05, .08], ward: [0, 1] },
+    b: { from: 5, up: [150, 250], hp: [200, 250], range: 2.5, guard: .2, thorns: [.007, .009], thornAir: [0, 1] } },
   // One target, walkers and flyers.
   // a, Hunter: mark — a bug it has pricked takes that much more damage from everything for MARK_T seconds (it pricks
   //   the bugs not marked yet first; marks do not add up); multi: how many bugs it shoots at once; chain (top) — a
@@ -34,7 +34,7 @@ export const PLANTS = {
   //   than that share of its health falls onto the trail and walks on; a boss hangs still for a moment.
   rose: { cost: 25, up: [60], hp: [60, 80], range: 1.5, rate: [1.3, 1.5], dmg: [8, 11], air: 1, shot: 'thorn', speed: 9,
     a: { from: 2, up: [120, 200], hp: [90, 100], range: [1.5, 1.6], rate: [1.6, 1.7], dmg: [11, 13], multi: 2, mark: .45, chain: [0, 2], air: 1, shot: 'thorn', speed: 9 },
-    b: { from: 4, up: [120, 200], hp: [70, 80], range: [3.5, 3.8], rate: [.8, .9], dmg: [40, 55], ground: .35, groundRange: 1.5, down: [0, .5], air: 1, shot: 'fluff', speed: 11 } },
+    b: { from: 5, up: [120, 200], hp: [70, 80], range: [3.5, 3.8], rate: [.8, .9], dmg: [40, 55], ground: .35, groundRange: 1.5, down: [0, .5], air: 1, shot: 'fluff', speed: 11 } },
   // Fire (the pepper is the chili now). Lobs a pepper that bursts where it lands: it hits up to `hits` walkers within
   // `splash` of it and sets them burning (burn a second for burnT seconds). Fire is weak against armor: a burning bug's
   // armor comes off every second of the burn.
@@ -44,7 +44,7 @@ export const PLANTS = {
   //   burns, against every plant; crack (top) — every hit takes a point of armor off for good.
   pepper: { cost: 35, up: [90], hp: [60, 80], range: [1.6, 1.7], rate: [.6, .65], dmg: [10, 15], splash: .8, hits: [3, 4], burn: [4, 6], burnT: 2, shot: 'pepper', speed: 5,
     a: { from: 2, up: [180, 280], hp: [80, 100], range: 1.7, rate: [.5, .55], dmg: [12, 16], burn: [9, 13], burnT: [2.5, 3], blaze: 1, spread: [0, 1] },
-    b: { from: 2, up: [180, 280], hp: [80, 100], range: 1.7, rate: [.65, .7], dmg: [24, 32], splash: [1, 1.1], hits: [5, 6], burn: [6, 9], burnT: [2.5, 3], melt: 1, crack: [0, 1], shot: 'pepper', speed: 5 } },
+    b: { from: 3, up: [180, 280], hp: [80, 100], range: 1.7, rate: [.65, .7], dmg: [24, 32], splash: [1, 1.1], hits: [5, 6], burn: [6, 9], burnT: [2.5, 3], melt: 1, crack: [0, 1], shot: 'pepper', speed: 5 } },
   // Ice: the only plant that slows. Throws an icicle at one bug, walkers and flyers: frost — the bug it hits is that
   // much slower for frostT seconds (slows do not add up; snails do not slow).
   // a, Cold: throws no more; every bug around it is `slow` slower, flyers too; rime (top) — every so many seconds the
@@ -52,8 +52,8 @@ export const PLANTS = {
   // b, Icicle: a heavy icicle from above on the thickest walker next to it, rare and hard (armor hardly matters to
   //   such a hit, bosses take it whole); stack (top) — every next hit on the same bug that much harder, up to twice.
   mint: { cost: 35, up: [80], hp: [60, 80], range: [1.5, 1.6], rate: [.8, .95], dmg: [7, 10], frost: [.3, .4], frostT: 1.5, air: 1, shot: 'icicle', speed: 8,
-    a: { from: 2, up: [130, 220], hp: [80, 100], range: [1.7, 1.9], slow: .5, rime: [0, 5], air: 1 },
-    b: { from: 3, up: [130, 220], hp: [80, 100], range: 1.6, rate: [.4, .45], dmg: [80, 110], frost: .15, frostT: .6, heavy: 1, stack: [0, .25], shot: 'icicleBig', speed: 7 } },
+    a: { from: 3, up: [130, 220], hp: [80, 100], range: [1.7, 1.9], slow: .5, rime: [0, 5], air: 1 },
+    b: { from: 4, up: [130, 220], hp: [80, 100], range: 1.6, rate: [.4, .45], dmg: [80, 110], frost: .15, frostT: .6, heavy: 1, stack: [0, .25], shot: 'icicleBig', speed: 7 } },
   // Finishing off. Every `eat` seconds swallows whole a walker (not a boss) with no more than `gulp` of its full health
   // left; a healthier bug it does not touch at all: its job is to make sure, not to deal damage.
   // a, Glutton: weaker bugs too and quicker; heads (top) — two at once.
@@ -62,7 +62,7 @@ export const PLANTS = {
   //   (it is not swallowed).
   flytrap: { cost: 60, up: [140], hp: [70, 90], range: 1.5, eat: [3, 2.5], gulp: [.4, .5],
     a: { from: 4, up: [250, 350], hp: [100, 120], range: [1.5, 1.6], eat: [1.8, 1.6], gulp: .6, heads: [1, 2] },
-    b: { from: 6, up: [250, 350], hp: [90, 110], range: 1.5, eat: [2.5, 2.2], gulp: .5, eatAir: 1, lure: [3, 5], lureBoss: [0, 1] } },
+    b: { from: 5, up: [250, 350], hp: [90, 110], range: 1.5, eat: [2.5, 2.2], gulp: .5, eatAir: 1, lure: [3, 5], lureBoss: [0, 1] } },
 };
 export const BRANCHES = ['a', 'b'];
 // A stat of a plant of type P at level lvl on branch br (levels 3 and 4): null when it has no such stat.
@@ -162,13 +162,98 @@ export const BROOD_REWARD = .34;
 // thought-out maze with the perks of two stars a level gets through (sim/src/bot.rs). The dew at the start is enough to
 // lay the first walls at once.
 // A level's field is a picture of 8 rows of 14 cells: . free, A the fruit, E an anthill (last column only),
-// R rock, S stump, L log, W water, X weeds (can be cleared), f fertile soil, m mud, n nettles.
+// R rock, S stump, L log, W water, X weeds (can be cleared), B bushes, f fertile soil (чернозём), m mud, n nettles,
+// _ a stone path (bugs walk it, nothing is planted on it), + a bed (plants grow on it, bugs never walk it); a free cell
+// (.) is grass: both.
 // The waves are put together by makeWaves from a short recipe:
 // count, budget [first wave, added per wave] in bug weights, roster [bug, first wave it comes in],
 // boss [wave, boss, how many]. How hard a level is comes from its field, its waves and its pay, not from the
 // health of the bugs: that follows one rule everywhere.
 // pay: the dew for a wave got through [after the first wave, after the last but one], see wavePay.
 export const LEVELS = [
+  // The first five levels teach the game: the bugs keep to a stone path and the plants grow on the beds beside it
+  // (1–2), then a grass cell sends them the long way round (3), then a meadow in the middle is the first maze (4–5).
+  // Plants and branches open here, each with the bugs it answers; from «Лужайка» on everything is open.
+  {
+    name: 'Тропинка', theme: 'meadow', feature: 'path',
+    map: [
+      'BBB++++++++++B',
+      'BB+__________E',
+      'BB+_+++++++++B',
+      'BB+_+BBBBBBBBB',
+      'BB+_+BBBBWWRBB',
+      '+B+_+BBBBWBBBB',
+      'BA__+BBRBBBBSB',
+      '+++++BBBBBBBBB',
+    ],
+    dew: 200, pay: [130, 240],
+    plants: ['rose', 'pepper'],
+    hp: .7, count: 20, budget: [1.5, .9], roster: [['ant', 1], ['aphid', 4], ['grasshopper', 9]], boss: [[10, 'queen', 1], [20, 'queen', 1]],
+  },
+  {
+    name: 'Грядки', theme: 'forest',
+    map: [
+      'BBB++B+B+++BBB',
+      'BSB+______+BBB',
+      'BBB+_+++B_+BWB',
+      'BBBB_BBB+_BBWB',
+      'B++B_+RBB_+BBB',
+      'BA___BBB+_+BBB',
+      'B+++++BBB____E',
+      'BBBBBBBB+++BBB',
+    ],
+    dew: 240, pay: [170, 320],
+    plants: ['pumpkin', 'rose', 'pepper'],
+    hp: .8, count: 20, budget: [1.8, 1], roster: [['ant', 1], ['aphid', 2], ['caterpillar', 5], ['grasshopper', 8]], boss: [[10, 'queen', 1], [20, 'queen', 1]],
+  },
+  {
+    name: 'Развилка', theme: 'orchard', feature: 'fork',
+    map: [
+      'BBBBBSBBBBBRBB',
+      'BBBBBBBBBBBBBB',
+      'B+++++++++++BB',
+      'BA_______.___E',
+      'B+_++++++B_+BB',
+      'BB_+++++++_+WB',
+      'BB_________+WB',
+      'BB+++++++++BBB',
+    ],
+    dew: 280, pay: [210, 400],
+    plants: ['pumpkin', 'rose', 'pepper', 'mint'],
+    hp: .9, count: 20, budget: [2, 1.1], roster: [['ant', 1], ['beetle', 3], ['grasshopper', 5], ['aphid', 7], ['caterpillar', 9]], boss: [[10, 'rhino', 1], [20, 'rhino', 1]],
+  },
+  {
+    name: 'Поляна', theme: 'meadow', feature: 'meadow',
+    map: [
+      'BBB++++++++BBB',
+      'SBB+......++BB',
+      'BBB+......___E',
+      'BBB+......++BB',
+      'B+++......+BBB',
+      'BA__......+BWB',
+      'B+++......+RWB',
+      'BBB++++++++BBB',
+    ],
+    dew: 320, pay: [250, 500],
+    plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
+    hp: 1, count: 20, budget: [2.2, 1.2], roster: [['ant', 1], ['snail', 3], ['beetle', 4], ['caterpillar', 6], ['pillbug', 9], ['cricket', 12]], boss: [[10, 'slugking', 1], [20, 'slugking', 1]],
+  },
+  {
+    name: 'Большая поляна', theme: 'sunset',
+    map: [
+      'BB++++++++++BB',
+      'B++........+WB',
+      'BA_........+WB',
+      'B++........+BB',
+      'BB+........__E',
+      'SB+........+BB',
+      'BB+........+BB',
+      'BB++++++++++RB',
+    ],
+    dew: 340, pay: [290, 580],
+    plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
+    hp: 1, count: 20, budget: [2.2, 1.2], roster: [['ant', 1], ['butterfly', 2], ['beetle', 3], ['snail', 5], ['wasp', 6], ['caterpillar', 8], ['cricket', 12]], boss: [[10, 'hornet', 1], [20, 'hornet', 1]],
+  },
   {
     name: 'Лужайка', theme: 'meadow',
     map: [
@@ -182,8 +267,8 @@ export const LEVELS = [
       '..LL..........',
     ],
     dew: 370, pay: [380, 680],
-    plants: ['pumpkin', 'rose', 'pepper'],
-    hp: .7, count: 20, budget: [1.7, 1.1], roster: [['ant', 1], ['beetle', 3], ['grasshopper', 6], ['caterpillar', 9], ['cricket', 13]], boss: [[10, 'queen', 1], [20, 'queen', 1]],
+    plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
+    hp: 1.4, count: 20, budget: [3.1, 2], roster: [['ant', 1], ['beetle', 3], ['grasshopper', 6], ['caterpillar', 9], ['cricket', 13]], boss: [[10, 'rhino', 1], [20, 'rhino', 1]],
   },
   {
     name: 'Опушка', theme: 'forest', feature: 'fertile',
@@ -198,7 +283,7 @@ export const LEVELS = [
       '.....f..S.....',
     ],
     dew: 380, pay: [380, 660],
-    plants: ['pumpkin', 'rose', 'pepper', 'mint'],
+    plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
     count: 22, budget: [8.7, 4.4], roster: [['ant', 1], ['aphid', 2], ['grasshopper', 3], ['beetle', 4], ['snail', 6], ['caterpillar', 8], ['cricket', 11]], boss: [[11, 'queen', 1], [22, 'queen', 2]],
   },
   {
@@ -315,7 +400,7 @@ export const LEVELS = [
   },
 ];
 
-const OBSTACLE = { R: 'rock', S: 'stump', L: 'log', W: 'water', X: 'weed' }, TILE = { f: 'fertile', m: 'mud', n: 'nettle' };
+const OBSTACLE = { R: 'rock', S: 'stump', L: 'log', W: 'water', X: 'weed', B: 'bush' }, TILE = { f: 'fertile', m: 'mud', n: 'nettle', _: 'stone', '+': 'bed' };
 function readMap(L) {
   L.obstacles = []; L.tiles = []; L.entries = []; L.fruit = null;
   L.map.forEach((row, j) => [...row].forEach((ch, i) => {
@@ -341,6 +426,8 @@ export function makeWaves(L, seed, { flyShare = FLY_SHARE } = {}) {
     // a new bug takes a quarter of the wave, the bugs already known share the rest
     const picks = [], n = w < 3 ? 1 : w < 8 ? 2 : 3;
     while (picks.length < n && pool.length) picks.push(pool.splice(Math.floor(R() * pool.length), 1)[0]);
+    // never flyers alone while the level has walkers to send: a walker takes the last pick's place
+    if (picks.length && picks.every((k) => BUGS[k].fly)) { const w = pool.find((k) => !BUGS[k].fly); if (w) picks[picks.length - 1] = w; }
     const rest = 1 - .25 * fresh.length, shares = [[1], [.6, .4], [.45, .33, .22]][picks.length - 1].map((v) => v * rest);
     // flyers cross the maze in a straight line: they stay a side threat, never most of a wave (a wall of them out of
     // nowhere was a loss whatever the maze); what they would have taken goes to the walkers of the wave
@@ -363,4 +450,6 @@ export function makeWaves(L, seed, { flyShare = FLY_SHARE } = {}) {
 }
 // hp: how healthy the bugs of a level are against their own health (BUGS), on top of their growth wave by wave;
 // fewer and healthier bugs make a long maze pay more against a garden by the trail as it is
-LEVELS.forEach((L, n) => { L.hp ??= 1; readMap(L); L.waves = makeWaves(L, 101 + n); });
+// seed: the draw of a level's waves, its own (the levels put in before «Лужайка» did not change the waves of those after)
+const OPEN = LEVELS.findIndex((L) => L.name === 'Лужайка');
+LEVELS.forEach((L, n) => { L.hp ??= 1; L.seed ??= n < OPEN ? 201 + n : 101 + n - OPEN; readMap(L); L.waves = makeWaves(L, L.seed); });

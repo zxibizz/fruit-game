@@ -100,11 +100,11 @@ impl<'a> Game<'a> {
     pub fn stub_at(&self, i: i32, j: i32) -> Option<usize> { self.stubs.iter().position(|s| s.i == i && s.j == j) }
 
     // Distance (in steps) from every free cell to the fruit; `extra`: a cell taken as closed.
-    pub fn compute_dist(&self, extra: i32) -> [f64; N] { dist_over(&self.grid, self.fruit, extra) }
+    pub fn compute_dist(&self, extra: i32) -> [f64; N] { dist_over(&self.grid, &self.tiles, self.fruit, extra) }
     // the same with the roots of the eaten plants closed too (they grow back after the wave)
     fn dist_with_roots(&self, extra: i32) -> [f64; N] {
         let mut grid = self.grid; for s in &self.stubs { grid[key(s.i, s.j)] = Cell::Rock; }
-        dist_over(&grid, self.fruit, extra)
+        dist_over(&grid, &self.tiles, self.fruit, extra)
     }
     // Diggers eat through plants: a plant is a cell that takes as many steps as they would walk while eating it.
     fn dig_steps(&self, c: Cell) -> f64 {
@@ -121,7 +121,7 @@ impl<'a> Game<'a> {
             for (di, dj) in DIRS {
                 let (ni, nj) = (i + di, j + dj); if !inside(ni, nj) { continue; }
                 let nk = key(ni, nj);
-                if matches!(self.grid[nk], Cell::Rock | Cell::Weed) { continue; } // rocks, stumps and logs stay in the way
+                if matches!(self.grid[nk], Cell::Rock | Cell::Weed) || self.tiles[nk] == Tile::Bed { continue; } // rocks, stumps, logs and beds stay in the way
                 if d[u] + enter < d[nk] { d[nk] = d[u] + enter; }
             }
         }
@@ -131,7 +131,7 @@ impl<'a> Game<'a> {
         let mut best = None; let mut bd = INF;
         let mut try_cell = |di: i32, dj: i32| {
             let (ni, nj) = (i + di, j + dj); if !inside(ni, nj) { return; }
-            let c = self.grid[key(ni, nj)]; if matches!(c, Cell::Rock | Cell::Weed) { return; }
+            let c = self.grid[key(ni, nj)]; if matches!(c, Cell::Rock | Cell::Weed) || self.tiles[key(ni, nj)] == Tile::Bed { return; }
             let v = self.dig[key(ni, nj)] + 1.0 + self.dig_steps(c); if v < bd - 1e-6 { bd = v; best = Some((ni, nj)); }
         };
         try_cell(dir.0, dir.1);
@@ -193,7 +193,7 @@ impl<'a> Game<'a> {
         if !inside(i, j) { return true; }
         if self.grid[key(i, j)] != Cell::Empty { return true; }
         if self.entries.iter().any(|&e| e == (i, j)) || (i, j) == self.fruit { return true; }
-        if self.tiles[key(i, j)] == Tile::Nettle { return true; }
+        if matches!(self.tiles[key(i, j)], Tile::Nettle | Tile::Stone) { return true; }
         if self.stub_at(i, j).is_some() { return true; }
         self.blocks(i, j)
     }
@@ -713,7 +713,7 @@ impl<'a> Game<'a> {
     }
 }
 
-pub fn dist_over(grid: &[Cell; N], fruit: (i32, i32), extra: i32) -> [f64; N] {
+pub fn dist_over(grid: &[Cell; N], tiles: &[Tile; N], fruit: (i32, i32), extra: i32) -> [f64; N] {
     let mut d = [INF; N]; let mut q = [(0i32, 0i32); N]; let mut qn = 1; q[0] = fruit;
     d[key(fruit.0, fruit.1)] = 0.0;
     let mut h = 0;
@@ -723,7 +723,7 @@ pub fn dist_over(grid: &[Cell; N], fruit: (i32, i32), extra: i32) -> [f64; N] {
             let (ni, nj) = (i + di, j + dj);
             if !inside(ni, nj) { continue; }
             let nk = key(ni, nj);
-            if d[nk] != INF || grid[nk] != Cell::Empty || nk as i32 == extra { continue; }
+            if d[nk] != INF || grid[nk] != Cell::Empty || tiles[nk] == Tile::Bed || nk as i32 == extra { continue; }
             d[nk] = k + 1.0; q[qn] = (ni, nj); qn += 1;
         }
     }

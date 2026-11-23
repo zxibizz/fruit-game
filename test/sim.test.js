@@ -17,7 +17,7 @@ test('the native simulation and public/game.js walk the same way, step for step'
 test('the mazes of the balance matrix: the game walks them as long as they are said to be, every length in more than one shape', async () => {
   const { LEVELS } = await import('../public/data.js'), { createGame, place, placeProblem, trails } = await import('../public/game.js'), { routes } = await import('../sim/js/play.mjs');
   const ORDER = ['min', 'mid', 'above', 'max'];
-  for (const L of routes(LEVELS.map((_, n) => n))) {
+  for (const L of routes(LEVELS.map((_, n) => n).filter((n) => !LEVELS[n].map.some((r) => r.includes('_'))))) { // (a stone path has no mazes)
     const at = `level ${L.level + 1}`, walk = (walls) => { const g = createGame(L.level, 1); g.dew = 1e9;
       for (const w of walls) for (const [i, j] of w) if (!placeProblem(g, i, j)) place(g, 'pumpkin', i, j);
       return Math.min(...trails(g).map((t) => t.length)); };

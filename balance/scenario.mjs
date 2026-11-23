@@ -61,7 +61,7 @@ export function applyOverrides(set = {}, waveSeed = null) {
     o[path.at(-1)] = v;
   }
   if (waveSeed != null) LEVELS.forEach((_, n) => regen.add(n));
-  for (const n of regen) LEVELS[n].waves = makeWaves(LEVELS[n], waveSeed != null ? waveSeed * 1000 + n : 101 + n, flyShare != null ? { flyShare } : {});
+  for (const n of regen) LEVELS[n].waves = makeWaves(LEVELS[n], waveSeed != null ? waveSeed * 1000 + n : LEVELS[n].seed, flyShare != null ? { flyShare } : {});
 }
 // The options of a scenario as the bot takes them (sim/js/play.mjs): the perks and the plants by name, the bank in dew.
 export function resolve(sc) {

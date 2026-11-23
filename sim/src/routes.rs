@@ -30,12 +30,12 @@ struct Line { up: bool, at: i32, lo: i32, hi: i32, gap: i32 }
 impl Line {
     fn cells(&self) -> Wall { (self.lo..=self.hi).filter(|&k| k != self.gap).map(|k| if self.up { (self.at, k) } else { (k, self.at) }).collect() }
 }
-fn free(g: &Game, i: i32, j: i32) -> bool { g.grid[key(i, j)] == Cell::Empty && g.tiles[key(i, j)] != Tile::Nettle && (i, j) != g.fruit && !g.entries.iter().any(|&e| e == (i, j)) }
+fn free(g: &Game, i: i32, j: i32) -> bool { g.grid[key(i, j)] == Cell::Empty && !matches!(g.tiles[key(i, j)], Tile::Nettle | Tile::Stone | Tile::Bed) && (i, j) != g.fruit && !g.entries.iter().any(|&e| e == (i, j)) }
 // every cell some trail runs over with the walls standing, and the length of the shortest trail (None: no way through)
 pub fn walk(g: &Game, walls: &[Wall]) -> Option<(usize, Vec<(i32, i32)>)> {
     let mut grid = g.grid;
     for w in walls { for &(i, j) in w { if free(g, i, j) { grid[key(i, j)] = Cell::Rock; } } }
-    let dist = dist_over(&grid, g.fruit, -1); let (mut min, mut seen, mut all) = (usize::MAX, [false; N], Vec::new());
+    let dist = dist_over(&grid, &g.tiles, g.fruit, -1); let (mut min, mut seen, mut all) = (usize::MAX, [false; N], Vec::new());
     for e in 0..g.entries.len() {
         let tr = g.trail(&dist, e);
         if *tr.last().unwrap() != g.fruit { return None; }
@@ -119,7 +119,7 @@ pub fn pool(d: &Data, level: usize) -> Vec<(Vec<Wall>, [f64; NM])> {
     for c in &cs { if c.shape != "best" && seen.contains(&&c.cells) { continue; } seen.push(&c.cells); all.push((c.shape, c.lines.iter().map(|l| l.cells()).collect(), &c.cells)); }
     for (shape, walls, cells) in all {
         let mut grid = g.grid; for w in &walls { for &(i, j) in w { if free(&g, i, j) { grid[key(i, j)] = Cell::Rock; } } }
-        let dist = dist_over(&grid, g.fruit, -1); let tr = g.trail(&dist, 0); if *tr.last().unwrap() != g.fruit { continue; }
+        let dist = dist_over(&grid, &g.tiles, g.fruit, -1); let tr = g.trail(&dist, 0); if *tr.last().unwrap() != g.fruit { continue; }
         let len = walk(&g, &walls).map_or(tr.len(), |x| x.0);
         let mut on = [false; N]; for &(i, j) in &tr { on[key(i, j)] = true; }
         let mut wraps: Vec<usize> = Vec::new();

@@ -514,6 +514,13 @@ function bushBase(c, col, w = 1) {
   for (const [dx, dy, r] of [[-9, -9, 9], [9, -10, 9], [0, -6, 10], [-5, -18, 9.5], [6, -19, 9.5], [0, -26, 8]]) hdBall(c, dx * w, dy, r * w, r, dy < -15 ? lighten(col, .08) : col, { specA: .4 });
 }
 function bush(c, col, u) { c.save(); c.scale(u, u); bushBase(c, col); c.restore(); }
+// A bush filling a cell of the field (nothing grows there, bugs do not go there), a little different every time.
+function hdBush(c, x, y) {
+  const R = rng(hash2(x, y) + 11); c.save(); c.translate(x + (R() - .5) * 4, y + 12); hdShadow(c, 0, 1, 18, 6, 1);
+  bush(c, ['#3f8a3a', '#468f3c', '#3a7f40'][Math.floor(R() * 3)], .95 + R() * .15);
+  if (R() > .6) for (let n = 0; n < 3; n++) { c.beginPath(); c.arc((R() - .5) * 18, -12 - R() * 14, 1.8, 0, TAU); c.fillStyle = R() > .5 ? '#fff4f8' : '#ffd84a'; c.fill(); }
+  c.restore();
+}
 function sparkle(c, x, y, r, col = '#fff3a8') {
   c.save(); c.beginPath(); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4, q = i % 2 ? r * .32 : r; c.lineTo(x + Math.cos(a) * q, y + Math.sin(a) * q); } c.closePath();
   c.fillStyle = col; c.fill(); c.lineWidth = .7; c.strokeStyle = 'rgba(140,90,10,.65)'; c.stroke(); c.restore();
@@ -1038,6 +1045,24 @@ function jagLeaf(c, x, y, len, ang, col, o = {}) {
 function hdTile(c, kind, x, y) {
   const seed = hash2(x, y), R = rng(seed + 3); R(); R();
   c.save();
+  if (kind === 'stone') {
+    // a path of cobbles, a little over the cell so that the stones of a path meet
+    c.beginPath(); rrect(c, x - 21.5, y - 21.5, 43, 43, 6); c.fillStyle = '#a89c86'; c.fill();
+    for (let n = 0; n < 7; n++) {
+      const cx = x + (n % 3 - 1) * 13 + (R() - .5) * 4 + (Math.floor(n / 3) % 2 ? 6 : 0), cy = y + (Math.floor(n / 3) - 1) * 13 + (R() - .5) * 3;
+      hdBlob(c, (cc) => wobbly(cc, cx, cy, 6.4 + R() * 1.4, 5.6 + R() * 1.2, seed + n, .12, 8, .4), R() > .5 ? '#cfc4ad' : '#bfb39a', cx, cy - 2, 7, { olk: .55, k: .5 });
+    }
+    c.restore(); return;
+  }
+  if (kind === 'bed') {
+    // a garden bed: dark soil in furrows inside a low wooden rim: plants grow here, bugs never walk here
+    c.beginPath(); rrect(c, x - 19, y - 19, 38, 38, 7); c.fillStyle = '#9a6a3c'; c.fill(); c.lineWidth = 2; c.strokeStyle = 'rgba(90,55,25,.8)'; c.stroke();
+    c.beginPath(); rrect(c, x - 16, y - 16, 32, 32, 5); c.fillStyle = '#6a4222'; c.fill();
+    c.save(); c.beginPath(); rrect(c, x - 16, y - 16, 32, 32, 5); c.clip();
+    for (let i = -1; i <= 1; i++) { const fy = y + i * 9; c.beginPath(); c.moveTo(x - 17, fy); c.lineTo(x + 17, fy); c.lineWidth = 3; c.strokeStyle = 'rgba(40,22,8,.35)'; c.stroke(); c.beginPath(); c.moveTo(x - 17, fy - 3); c.lineTo(x + 17, fy - 3); c.lineWidth = 1.2; c.strokeStyle = 'rgba(180,120,70,.4)'; c.stroke(); }
+    for (let i = 0; i < 9; i++) { c.beginPath(); c.arc(x + (R() - .5) * 28, y + (R() - .5) * 28, .7 + R(), 0, TAU); c.fillStyle = 'rgba(190,130,70,.7)'; c.fill(); }
+    c.restore(); c.restore(); return;
+  }
   if (kind === 'fertile') {
     // rich dark bed: furrows, crumbs, two sprouts and a glint: plants grow stronger here
         const bed = cc => wobbly(cc, x, y, 19, 18.5, seed, .05, 14, .75);
@@ -1166,4 +1191,4 @@ function hdWeb(c, x, y, r = 18) {
   c.restore();
 }
 
-export { hdBall, hdBlob, hdLeaf, hdShadow, hdLine, hdCurve, hdEye, hdText, hdBug, hdPlant, hdApple, hdStump, hdAnthill, hdRock, hdLog, hdGrass, hdPath, hdBorderBushes, hdForeground, hdVignette, hdMotes, fxThorn, fxKernel, fxStar, fxHit, fxDmg, fxFrost, fxIced, fxFire, hdDrop, hdHp, uiPanel, uiRound, iconFrost, iconRain, iconBirds, hdSoil, hdTile, hdWater, hdWeed, hdWeb, hdDapple, hdGrade, hdSun2, bladeTri, rrect, along, chaikin, rng, lighten, darken, alpha, mix, TAU, star5, strokePts };
+export { hdBush, hdBall, hdBlob, hdLeaf, hdShadow, hdLine, hdCurve, hdEye, hdText, hdBug, hdPlant, hdApple, hdStump, hdAnthill, hdRock, hdLog, hdGrass, hdPath, hdBorderBushes, hdForeground, hdVignette, hdMotes, fxThorn, fxKernel, fxStar, fxHit, fxDmg, fxFrost, fxIced, fxFire, hdDrop, hdHp, uiPanel, uiRound, iconFrost, iconRain, iconBirds, hdSoil, hdTile, hdWater, hdWeed, hdWeb, hdDapple, hdGrade, hdSun2, bladeTri, rrect, along, chaikin, rng, lighten, darken, alpha, mix, TAU, star5, strokePts };

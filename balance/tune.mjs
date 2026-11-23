@@ -38,7 +38,7 @@ const med = (a) => { const s = [...a].sort((x, y) => x - y); return s.length % 2
 const r1 = (v) => Math.round(v * 10) / 10, pct = (v) => `${Math.round(v * 100)}%`;
 // the draws of the waves a level is measured on, and data.js as it was (all the levels, the draw of data.js)
 const DRAWS = [0, 1, 2, 3];
-const reset = () => LEVELS.forEach((L, n) => { L.waves = makeWaves(L, 101 + n); });
+const reset = () => LEVELS.forEach((L) => { L.waves = makeWaves(L, L.seed); });
 const mazes = Object.fromEntries(mazesOf(levels).map((L) => [L.level, L]));
 
 // the scenarios of a level: who, and the options the bot takes

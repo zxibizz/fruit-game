@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame, place, upgrade, startWave, step } from '../public/game.js';
+import { LEVELS } from '../public/data.js';
 import { createTelemetry } from '../public/telemetry.js';
 
 // The recorder of public/telemetry.js on a real party of the game: what a player did and what the wave did come out
@@ -10,7 +11,7 @@ const memory = () => { const m = new Map(); return { getItem: (k) => (m.has(k) ?
 test('a party is recorded wave by wave: the garden, the trail, what was built and what bit the fruit', async () => {
   const sent = []; let up = false;
   const tm = createTelemetry({ storage: memory(), post: async (body) => { if (up) sent.push(...JSON.parse(body)); return up; } });
-  const g = createGame(0, 7, {}); tm.start(g);
+  const g = createGame(LEVELS.findIndex((L) => L.name === 'Лужайка'), 7, {}); tm.start(g);
   g.dew = 1000; for (let j = 0; j < 7; j++) place(g, 'pumpkin', 9, j); place(g, 'rose', 8, 3); place(g, 'pepper', 10, 4); upgrade(g, g.plants.at(-1));
   tm.observe(g); g.events.length = 0;
   startWave(g);
@@ -20,7 +21,7 @@ test('a party is recorded wave by wave: the garden, the trail, what was built an
   up = true; await tm.flush();
   assert.equal(tm.pending, 0, 'sent and dropped');
   const [start, wave] = sent;
-  assert.equal(start.type, 'start'); assert.equal(start.level, 0); assert.equal(start.seed, 7); assert.ok(start.dev && start.id && start.ver);
+  assert.equal(start.type, 'start'); assert.equal(start.level, LEVELS.findIndex((L) => L.name === 'Лужайка')); assert.equal(start.seed, 7); assert.ok(start.dev && start.id && start.ver);
   assert.equal(wave.type, 'wave'); assert.equal(wave.n, 1); assert.equal(wave.id, start.id);
   assert.equal(wave.garden.plants.length, 9); assert.ok(wave.garden.trail > 14, 'the pumpkins lengthen the trail');
   assert.deepEqual(wave.before.filter((a) => a[0] === 'place').length, 9); assert.equal(wave.before.filter((a) => a[0] === 'up').length, 1);

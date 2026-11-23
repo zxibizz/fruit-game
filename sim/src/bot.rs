@@ -122,7 +122,7 @@ pub fn layout(d: &Data, level: usize, terrain: bool) -> Vec<(i32, i32)> {
     let base = Game::new(d, level, 1, &[]);
     let value = |walls: &[(i32, i32)]| -> f64 {
         let mut g = base.clone();
-        for &(col, gap) in walls { for j in 0..ROWS { if j != gap && g.grid[key(col, j)] == Cell::Empty && g.tiles[key(col, j)] != Tile::Nettle && (col, j) != g.fruit { g.grid[key(col, j)] = Cell::Rock; } } }
+        for &(col, gap) in walls { for j in 0..ROWS { if j != gap && g.grid[key(col, j)] == Cell::Empty && !matches!(g.tiles[key(col, j)], Tile::Nettle | Tile::Stone | Tile::Bed) && (col, j) != g.fruit { g.grid[key(col, j)] = Cell::Rock; } } }
         let dist = g.compute_dist(-1); let mut min = f64::INFINITY;
         for e in 0..g.entries.len() {
             let tr = g.trail(&dist, e);
@@ -364,7 +364,7 @@ impl<'a, 'o> Bot<'a, 'o> {
         let gain_of = |q: BP, i: i32, j: i32| -> f64 {
             if on[key(i, j)] {
                 let mut grid = g.grid; grid[key(i, j)] = Cell::Rock;
-                let tr2 = trail_of(g, &compute_dist(&grid, g.fruit, -1));
+                let tr2 = trail_of(g, &compute_dist(&grid, &g.tiles, g.fruit, -1));
                 worth(g, &tr2, &o, terrain, Some(q)) - now + (tr2.len() as f64 - tr.len() as f64) * 1e-3 * o.n_g
             } else if wide(g, &q) { worth(g, &tr, &o, terrain, Some(q)) - now }
             else { add(term(g, &s, &tr, &o, terrain, &q), (0.0, 0.0)) } // only its own share: the others do not change
@@ -424,7 +424,7 @@ impl<'a, 'o> Bot<'a, 'o> {
                 offer(gain * lean_up(p.kind), c, Act::Up(p.id, br), true);
             }
             if p.kind == d.pumpkin && p.lvl == 1 && g.phase == Phase::Build {
-                for &kind in &self.others {
+                for &kind in self.others.iter().filter(|&&k| k != d.pumpkin) {
                     if !allowed_at(p.i, p.j, kind) { continue; }
                     let q = BP { kind, ..bp };
                     let gain = if wide(g, &q) { worth(g, &tr, &o, terrain, Some(q)) - now } else { add(term(g, &s, &tr, &o, terrain, &q), (0.0, 0.0)) };
@@ -494,6 +494,7 @@ impl<'a, 'o> Bot<'a, 'o> {
         for w in 0..due {
             for c in 0..self.walls[w].len() {
                 let (i, j) = self.walls[w][c];
+                if !self.kinds.contains(&d.pumpkin) || self.g.tiles[key(i, j)] == Tile::Bed { continue; } // (a wall only on grass: a bed shuts nothing)
                 if self.g.grid[key(i, j)] != Cell::Empty || self.g.stub_at(i, j).is_some() || !self.room() || self.g.place_problem(i, j) { continue; }
                 if !self.place(d.pumpkin, i, j) { return; }
             }
@@ -532,7 +533,7 @@ impl<'a, 'o> Bot<'a, 'o> {
 }
 
 // the free function behind Game::compute_dist, for a field the bot only imagines
-fn compute_dist(grid: &[Cell; N], fruit: (i32, i32), extra: i32) -> [f64; N] { crate::game::dist_over(grid, fruit, extra) }
+fn compute_dist(grid: &[Cell; N], tiles: &[Tile; N], fruit: (i32, i32), extra: i32) -> [f64; N] { crate::game::dist_over(grid, tiles, fruit, extra) }
 
 pub fn play_level<'a>(d: &'a Data, level: usize, opt: &Opts, layouts: &dyn Fn(usize, bool) -> Vec<(i32, i32)>, mazes: &dyn Fn(usize, &str) -> Option<Vec<Wall>>, pool: &dyn Fn(usize) -> std::sync::Arc<Vec<(Vec<Wall>, [f64; NM])>>, record: bool) -> (Res, Option<Vec<Op>>) {
     let g = Game::new(d, level, opt.seed, &opt.meta); let lv = &d.levels[level];
@@ -546,7 +547,10 @@ pub fn play_level<'a>(d: &'a Data, level: usize, opt: &Opts, layouts: &dyn Fn(us
         all[..round(all.len() as f64 * opt.route) as usize].iter().map(|&(col, gap)| (0..ROWS).filter(|&j| j != gap).map(|j| (col, j)).collect()).collect()
     };
     let kinds: Vec<usize> = lv.plants.iter().cloned().filter(|&k| opt.plants.as_ref().map_or(true, |a| a.contains(&k))).collect();
-    let others: Vec<usize> = kinds.iter().cloned().filter(|&k| k != d.pumpkin).collect();
+    // walls go on grass only (a bed shuts nothing, nothing grows on stone): on a stone path there is no maze to build
+    let walls: Vec<Wall> = walls.into_iter().map(|w| w.into_iter().filter(|&(i, j)| !matches!(g.tiles[key(i, j)], Tile::Bed | Tile::Stone)).collect::<Wall>()).filter(|w| !w.is_empty()).collect();
+    // the plants put beside the trail (a pumpkin too where there is no maze to build: its thorns and guard by a path)
+    let others: Vec<usize> = kinds.iter().cloned().filter(|&k| k != d.pumpkin || walls.is_empty()).collect();
     let reach = others.iter().fold(f64::NEG_INFINITY, |m, &k| m.max(d.plants[k].st[Stat::Range as usize][1])) + 0.6;
     let planned: Vec<(i32, i32)> = if let Some(plan) = &opt.plan { plan.iter().filter(|s| s.0.is_some()).map(|s| (s.1, s.2)).collect() } else { walls.iter().flatten().cloned().collect() };
     let first_digger = lv.waves.iter().position(|w| w.iter().any(|gr| d.bugs[gr.kind].dig != 0.0)).map_or(0, |k| k as i32 + 1);
@@ -554,8 +558,8 @@ pub fn play_level<'a>(d: &'a Data, level: usize, opt: &Opts, layouts: &dyn Fn(us
     let mut keep = [false; N];
     {
         let f = Game::new(d, level, 1, &[]); let mut grid = f.grid;
-        for &(i, j) in &planned { if grid[key(i, j)] == Cell::Empty && f.tiles[key(i, j)] != Tile::Nettle { grid[key(i, j)] = Cell::Rock; } }
-        for (i, j, _) in trail_of(&f, &compute_dist(&grid, f.fruit, -1)) { keep[key(i, j)] = true; }
+        for &(i, j) in &planned { if grid[key(i, j)] == Cell::Empty && !matches!(f.tiles[key(i, j)], Tile::Nettle | Tile::Stone | Tile::Bed) { grid[key(i, j)] = Cell::Rock; } }
+        for (i, j, _) in trail_of(&f, &compute_dist(&grid, &f.tiles, f.fruit, -1)) { keep[key(i, j)] = true; }
     }
     let dew0 = g.dew;
     let mut b = Bot { g, d, lv, opt, o: Soon::default(), r: (opt.seed as i32).wrapping_mul(7919).wrapping_add(13), walls, planned, keep, kinds, others, reach, first_digger,

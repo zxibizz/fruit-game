@@ -7,8 +7,9 @@ export const VERSION = '0.27.0';
 // every level retuned; 4: the waves retuned for the ordinary player, some levels with fewer and healthier bugs; 5: the
 // anthill of «Старый сад» moved to the edge, where an old garden could shut the trail; 6: diggers last in a wave;
 // 7: the anthills and the fruit of «Закат» moved; 8: no healing, the roots grow back after the wave (an old garden
-// with its roots grown back could shut the trail); 9: five plants with branches; an older save is dropped).
-const SAVE_V = 9;
+// with its roots grown back could shut the trail); 9: five plants with branches; 10: five levels before «Лужайка», every
+// level after them moved on by five; an older save is dropped).
+const SAVE_V = 10;
 export { COLS, ROWS, BREAK };
 
 const DIRS = [[-1, 0], [0, -1], [0, 1], [1, 0]]; // tie order: towards the fruit side first
@@ -52,7 +53,7 @@ export function computeDist(g, extra = -1, roots = false) {
     const [i, j] = q[h], k = d[key(i, j)];
     for (const [di, dj] of DIRS) {
       const ni = i + di, nj = j + dj, nk = key(ni, nj);
-      if (!inside(ni, nj) || d[nk] !== INF || g.grid[nj][ni] || nk === extra || (roots && stubAt(g, ni, nj))) continue;
+      if (!inside(ni, nj) || d[nk] !== INF || g.grid[nj][ni] || g.tiles[nj][ni] === 'bed' || nk === extra || (roots && stubAt(g, ni, nj))) continue;
       d[nk] = k + 1; q.push([ni, nj]);
     }
   }
@@ -71,7 +72,7 @@ export function computeDig(g) {
     done[u] = true; const i = u % COLS, j = (u - i) / COLS, enter = 1 + digSteps(g.grid[j][i]);
     for (const [di, dj] of DIRS) {
       const ni = i + di, nj = j + dj; if (!inside(ni, nj)) continue;
-      const c = g.grid[nj][ni]; if (c && !c.type) continue; // rocks, stumps and logs stay in the way
+      const c = g.grid[nj][ni]; if ((c && !c.type) || g.tiles[nj][ni] === 'bed') continue; // rocks, stumps, logs and beds stay in the way
       if (d[u] + enter < d[key(ni, nj)]) d[key(ni, nj)] = d[u] + enter;
     }
   }
@@ -81,7 +82,7 @@ function nextDig(g, i, j, dir) {
   let best = null, bd = INF;
   const tryCell = (di, dj) => {
     const ni = i + di, nj = j + dj; if (!inside(ni, nj)) return;
-    const c = g.grid[nj][ni]; if (c && !c.type) return;
+    const c = g.grid[nj][ni]; if ((c && !c.type) || g.tiles[nj][ni] === 'bed') return;
     const v = g.dig[key(ni, nj)] + 1 + digSteps(c); if (v < bd - 1e-6) { bd = v; best = [ni, nj]; }
   };
   if (dir) tryCell(dir[0], dir[1]);
@@ -173,6 +174,7 @@ export function placeProblem(g, i, j) {
   if (g.grid[j][i]) return 'busy';
   if (isEntry(g, i, j) || (i === g.fruit[0] && j === g.fruit[1])) return 'busy';
   if (g.tiles[j][i] === 'nettle') return 'nettle';
+  if (g.tiles[j][i] === 'stone') return 'stone';
   if (stubAt(g, i, j)) return 'roots';
   return blocks(g, i, j) ? 'blocks' : null;
 }

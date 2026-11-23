@@ -41,7 +41,7 @@ pub struct BugDef {
     pub charge: Option<[f64; 3]>, pub brood: Option<(usize, usize, f64)>, pub web: Option<[f64; 4]>, pub split: Option<(usize, usize)>,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Tile { None, Fertile, Mud, Nettle }
+pub enum Tile { None, Fertile, Mud, Nettle, Stone, Bed }
 pub struct Group { pub kind: usize, pub count: usize, pub gap: f64, pub delay: f64 }
 pub struct Level {
     pub dew: f64, pub hp: f64, pub pay: [f64; 2], pub count: usize, pub pay_at: Vec<f64>, pub plants: Vec<usize>,
@@ -123,7 +123,7 @@ impl Data {
                 dew: l.at("dew").num(), hp: l.get("hp").map_or(1.0, |v| v.num()), pay: [pay[0], pay[1]], count: l.at("count").num() as usize, pay_at: nums(l.at("payAt")),
                 plants: l.at("plants").arr().iter().map(|p| plant_ix(p.str())).collect(),
                 obstacles: l.at("obstacles").arr().iter().map(|o| { let a = o.arr(); (a[0].num() as i32, a[1].num() as i32, a[2].str() == "weed") }).collect(),
-                tiles: l.at("tiles").arr().iter().map(|o| { let a = o.arr(); (a[0].num() as i32, a[1].num() as i32, match a[2].str() { "fertile" => Tile::Fertile, "mud" => Tile::Mud, "nettle" => Tile::Nettle, t => panic!("unknown ground {}", t) }) }).collect(),
+                tiles: l.at("tiles").arr().iter().map(|o| { let a = o.arr(); (a[0].num() as i32, a[1].num() as i32, match a[2].str() { "fertile" => Tile::Fertile, "mud" => Tile::Mud, "nettle" => Tile::Nettle, "stone" => Tile::Stone, "bed" => Tile::Bed, t => panic!("unknown ground {}", t) }) }).collect(),
                 entries: l.at("entries").arr().iter().map(|e| e.num() as i32).collect(),
                 fruit: (fruit[0] as i32, fruit[1] as i32),
                 waves: l.at("waves").arr().iter().map(|w| w.arr().iter().map(|g| { let a = g.arr(); Group { kind: bug_ix(a[0].str()), count: a[1].num() as usize, gap: a[2].num(), delay: a[3].num() } }).collect()).collect(),

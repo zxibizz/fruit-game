@@ -35,7 +35,7 @@ const base = { ...resolve({ level, opts: SMART }), ...(policy ? { policy } : {})
 mkdirSync(dirname(out), { recursive: true }); // before the search: its result must have somewhere to go
 // the waves of the game (draw 0) and two other draws of them; data.js as it was after
 const DRAWS = [0, 1, 2], datas = DRAWS.map((w) => { if (w) applyOverrides({}, w); return exportData(); });
-LEVELS.forEach((L, n) => { L.waves = makeWaves(L, 101 + n); });
+LEVELS.forEach((L) => { L.waves = makeWaves(L, L.seed); });
 // plays [{ opts, w }] (w: the draw, 0 when not said), a batch per draw, in the order given
 const run = (list) => { const r = Array(list.length);
   for (const w of new Set(list.map((x) => x.w || 0))) { const ks = list.map((x, k) => ((x.w || 0) === w ? k : -1)).filter((k) => k >= 0);
