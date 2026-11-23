@@ -126,7 +126,7 @@ let ufx = []; // effects in UI space
 const load = (k, d) => { try { return Object.assign(d, JSON.parse(localStorage.getItem(k) || '{}')); } catch { return d; } };
 const progress = load('fruit.progress', { stars: [], perks: {}, bugs: {}, cards: {} });
 // v2: five levels came before «Лужайка» (0.27.0): the stars of the levels a player had move on by five
-if (!progress.v) { if (progress.stars.length) progress.stars = [0, 0, 0, 0, 0, ...progress.stars]; progress.v = 2; localStorage.setItem('fruit.progress', JSON.stringify(progress)); }
+if (!progress.v) { if (progress.stars.length) progress.stars = [0, 0, 0, 0, 0, ...progress.stars]; progress.v = 2; localStorage.setItem('fruit.progress', JSON.stringify(progress)); localStorage.removeItem('fruit.save'); } // (a level left unfinished had the old numbers: dropped, as its save version is anyway)
 const saveProgress = () => localStorage.setItem('fruit.progress', JSON.stringify(progress));
 const audio = load('fruit.audio', { vol: .6, music: .35 });
 const starsAll = () => progress.stars.reduce((a, b) => a + (b || 0), 0);

@@ -15,7 +15,8 @@
 //   upper bound for a lazy garden); meta — the perks bought; max_plants — a cap on the garden; place — where the
 //   shooters go: best (most damage for the dew), end / start (only by the last / first part of the trail), spread
 //   (any useful cell, picked at random); plants — the kinds it may plant; upgrades — greedy, none or first (grows
-//   what it has before planting more); early — calls every wave at once (else waits for the countdown).
+//   what it has before planting more); early — calls every wave at once (else waits for the countdown); top — the
+//   highest level it grows a plant to (2: it never takes a branch).
 // No plant is mended in a wave (an eaten one is a hole till the wave is over), so the bot keeps no dew for that.
 use crate::data::*;
 use crate::game::*;
@@ -31,11 +32,11 @@ pub enum Upgrades { Greedy, None, First }
 #[derive(Clone, Debug)]
 pub struct Opts {
     pub seed: u32, pub max_plants: f64, pub route: f64, pub maze: Option<String>, pub hp: f64, pub plan: Option<Vec<(Option<usize>, i32, i32)>>, pub policy: Option<Policy>, pub terrain: bool, pub powers: Powers, pub bank: Option<f64>, pub meta: Vec<(String, usize)>,
-    pub place: Where, pub plants: Option<Vec<usize>>, pub upgrades: Upgrades, pub early: bool,
+    pub place: Where, pub plants: Option<Vec<usize>>, pub upgrades: Upgrades, pub early: bool, pub top: usize, pub trust: Vec<f64>,
     pub steps: usize, // the party stops after so many steps of the game (for the parity check: a part of a level is enough there)
 }
 impl Default for Opts {
-    fn default() -> Opts { Opts { seed: 7, max_plants: f64::INFINITY, route: 1.0, maze: None, hp: 1.0, plan: None, policy: None, terrain: true, powers: Powers::On, bank: None, meta: Vec::new(), place: Where::Best, plants: None, upgrades: Upgrades::Greedy, early: true, steps: usize::MAX } }
+    fn default() -> Opts { Opts { seed: 7, max_plants: f64::INFINITY, route: 1.0, maze: None, hp: 1.0, plan: None, policy: None, terrain: true, powers: Powers::On, bank: None, meta: Vec::new(), place: Where::Best, plants: None, upgrades: Upgrades::Greedy, early: true, top: 4, trust: Vec::new(), steps: usize::MAX } }
 }
 // the garden as it stood when a wave began (Bot::gauge)
 #[derive(Clone, Copy, Debug)]
@@ -102,7 +103,10 @@ fn bias(p: &[f64; NF], f: &[f64; NF]) -> f64 { let z: f64 = (0..NF).map(|k| p[k]
 struct BP { kind: usize, lvl: usize, br: u8, i: i32, j: i32 }
 // the coming waves as the bot sees them
 #[derive(Clone, Copy, Default)]
-struct Soon { set: bool, armor: f64, crowd: f64, n_g: f64, n_a: f64, hp_g: f64, hp_a: f64 }
+struct Soon { set: bool, armor: f64, crowd: f64, n_g: f64, n_a: f64, hp_g: f64, hp_a: f64, trust: [f64; 16] }
+// how much the bot trusts its own count of what a plant does, by the plant and its branch (0: not given, taken as 1):
+// the count is a formula, the trust is fitted on parties (balance/calibrate.mjs)
+fn trust(o: &Soon, p: &BP) -> f64 { let k = p.kind * 3 + if p.lvl <= 2 { 0 } else { p.br as usize }; let v = if k < 16 { o.trust[k] } else { 0.0 }; if v == 0.0 { 1.0 } else { v } }
 type Tr = Vec<(i32, i32, usize)>;
 
 fn js_rng(s: &mut i32) -> f64 { *s = s.wrapping_mul(1103515245).wrapping_add(12345) & 0x7fffffff; *s as f64 / 2147483647.0 }
@@ -172,14 +176,14 @@ fn study(g: &Game, tr: &Tr, o: &Soon, terrain: bool, ovr: Option<BP>) -> Study {
         if s(p, Stat::Slow) != 0.0 { return Some((p.i, p.j, r, s(p, Stat::Slow) + (if s(p, Stat::Rime) != 0.0 { 0.06 } else { 0.0 }))); }
         let f = s(p, Stat::Frost); if f == 0.0 { return None; }
         Some((p.i, p.j, r, f * (1.0f64).min(s(p, Stat::Rate) * s(p, Stat::FrostT) / (1.0f64).max(o.crowd * reach_n(p, r) as f64))))
-    }).collect();
+    }).map(|(i, j, r, v)| { let p = cells[key(i, j)].unwrap(); (i, j, r, ((v * trust(o, &p)) as f64).min(0.8)) }).collect();
     // a rose marks the bugs it pricks: all the damage they take on the cells it reaches is that much more, for the
     // share of the crowd it keeps marked (what it pricks in MARK_T seconds over the walkers in its reach)
     // (a chain of marks keeps more of a crowd marked)
     let roses: Vec<(i32, i32, f64, f64)> = plants.iter().filter(|p| s(p, Stat::Mark) != 0.0).map(|p| {
         let r = s(p, Stat::Range); let n = reach_n(p, r);
         let multi = s(p, Stat::Multi) + s(p, Stat::Chain);
-        (p.i, p.j, r, s(p, Stat::Mark) * (1.0f64).min((if multi != 0.0 { multi } else { 1.0 }) * s(p, Stat::Rate) * d.mark_t / (1.0f64).max(o.crowd * n as f64)))
+        (p.i, p.j, r, trust(o, p) * s(p, Stat::Mark) * (1.0f64).min((if multi != 0.0 { multi } else { 1.0 }) * s(p, Stat::Rate) * d.mark_t / (1.0f64).max(o.crowd * n as f64)))
     }).collect();
     let time: Vec<f64> = tr.iter().map(|&(a, b, _)| {
         let mut slow = 0.0f64; for &(i, j, r, v) in &mints { if within((a - i) as f64, (b - j) as f64, r) { slow = slow.max(v); } }
@@ -237,7 +241,7 @@ fn term(g: &Game, s_: &Study, tr: &Tr, o: &Soon, terrain: bool, p: &BP) -> (f64,
         };
     let ground = s(Stat::Ground); let gr = dps * n * per * (if ground != 0.0 { ground } else { 1.0 });
     let air = if adps != 0.0 { adps * fly_time(g, p, r) * (if ground != 0.0 { 1.0 } else { 0.6 }) } else { 0.0 }; // a ground plant has other targets too
-    (gr, air)
+    let t = trust(o, p); (gr * t, air * t)
 }
 // What the garden is worth for the coming waves: the bugs it stops. A bug that gets through bites, so walkers and
 // flyers count by their number, each kind by the damage it takes against its health: once one side is safe, more of
@@ -302,7 +306,8 @@ impl<'a, 'o> Bot<'a, 'o> {
             }
         }
         for wave in lv.waves.iter().skip(from).take(3) { for gr in wave { let b = &d.bugs[gr.kind]; let q = gr.count as f64 * b.hp * (if b.fly { 0.0 } else { 1.0 }); sum += q * b.armor; all += q; } }
-        Soon { set: true, armor: if all != 0.0 { sum / all } else { 0.0 }, crowd: if w != 0.0 { dd / w } else { 1.0 }, n_g: if n_g != 0.0 { n_g } else { 0.1 }, n_a,
+        let mut trust = [0.0; 16]; for (k, &v) in self.opt.trust.iter().enumerate().take(16) { trust[k] = v; }
+        Soon { trust, set: true, armor: if all != 0.0 { sum / all } else { 0.0 }, crowd: if w != 0.0 { dd / w } else { 1.0 }, n_g: if n_g != 0.0 { n_g } else { 0.1 }, n_a,
             hp_g: if c_g != 0.0 { h_g / c_g } else { 50.0 }, hp_a: if c_a != 0.0 { h_a / c_a } else { 50.0 } }
     }
     // The garden against the wave that has just begun and the two after it, in the bot's own count of the damage a
@@ -402,7 +407,7 @@ impl<'a, 'o> Bot<'a, 'o> {
             // growing: one way, or at level 2 either branch open here
             let ways: &[u8] = if p.lvl == 2 { &[1, 2] } else { &[0] };
             for &br in ways {
-                if upgrades == Upgrades::None || p.lvl >= 4 || (p.lvl == 2 && !g.branch_open(p.kind, br)) { continue; }
+                if upgrades == Upgrades::None || p.lvl >= self.opt.top.min(4) || (p.lvl == 2 && !g.branch_open(p.kind, br)) { continue; }
                 let Some(c) = g.upgrade_cost(pi, br) else { continue };
                 let up = BP { lvl: p.lvl + 1, br: if p.lvl == 2 { br } else { p.br }, ..bp };
                 let gain = if wide(g, &up) || wide(g, &bp) { worth(g, &tr, &o, terrain, Some(up)) - now } else { let was = term(g, &s, &tr, &o, terrain, &bp); add(term(g, &s, &tr, &o, terrain, &up), was) };

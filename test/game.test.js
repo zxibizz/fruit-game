@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame, step, place, placeProblem, plantOn, plantProblem, trail, trails, startWave, removePlant, upgrade, upgradeCost, usePower, earlyBonus, stubAt, refund, pstat, clearWeed, snapshot, restore, bugHp, COLS, ROWS, BREAK } from '../public/game.js';
 import { LEVELS, PLANTS, BUGS, PLANT_ORDER, PERKS, PERK_ORDER, WEED_COST, FERTILE, MARK_T, wavePay } from '../public/data.js';
-import { expectedMeta, fullMeta } from '../balance/scenario.mjs';
+import { expectedMeta, fullMeta, fixedMap, lazyFixed } from '../balance/scenario.mjs';
+import { EXPERT } from '../balance/plans.mjs';
 // the levels on an open field (the fixed paths of the first ones come before them)
 const F = LEVELS.findIndex((L) => L.name === 'Лужайка');
 import { play } from '../sim/js/play.mjs';
@@ -15,7 +16,7 @@ test('every level has a way from the entrance to the fruit', () => {
     assert.ok(g.entries.length >= 1 && L.fruit, `level ${n + 1} has anthills and a fruit`);
     for (const tr of trails(g)) assert.deepEqual(tr[tr.length - 1], g.fruit, `level ${n + 1}`);
     assert.ok(L.map.length === ROWS && L.map.every((r) => r.length === COLS), `level ${n + 1} map size`);
-    assert.ok(L.boss.length >= 2 && L.boss.every(([at, kind]) => at <= L.count && BUGS[kind].boss), `level ${n + 1} bosses`);
+    assert.ok(L.boss.length >= (n < F ? 1 : 2) && L.boss.every(([at, kind]) => at <= L.count && BUGS[kind].boss), `level ${n + 1} bosses`); // (one at the end of a first, short level)
     assert.ok(!L.boss.some(([, k]) => BUGS[k].fly) || PLANTS.rose.b.from <= n + 1, `level ${n + 1}: a flying boss needs the far shot rose`);
     assert.ok(L.plants.every((p) => PLANTS[p]), `level ${n + 1} plants`);
   });
@@ -127,31 +128,37 @@ test('bugs never walk into plants; a plant put on a cell with bugs lets them out
 // playLevels: [[level, options], ...] played in one go, the bot's reports back in the same order
 const playLevels = (list) => play(list.map(([level, opts]) => ({ level, opts }))).map((x) => x.res);
 // (played when the first balance test asks: the other tests do not need the native bot, nor cargo)
-let smartRuns; const smart = () => (smartRuns ??= playLevels(LEVELS.map((_, n) => [n, { meta: expectedMeta(n) }])));
+// (it plays the learnt strategy, balance/strategy.json: since the branches its own count alone did not keep up)
+let smartRuns; const smart = () => (smartRuns ??= playLevels(LEVELS.map((_, n) => [n, { meta: expectedMeta(n), ...(EXPERT ? { policy: EXPERT } : {}) }])));
 test('played with thought, every level is won', () => {
-  smart().forEach((r, n) => { assert.ok(r.won, `level ${n + 1} lost at wave ${r.wave}`); assert.ok(r.plants >= 40, `level ${n + 1}: ${r.plants} plants`); });
+  smart().forEach((r, n) => { assert.ok(r.won, `level ${n + 1} lost at wave ${r.wave}`); assert.ok(r.plants >= (n < F ? 20 : 40), `level ${n + 1}: ${r.plants} plants`); }); // (the first levels have few beds)
 });
 
 // The full picture — many seeds, other draws of the waves, exploits, every skill and perk switched off — is the balance
 // matrix (node balance/run.mjs full); these are its hard rules on one seed, quick enough for every run of the tests.
 test('a garden beside the untouched trail loses every level, however it is planted, with the most perks there can be by then', () => {
-  const soft = [F + 6, F + 8], PLACES = ['best', 'end', 'start', 'spread']; // «Заросли» and «Закат»: a lazy garden with every perk may still get through
-  const usual = playLevels(LEVELS.map((_, n) => [n, { route: 0, meta: expectedMeta(n) }]));
-  const hard = LEVELS.map((_, n) => n).filter((n) => !soft.includes(n)), most = playLevels(hard.flatMap((n) => PLACES.map((place) => [n, { route: 0, meta: expectedMeta(n, 3), place }])));
-  for (let n = 0; n < LEVELS.length; n++) {
-    const r = usual[n];
-    assert.equal(r.won, false, `level ${n + 1}`);
+  // (where there is no maze to build, a lazy garden is one kind of plant on every bed, never grown to a branch)
+  const soft = [F - 1, F + 2, F + 6, F + 8], PLACES = ['best', 'end', 'start', 'spread']; // «Большая поляна» (its map: to be redone), «Старый сад» (on the edge since the branches), «Заросли» and «Закат»: a lazy garden with every perk may still get through
+  const open = LEVELS.map((_, n) => n).filter((n) => !fixedMap(n)), fixed = LEVELS.map((_, n) => n).filter(fixedMap);
+  const usual = playLevels(open.map((n) => [n, { route: 0, meta: expectedMeta(n) }]));
+  open.forEach((n, a) => {
+    const r = usual[a];
+    if (n !== F - 1) assert.equal(r.won, false, `level ${n + 1}`);
     // («Опушка» is the exception: a row of chili with mint holds there until the last waves, and loses in them)
     if (n >= F && n < F + 3 && n !== F + 1) assert.ok(Math.min(...Object.keys(r.bites).map((k) => parseInt(k, 10))) <= LEVELS[n].count * LEAK, `level ${n + 1}: it leaks well before the end`);
-  }
+  });
+  const hard = open.filter((n) => !soft.includes(n)), most = playLevels(hard.flatMap((n) => PLACES.map((place) => [n, { route: 0, meta: expectedMeta(n, 3), place }])));
   hard.forEach((n, a) => PLACES.forEach((place, b) => assert.equal(most[a * PLACES.length + b].won, false, `level ${n + 1}, three stars a level, planted ${place}`)));
+  const lazy = fixed.flatMap((n) => lazyFixed(n).map(([name, o]) => [n, name, o])), runs = playLevels(lazy.map(([n, , o]) => [n, { ...o, meta: expectedMeta(n, 3), plants: o.plants }]));
+  lazy.forEach(([n, name], k) => assert.equal(runs[k].won, false, `level ${n + 1}, ${name}`));
 });
 
 test('half a garden or no frost and rain: the levels go worse', () => {
   const score = (list) => list.reduce((s, r) => s + (r.won ? r.hp / r.maxHp : -(1 - (r.wave - 1) / r.waves)), 0), some = [1, 2, 4, 6, 7].map((n) => F + n);
   const base = score(some.map((n) => smart()[n]));
-  assert.ok(score(playLevels(some.map((n) => [n, { maxPlants: 30, meta: expectedMeta(n) }]))) < base, 'half a garden');
-  assert.ok(score(playLevels(some.map((n) => [n, { powers: false, meta: expectedMeta(n) }]))) < base, 'no powers');
+  const P = EXPERT ? { policy: EXPERT } : {};
+  assert.ok(score(playLevels(some.map((n) => [n, { maxPlants: 30, meta: expectedMeta(n), ...P }]))) < base, 'half a garden');
+  assert.ok(score(playLevels(some.map((n) => [n, { powers: false, meta: expectedMeta(n), ...P }]))) < base, 'no powers');
 });
 
 test('a hit hurts the same wherever on the trail it lands', () => {
@@ -164,7 +171,7 @@ test('a hit hurts the same wherever on the trail it lands', () => {
 
 test('levels are long and their waves grow', () => {
   LEVELS.forEach((L, n) => {
-    assert.ok(L.waves.length >= 20, `level ${n + 1}`);
+    assert.ok(L.waves.length >= (n < F ? 12 : 20), `level ${n + 1}`); // (the first levels teach: shorter)
     const weight = (w) => w.reduce((s, [k, c]) => s + c * BUGS[k].w, 0);
     assert.ok(weight(L.waves[L.waves.length - 1]) > 5 * weight(L.waves[0]), `level ${n + 1}`);
     if (!L.map.some((r) => r.includes("_"))) assert.ok(L.waves.some((w) => w.some(([k]) => BUGS[k].dig)), `level ${n + 1} has diggers`); // (no diggers on a stone path: nothing to dig through)

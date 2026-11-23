@@ -1,4 +1,4 @@
-// The tuner of the waves: node balance/tune.mjs [--levels 1-9] [--dry] [--target 1.1] [--iter 5] [--hp 1,1.4,2] [--jobs 2]
+// The tuner of the waves: node balance/tune.mjs [--levels 1-9] [--dry] [--target 1.1] [--iter 5] [--hp 1,1.4,2] [--draws 4] [--jobs 2]
 // For every level it measures, on the waves of the game (the draw of data.js) and three other draws of them (the
 // seed of the game changes nothing for the bot, but the draw does: a tenth of a bug more in the budget, and so a bug
 // more or less in some group, swung a margin by a third on one draw), the margins (each the median over the draws) — how much
@@ -24,7 +24,7 @@ import { setPriority } from 'node:os';
 import { LEVELS, makeWaves } from '../public/data.js';
 import { play, routes as mazesOf } from '../sim/js/play.mjs';
 import { exportData } from '../sim/js/export.mjs';
-import { applyOverrides, resolve } from './scenario.mjs';
+import { applyOverrides, resolve, fixedMap, lazyFixed } from './scenario.mjs';
 import { margins, show } from './margin.mjs';
 import { PLAYERS, EXPERT } from './plans.mjs';
 
@@ -37,18 +37,20 @@ const SMART = { route: 1, place: 'best', upgrades: 'greedy', meta: 'exp2', terra
 const med = (a) => { const s = [...a].sort((x, y) => x - y); return s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2; };
 const r1 = (v) => Math.round(v * 10) / 10, pct = (v) => `${Math.round(v * 100)}%`;
 // the draws of the waves a level is measured on, and data.js as it was (all the levels, the draw of data.js)
-const DRAWS = [0, 1, 2, 3];
+const DRAWS = Array.from({ length: Number(opt('--draws', 4)) }, (_, k) => k); // --draws 2: twice as quick, a little noisier
 const reset = () => LEVELS.forEach((L) => { L.waves = makeWaves(L, L.seed); });
 const mazes = Object.fromEntries(mazesOf(levels).map((L) => [L.level, L]));
 
 // the scenarios of a level: who, and the options the bot takes
 function scenarios(n) {
   const out = [], add = (who, name, opts) => out.push({ who, name, opts: resolve({ level: n, opts }) });
-  for (const [who, p] of Object.entries(PLAYERS)) for (const r of mazes[n].routes.filter((x) => x.class === p.cls && x.shape !== 'best')) add(who, r.name, { ...p.opts, maze: r.name });
+  const fixed = fixedMap(n); // no maze to build: the players play the path as it is, a lazy garden is one kind and no branch
+  for (const [who, p] of Object.entries(PLAYERS)) { if (fixed || p.cls === 'own') { add(who, `${who}/${fixed ? 'path' : 'own'}`, { ...p.opts, ...(fixed ? { route: 0 } : {}) }); continue; } for (const r of mazes[n].routes.filter((x) => x.class === p.cls && x.shape !== 'best')) add(who, r.name, { ...p.opts, maze: r.name }); }
   add('smart', 'smart', SMART);
   if (EXPERT) add('expert', 'expert', { ...SMART, policy: EXPERT });
-  for (const place of ['best', 'end', 'start', 'spread']) add('lazy', `lazy ${place}`, { route: 0, meta: 'exp3', place });
-  add('lazy2', 'lazy with the usual perks', { route: 0, meta: 'exp2' }); // the perks of the ordinary player: for comparison only
+  if (fixed) for (const [name, o] of lazyFixed(n)) add('lazy', name, o);
+  else for (const place of ['best', 'end', 'start', 'spread']) add('lazy', `lazy ${place}`, { route: 0, meta: 'exp3', place });
+  if (!fixed) add('lazy2', 'lazy with the usual perks', { route: 0, meta: 'exp2' }); // the perks of the ordinary player: for comparison only (with no maze it is the smart bot)
   return out;
 }
 // one level at one budget: what every scenario makes of the waves as they are, and its margin

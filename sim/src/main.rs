@@ -106,6 +106,8 @@ fn opts_of(d: &Data, j: &J) -> Opts {
             "upgrades" => o.upgrades = match v.str() { "greedy" => Upgrades::Greedy, "none" => Upgrades::None, "first" => Upgrades::First, x => panic!("upgrades: {}", x) },
             "early" => o.early = v.truthy(),
             "steps" => o.steps = v.num() as usize,
+            "top" => o.top = v.num() as usize,
+            "trust" => o.trust = v.arr().iter().map(|x| x.num()).collect(),
             x => panic!("unknown option {}", x),
         }
     }

@@ -12,6 +12,7 @@
 // The plans: quick, full, and routes (the smart bot, the routes and the players alone).
 import { existsSync, readFileSync } from 'node:fs';
 import { LEVELS } from '../public/data.js';
+import { fixedMap, lazyFixed } from './scenario.mjs';
 
 // The expert: the smart bot playing the strategy balance/strategy.mjs found (balance/strategy.json): where to put
 // what, what to grow and which maze to build, weighed by what it sees. Without the file there is no expert group.
@@ -30,9 +31,12 @@ const smart = (o = {}) => ({ ...SMART, ...o });
 // chance, waves not called early, two stars a level. (Plants put at random by the trail, as 'spread' does, made
 // both lose to a lazy garden with no maze at all, and the shooters by the fruit alone ('end') put the novice out by
 // the middle of every level: no player plays like that.)
+// (0.27.0: the ordinary player plays the strategy of the expert, learnt on the plants of now, with the skills of an
+// ordinary player taken off: the smart bot's own count could not keep up with the branches, and a lazy garden did as
+// well as its mazes; the strategy builds the maze it sees most in, so the ordinary player has one maze, not a class)
 export const PLAYERS = {
   novice: { cls: 'min', opts: { place: 'best', upgrades: 'first', meta: 'exp1', terrain: false, powers: false, early: false } },
-  ordinary: { cls: 'mid', opts: { place: 'best', upgrades: 'greedy', meta: 'exp2', terrain: true, powers: 'eager', early: false } },
+  ordinary: { cls: 'own', opts: { place: 'best', upgrades: 'greedy', meta: 'exp2', terrain: true, powers: 'eager', early: false, ...(EXPERT ? { route: 1, policy: EXPERT } : {}) } },
 };
 const EXPLOIT = { route: 0, bank: 'level', meta: 'full' }; // every perk at once: a replay after the whole game
 
@@ -43,7 +47,8 @@ function forLevel(n, kind, routes) {
   const byRoute = () => { if (!routes) throw new Error(`plan ${kind}: the mazes of level ${n + 1} are not given`);
     add('route', 'route straight', smart({ route: 0 }), { cls: 'straight', shape: '', len: routes.base });
     for (const r of routes.routes) add('route', `route ${r.name}`, smart({ maze: r.name }), { cls: r.class, shape: r.shape, len: r.len }); };
-  const byPlayer = () => { for (const [who, p] of Object.entries(PLAYERS)) for (const r of routes.routes.filter((x) => x.class === p.cls && x.shape !== 'best')) add('player', `${who} ${r.name}`, { ...p.opts, maze: r.name }, { who, shape: r.shape, len: r.len }); };
+  const fixed = fixedMap(n);
+  const byPlayer = () => { for (const [who, p] of Object.entries(PLAYERS)) { if (fixed || p.cls === 'own') { add('player', `${who} ${fixed ? 'path' : 'own'}`, { ...p.opts, ...(fixed ? { route: 0 } : {}) }, { who, shape: fixed ? 'path' : 'own', len: 0 }); continue; } for (const r of routes.routes.filter((x) => x.class === p.cls && x.shape !== 'best')) add('player', `${who} ${r.name}`, { ...p.opts, maze: r.name }, { who, shape: r.shape, len: r.len }); } };
   if (EXPERT) { for (const seed of kind === 'quick' ? [7, 8] : [7, 8, 9]) add('expert', `expert s${seed}`, smart({ seed, policy: EXPERT }));
     if (kind !== 'quick') for (const ws of [1, 2, 3]) add('expert', `expert waves${ws}`, smart({ policy: EXPERT }), { waveSeed: ws }); }
   if (kind === 'routes') { byRoute(); byPlayer(); return out; }
@@ -52,12 +57,13 @@ function forLevel(n, kind, routes) {
     for (const upgrades of kind === 'quick' ? ['greedy'] : ['greedy', 'first']) add('exploit', `exploit ${place}${upgrades === 'first' ? ' grow' : ''}`, { ...EXPLOIT, place, upgrades });
   // what a player without a maze really has: the dew as it comes, and the most perks there can be by this level (three
   // stars on every level before it), planted any way
-  for (const place of ['best', 'end', 'start', 'spread']) add('lazy', `lazy ${place}`, { route: 0, meta: 'exp3', place });
+  if (fixed) for (const [name, o] of lazyFixed(n)) add('lazy', name, o);
+  else for (const place of ['best', 'end', 'start', 'spread']) add('lazy', `lazy ${place}`, { route: 0, meta: 'exp3', place });
   if (kind === 'quick') return out;
   add('lazy', 'lazy usual perks', { route: 0, meta: 'exp2' });
   add('lazy', 'lazy every perk', { route: 0, meta: 'full' }); // a replay after the whole game: a warning only
   add('skill', 'half', smart({ maxPlants: 30 })); // half a garden: must do worse than a full one
-  byRoute(); byPlayer();
+  if (!fixed) byRoute(); byPlayer();
   for (const m of ['none', 'exp1', 'full']) add('meta', `meta ${m}`, smart({ meta: m }));
   add('skill', 'blind', smart({ terrain: false }));
   add('skill', 'no powers', smart({ powers: false }));

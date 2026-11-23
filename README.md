@@ -18,7 +18,9 @@ and in portrait (turned there).
   worn bugs (Glutton / Lure turns flyers to its nectar). A branch opens on the level where the bugs it answers first
   come. A branch and a top are seen at a glance (a look of their own, gold at the top); the panel shows every number
   now and after the upgrade. Hold a plant or a bug to read about it; the guide on the home screen has all of them.
-- **Levels**: nine, 20–30 waves each, with their own ground: fertile beds (a stronger plant), mud (slow bugs), ponds,
+- **Levels**: fourteen. The first five teach (12–18 waves, one boss at the end): the bugs keep to a stone path and the
+  plants grow on beds beside it, then a grass cell sends them the long way round, then meadows in the middle are the
+  first mazes; plants and branches open there, each with the bugs it answers. Then nine open fields, 20–30 waves each, with their own ground: fertile beds (a stronger plant), mud (slow bugs), ponds,
   nettles (sting the bugs, nothing grows), weeds (cleared for dew), two anthills. A boss comes in the middle and at
   the end of every level: the rhino beetle runs, the queen lets ants out, the slug king splits into snails, the
   hornet flies over the maze, the spider webs the plants.

@@ -42,7 +42,7 @@ export const PLANTS = {
   //   spread (top) — a bug it set burning sets the next bug it touches burning too (one link).
   // b, Burn-through: throws at the armored and the thick first; melt — a bug it set burning has no armor while it
   //   burns, against every plant; crack (top) — every hit takes a point of armor off for good.
-  pepper: { cost: 35, up: [90], hp: [60, 80], range: [1.6, 1.7], rate: [.6, .65], dmg: [10, 15], splash: .8, hits: [3, 4], burn: [4, 6], burnT: 2, shot: 'pepper', speed: 5,
+  pepper: { cost: 35, up: [90], hp: [60, 80], range: [1.6, 1.7], rate: [.6, .65], dmg: [8, 12], splash: .8, hits: [3, 4], burn: [3, 4.5], burnT: 2, shot: 'pepper', speed: 5,
     a: { from: 2, up: [180, 280], hp: [80, 100], range: 1.7, rate: [.5, .55], dmg: [12, 16], burn: [9, 13], burnT: [2.5, 3], blaze: 1, spread: [0, 1] },
     b: { from: 3, up: [180, 280], hp: [80, 100], range: 1.7, rate: [.65, .7], dmg: [24, 32], splash: [1, 1.1], hits: [5, 6], burn: [6, 9], burnT: [2.5, 3], melt: 1, crack: [0, 1], shot: 'pepper', speed: 5 } },
   // Ice: the only plant that slows. Throws an icicle at one bug, walkers and flyers: frost — the bug it hits is that
@@ -188,7 +188,7 @@ export const LEVELS = [
     ],
     dew: 200, pay: [130, 240],
     plants: ['rose', 'pepper'],
-    hp: .7, count: 20, budget: [1.5, .9], roster: [['ant', 1], ['aphid', 4], ['grasshopper', 9]], boss: [[10, 'queen', 1], [20, 'queen', 1]],
+    hp: 1.4, count: 12, budget: [1.1, .7], roster: [['ant', 1], ['aphid', 4], ['grasshopper', 8]], boss: [[12, 'queen', 1]],
   },
   {
     name: 'Грядки', theme: 'forest',
@@ -204,7 +204,7 @@ export const LEVELS = [
     ],
     dew: 240, pay: [170, 320],
     plants: ['pumpkin', 'rose', 'pepper'],
-    hp: .8, count: 20, budget: [1.8, 1], roster: [['ant', 1], ['aphid', 2], ['caterpillar', 5], ['grasshopper', 8]], boss: [[10, 'queen', 1], [20, 'queen', 1]],
+    count: 12, budget: [3.6, 2.1], roster: [['ant', 1], ['aphid', 2], ['caterpillar', 5], ['grasshopper', 8]], boss: [[12, 'queen', 1]],
   },
   {
     name: 'Развилка', theme: 'orchard', feature: 'fork',
@@ -220,7 +220,7 @@ export const LEVELS = [
     ],
     dew: 280, pay: [210, 400],
     plants: ['pumpkin', 'rose', 'pepper', 'mint'],
-    hp: .9, count: 20, budget: [2, 1.1], roster: [['ant', 1], ['beetle', 3], ['grasshopper', 5], ['aphid', 7], ['caterpillar', 9]], boss: [[10, 'rhino', 1], [20, 'rhino', 1]],
+    count: 15, budget: [4.3, 2.3], roster: [['ant', 1], ['beetle', 3], ['grasshopper', 5], ['aphid', 7], ['caterpillar', 9]], boss: [[15, 'rhino', 1]],
   },
   {
     name: 'Поляна', theme: 'meadow', feature: 'meadow',
@@ -236,7 +236,7 @@ export const LEVELS = [
     ],
     dew: 320, pay: [250, 500],
     plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
-    hp: 1, count: 20, budget: [2.2, 1.2], roster: [['ant', 1], ['snail', 3], ['beetle', 4], ['caterpillar', 6], ['pillbug', 9], ['cricket', 12]], boss: [[10, 'slugking', 1], [20, 'slugking', 1]],
+    count: 18, budget: [5.6, 3.2], roster: [['ant', 1], ['snail', 3], ['beetle', 4], ['caterpillar', 6], ['pillbug', 9], ['cricket', 12]], boss: [[18, 'slugking', 1]],
   },
   {
     name: 'Большая поляна', theme: 'sunset',
@@ -252,7 +252,7 @@ export const LEVELS = [
     ],
     dew: 340, pay: [290, 580],
     plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
-    hp: 1, count: 20, budget: [2.2, 1.2], roster: [['ant', 1], ['butterfly', 2], ['beetle', 3], ['snail', 5], ['wasp', 6], ['caterpillar', 8], ['cricket', 12]], boss: [[10, 'hornet', 1], [20, 'hornet', 1]],
+    count: 18, budget: [5.2, 2.9], roster: [['ant', 1], ['butterfly', 2], ['beetle', 3], ['snail', 5], ['wasp', 6], ['caterpillar', 8], ['cricket', 12]], boss: [[18, 'hornet', 1]],
   },
   {
     name: 'Лужайка', theme: 'meadow',
@@ -268,7 +268,7 @@ export const LEVELS = [
     ],
     dew: 370, pay: [380, 680],
     plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
-    hp: 1.4, count: 20, budget: [3.1, 2], roster: [['ant', 1], ['beetle', 3], ['grasshopper', 6], ['caterpillar', 9], ['cricket', 13]], boss: [[10, 'rhino', 1], [20, 'rhino', 1]],
+    hp: 1.4, count: 20, budget: [5.6, 3.6], roster: [['ant', 1], ['beetle', 3], ['grasshopper', 6], ['caterpillar', 9], ['cricket', 13]], boss: [[10, 'rhino', 1], [20, 'rhino', 1]],
   },
   {
     name: 'Опушка', theme: 'forest', feature: 'fertile',
@@ -284,7 +284,7 @@ export const LEVELS = [
     ],
     dew: 380, pay: [380, 660],
     plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
-    count: 22, budget: [8.7, 4.4], roster: [['ant', 1], ['aphid', 2], ['grasshopper', 3], ['beetle', 4], ['snail', 6], ['caterpillar', 8], ['cricket', 11]], boss: [[11, 'queen', 1], [22, 'queen', 2]],
+    count: 22, budget: [10.5, 5.3], roster: [['ant', 1], ['aphid', 2], ['grasshopper', 3], ['beetle', 4], ['snail', 6], ['caterpillar', 8], ['cricket', 11]], boss: [[11, 'queen', 1], [22, 'queen', 2]],
   },
   {
     name: 'Старый сад', theme: 'orchard', feature: 'mud',
@@ -300,7 +300,7 @@ export const LEVELS = [
     ],
     dew: 400, pay: [390, 690],
     plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
-    count: 24, budget: [8.3, 3.9], roster: [['ant', 1], ['snail', 2], ['aphid', 3], ['pillbug', 5], ['caterpillar', 7], ['cricket', 9], ['grasshopper', 12], ['beetle', 15]], boss: [[12, 'slugking', 1], [24, 'slugking', 1]],
+    hp: 1.4, count: 24, budget: [5.9, 2.8], roster: [['ant', 1], ['snail', 2], ['aphid', 3], ['pillbug', 5], ['caterpillar', 7], ['cricket', 9], ['grasshopper', 12], ['beetle', 15]], boss: [[12, 'slugking', 1], [24, 'slugking', 1]],
   },
   {
     name: 'Пруд', theme: 'marsh', feature: 'water',
@@ -316,7 +316,7 @@ export const LEVELS = [
     ],
     dew: 410, pay: [415, 930],
     plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
-    hp: 1.4, count: 24, budget: [5.6, 2.6], roster: [['ant', 1], ['butterfly', 3], ['beetle', 4], ['caterpillar', 6], ['cricket', 10], ['snail', 13], ['aphid', 16]], boss: [[12, 'hornet', 1], [24, 'hornet', 2]],
+    hp: 1.4, count: 24, budget: [6.5, 3], roster: [['ant', 1], ['butterfly', 3], ['beetle', 4], ['caterpillar', 6], ['cricket', 10], ['snail', 13], ['aphid', 16]], boss: [[12, 'hornet', 1], [24, 'hornet', 2]],
   },
   {
     name: 'Крапивный лог', theme: 'forest', feature: 'nettle',
@@ -332,7 +332,7 @@ export const LEVELS = [
     ],
     dew: 420, pay: [300, 475],
     plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
-    count: 25, budget: [9.6, 4.6], roster: [['ant', 1], ['pillbug', 2], ['firefly', 4], ['grasshopper', 6], ['caterpillar', 8], ['butterfly', 10], ['cricket', 12], ['snail', 15]], boss: [[12, 'spider', 1], [25, 'spider', 2]],
+    count: 25, budget: [8.9, 4.3], roster: [['ant', 1], ['pillbug', 2], ['firefly', 4], ['grasshopper', 6], ['caterpillar', 8], ['butterfly', 10], ['cricket', 12], ['snail', 15]], boss: [[12, 'spider', 1], [25, 'spider', 2]],
   },
   {
     name: 'Два муравейника', theme: 'sunset', feature: 'twin',
@@ -348,7 +348,7 @@ export const LEVELS = [
     ],
     dew: 440, pay: [470, 835],
     plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
-    hp: 1.4, count: 26, budget: [9.6, 4.6], roster: [['ant', 1], ['aphid', 2], ['beetle', 3], ['wasp', 5], ['caterpillar', 7], ['firefly', 9], ['cricket', 11], ['pillbug', 14], ['snail', 17]], boss: [[13, 'queen', 1], [26, 'rhino', 2]],
+    count: 26, budget: [10.7, 5.1], roster: [['ant', 1], ['aphid', 2], ['beetle', 3], ['wasp', 5], ['caterpillar', 7], ['firefly', 9], ['cricket', 11], ['pillbug', 14], ['snail', 17]], boss: [[13, 'queen', 1], [26, 'rhino', 2]],
   },
   {
     name: 'Заросли', theme: 'orchard', feature: 'weed',
@@ -364,7 +364,7 @@ export const LEVELS = [
     ],
     dew: 440, pay: [330, 610],
     plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
-    count: 28, budget: [8.3, 3.8], roster: [['ant', 1], ['grasshopper', 2], ['pillbug', 3], ['caterpillar', 5], ['butterfly', 7], ['cricket', 9], ['firefly', 11], ['snail', 13], ['wasp', 16], ['aphid', 19]], boss: [[9, 'rhino', 1], [18, 'slugking', 1], [28, 'spider', 2]],
+    count: 28, budget: [5.1, 2.3], roster: [['ant', 1], ['grasshopper', 2], ['pillbug', 3], ['caterpillar', 5], ['butterfly', 7], ['cricket', 9], ['firefly', 11], ['snail', 13], ['wasp', 16], ['aphid', 19]], boss: [[9, 'rhino', 1], [18, 'slugking', 1], [28, 'spider', 2]],
   },
   {
     name: 'Болото', theme: 'marsh', feature: 'mud',
@@ -380,7 +380,7 @@ export const LEVELS = [
     ],
     dew: 450, pay: [340, 730],
     plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
-    count: 28, budget: [16.6, 7.2], roster: [['ant', 1], ['snail', 2], ['wasp', 3], ['aphid', 5], ['pillbug', 6], ['caterpillar', 8], ['firefly', 10], ['cricket', 12], ['beetle', 15], ['butterfly', 18]], boss: [[9, 'hornet', 1], [18, 'spider', 1], [28, 'slugking', 2]],
+    count: 28, budget: [15.5, 6.7], roster: [['ant', 1], ['snail', 2], ['wasp', 3], ['aphid', 5], ['pillbug', 6], ['caterpillar', 8], ['firefly', 10], ['cricket', 12], ['beetle', 15], ['butterfly', 18]], boss: [[9, 'hornet', 1], [18, 'spider', 1], [28, 'slugking', 2]],
   },
   {
     name: 'Закат', theme: 'sunset', feature: 'twin',
@@ -396,7 +396,7 @@ export const LEVELS = [
     ],
     dew: 460, pay: [290, 640],
     plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
-    count: 30, budget: [7, 3.6], roster: [['ant', 1], ['beetle', 2], ['butterfly', 3], ['pillbug', 4], ['caterpillar', 6], ['cricket', 8], ['firefly', 10], ['snail', 12], ['wasp', 14], ['grasshopper', 17], ['aphid', 20]], boss: [[10, 'queen', 1], [20, 'hornet', 1], [30, 'rhino', 2]],
+    hp: 1.4, count: 30, budget: [5, 2.6], roster: [['ant', 1], ['beetle', 2], ['butterfly', 3], ['pillbug', 4], ['caterpillar', 6], ['cricket', 8], ['firefly', 10], ['snail', 12], ['wasp', 14], ['grasshopper', 17], ['aphid', 20]], boss: [[10, 'queen', 1], [20, 'hornet', 1], [30, 'rhino', 2]],
   },
 ];
 

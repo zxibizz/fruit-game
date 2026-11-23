@@ -48,7 +48,7 @@ const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-'), out =
 const cacheDir = join(homedir(), 'tmp', 'balance-cache'); mkdirSync(cacheDir, { recursive: true }); mkdirSync(out, { recursive: true });
 const RS = readdirSync(join(root, 'sim', 'src')).sort().map((f) => `sim/src/${f}`);
 execFileSync('cargo', ['build', '--release', '--quiet'], { cwd: join(root, 'sim'), stdio: 'inherit' });
-const JS = ['public/data.js', 'balance/scenario.mjs', 'balance/native.mjs', 'sim/js/export.mjs', 'sim/js/play.mjs'];
+const JS = ['public/data.js', 'balance/scenario.mjs', 'balance/native.mjs', 'sim/js/export.mjs', 'sim/js/play.mjs', ...(existsSync(join(root, 'balance', 'trust.json')) ? ['balance/trust.json'] : [])];
 const code = createHash('sha1'); for (const f of [...JS, ...RS]) code.update(readFileSync(join(root, f))); const codeHash = code.digest('hex');
 // the workers run a snapshot of the code taken now: edits made while the plan runs must not mix into its results
 const snap = join(cacheDir, 'code', codeHash), bin = join(snap, 'fruit-sim');
