@@ -1,8 +1,8 @@
 // Drawing, input, HUD and screens. The game state lives in game.js; this file only shows it and turns taps into actions.
 import * as A from './art.js';
 import {
-  createGame, step, plantOn, plantProblem, placeProblem, blockingCells, previewTrails, trails, upgrade, upgradeCost, removePlant, refund, isFresh,
-  startWave, earlyBonus, wavePreview, usePower, stars, regrow, regrowCost, clearStub, stubAt, heal, healCost, bugHp, rewardOf, pstat, clearWeed,
+  createGame, step, plantOn, plantProblem, blockingCells, previewTrails, trails, upgrade, upgradeCost, removePlant, refund, isFresh,
+  startWave, earlyBonus, wavePreview, usePower, stars, stubAt, bugHp, rewardOf, pstat, clearWeed,
   snapshot, restore, digTrails, digHills, COLS, ROWS, BREAK,
 } from './game.js';
 import { PLANTS, BUGS, LEVELS, PERKS, PERK_ORDER, PLANT_ORDER, WEED_COST, FERTILE, TUNE, FLY_HP } from './data.js';
@@ -17,11 +17,11 @@ const T = {
   plant: { pumpkin: 'Тыква', rose: 'Шиповник', aloe: 'Алоэ', corn: 'Кукуруза', mint: 'Мята', pepper: 'Перец', dandelion: 'Одуванчик', flytrap: 'Мухоловка', bell: 'Колокольчик' },
   eaten: { pumpkin: 'съедена', rose: 'съеден', aloe: 'съедено', corn: 'съедена', mint: 'съедена', pepper: 'съеден', dandelion: 'съеден', flytrap: 'съедена', bell: 'съеден' },
   // a few words for the card under the plant's name
-  role: { pumpkin: 'Стена', rose: 'Метит шипами', aloe: 'Лекарь', corn: 'Бьёт по толпе', mint: 'Замедляет', pepper: 'Жжёт толпу', dandelion: 'Дальний, по летающим', flytrap: 'Глотает ослабленных', bell: 'Помощник' },
+  role: { pumpkin: 'Стена', rose: 'Метит шипами', aloe: 'Защищает соседей', corn: 'Бьёт по толпе', mint: 'Замедляет', pepper: 'Жжёт толпу', dandelion: 'Дальний, по летающим', flytrap: 'Глотает ослабленных', bell: 'Помощник' },
   about: {
     pumpkin: 'Живая стена. Не стреляет, зато крепкая и дешёвая: из тыкв строят лабиринт, чтобы жуки шли дольше.',
     rose: 'Колет шипами, и уколотый жук несколько секунд получает больше урона от всех растений. Сам бьёт слабо — ставь рядом с сильными. Достаёт и летающих.',
-    aloe: 'Не воюет: лечит покусанные растения вокруг, а съеденные рядом с ним отрастают гораздо быстрее.',
+    aloe: 'Не воюет: растения вокруг получают меньше урона, и жукам дольше их грызть. Ставь у стен, которые грызут.',
     corn: 'Кидает початок навесом: зёрна задевают нескольких жуков рядом с целью. Хороша против толпы. Летающих не достаёт.',
     mint: 'Холодит: жуки рядом ползут медленнее и дольше остаются под обстрелом. Сама не бьёт — ставь рядом со стрелками.',
     pepper: 'Обжигает сразу всех жуков вокруг себя, сколько бы их ни было, и поджигает. Каждому достаётся немного: хорош против плотной толпы мелких. Огонь не замечает броню.',
@@ -33,7 +33,7 @@ const T = {
   perk: {
     pumpkin: 'Колючая: кто её грызёт, сам теряет здоровье',
     rose: 'Стреляет сразу по двум жукам',
-    aloe: 'Растения вокруг получают на 30% меньше урона',
+    aloe: 'Защищает соседей сильнее',
     corn: 'Взрыв зёрен шире и задевает больше жуков',
     mint: 'Раз в 6 с замораживает жуков вокруг на секунду',
     pepper: 'Жуки горят в полтора раза дольше',
@@ -69,18 +69,18 @@ const T = {
     weed: ['Заросли', `Колючие кусты мешают сажать. Тапни по кусту — уберёшь его за ${WEED_COST} росы. А можно оставить стеной.`],
   },
   featureShort: { fertile: 'грядки', mud: 'грязь', water: 'пруды', nettle: 'крапива', twin: '2 муравейника', weed: 'заросли' },
-  perkName: { dew: 'Утренняя роса', heart: 'Крепкое яблоко', roots: 'Живучие корни', clouds: 'Тучи наготове', refund: 'Бережный садовник' },
+  perkName: { dew: 'Утренняя роса', heart: 'Крепкое яблоко', clouds: 'Тучи наготове', refund: 'Бережный садовник' },
   perkAbout: {
-    dew: (v) => `+${v} росы в начале уровня`, heart: (v) => `+${v} к здоровью яблока`, roots: (v) => `Корни отрастают на ${Math.round((1 - v) * 100)}% быстрее`,
+    dew: (v) => `+${v} росы в начале уровня`, heart: (v) => `+${v} к здоровью яблока`,
     clouds: (v) => `+${v} мороз и +${v} дождь в начале уровня`, refund: (v) => `За проданное растение возвращается ${Math.round(v * 100)}% росы`,
     pumpkin: (v) => `Прочность +${Math.round((v - 1) * 100)}%`, rose: (v) => `Урон +${Math.round((v - 1) * 100)}%`, corn: (v) => `Урон +${Math.round((v - 1) * 100)}%`,
-    aloe: (v) => `Лечит на ${Math.round((v - 1) * 100)}% быстрее`, mint: (v) => `Замедляет ещё на ${Math.round(v * 100)}%`, pepper: (v) => `Огонь жжёт на ${Math.round((v - 1) * 100)}% сильнее`,
+    aloe: (v) => `Соседям урона ещё на ${Math.round(v * 100)}% меньше`, mint: (v) => `Замедляет ещё на ${Math.round(v * 100)}%`, pepper: (v) => `Огонь жжёт на ${Math.round((v - 1) * 100)}% сильнее`,
     dandelion: (v) => `Урон +${Math.round((v - 1) * 100)}%`, flytrap: (v) => `Жуёт на ${Math.round((1 - v) * 100)}% быстрее`, bell: (v) => `Соседи стреляют ещё на ${Math.round(v * 100)}% чаще`,
   },
   fresh: (list) => `Новое: ${list.join(', ')}. Зажми, чтобы узнать подробнее`, freshBug: (list) => `Новый жук: ${list.join(', ')}. Зажми его, чтобы узнать подробнее`,
   boss: (name) => `Босс: ${name}!`,
-  roots: (name) => `${name}: корни`, rootsHint: 'Корни отрастут сами. Тапни по ним — отрастут сразу, за росу. Держи немного росы про запас', powersBack: 'Мороз и дождь снова с тобой', regrown: 'Отросло!', lvl: (n) => `уровень ${n}`,
-  problem: { same: 'Здесь уже такое растение', busy: 'Здесь занято', blocks: 'Нельзя закрыть жукам путь', poor: 'Не хватает росы', nettle: 'На крапиве ничего не растёт', outside: '' },
+  roots: (name) => `${name}: корни`, rootsHint: 'Съеденное отрастёт само после волны, а до тех пор тут дыра — жуки пойдут через неё. Дождь отращивает сразу', powersBack: 'Мороз и дождь снова с тобой', regrown: 'Отросло!', rootsWait: 'Растение отрастёт после волны, а пока здесь ничего не посадить', rootsRain: 'Дождь отрастит сразу', lvl: (n) => `уровень ${n}`,
+  problem: { same: 'Здесь уже такое растение', busy: 'Здесь занято', blocks: 'Нельзя закрыть жукам путь', poor: 'Не хватает росы', nettle: 'На крапиве ничего не растёт', roots: 'Здесь корни: растение отрастёт после волны', outside: '' },
   swap: (n, lvl) => (lvl > 1 ? `замена ур. ${lvl}, вернётся ${n}` : `замена, вернётся ${n}`), swapAgain: 'Тапни ещё раз — заменить',
   gain: (n) => (n > 0 ? `путь +${n}` : n < 0 ? `путь ${n}` : 'путь тот же'),
   hint1: 'Перетащи растение с полки на поле. Первый уровень растения дешёвый — строй из них длинную петляющую тропинку. Готов — жми ▶',
@@ -98,7 +98,7 @@ const T = {
   won: 'Яблоко спасено!', lost: 'Жуки съели яблоко', retry: 'Ещё раз', levels: 'Уровни', nextLevel: 'Дальше', resume: 'Продолжить',
   pause: 'Пауза', restart: 'Заново', waveDone: (b) => `Волна пройдена  +${b}`, early: (b) => `+${b} за смелость`,
   screams: ['Ай!', 'Ой-ой!', 'Больно!', 'Кусь?!', 'Ай-ай!'],
-  up: 'Улучшить', sell: 'Продать', healBtn: 'Лечить', max: 'Максимум', lvl3: 'На 3 уровне', webbed: 'В паутине!', onFertile: 'На грядке: +30%', fullRefund: 'вернётся вся роса',
+  up: 'Улучшить', sell: 'Продать', max: 'Максимум', lvl3: 'На 3 уровне', webbed: 'В паутине!', onFertile: 'На грядке: +30%', fullRefund: 'вернётся вся роса',
   weed: 'Убрать куст', perks: 'Улучшения', guide: 'Справочник', sound: 'Звук', music: 'Музыка', close: 'Закрыть', ok: 'Понятно', reset: 'Сбросить',
   newPlant: 'Новое растение', levelFeature: 'Особенность уровня', cont: (name, w) => `Продолжить: ${name}, волна ${w}`,
   starsFree: (free, all) => `Свободно <b>★ ${free}</b> из ${all}`, perksHint: 'Звёзды дают за уровни. Улучшения можно сбросить и раздать заново.',
@@ -418,7 +418,7 @@ function statRows(type, lvl, p = null) {
   add('Выстрелов/с', 'rate', (r) => num(r));
   add('Укус', 'chomp'); add('Глотает, если здоровья', 'gulp', (s) => `до ${Math.round(s * 100)}%`); add('Кусает раз в', 'eat', (s) => `${num(s)} с`);
   add('Замедление', 'slow', (s) => `${Math.round(s * 100)}%`);
-  add('Лечит/с', 'heal'); add('Отращивает за', 'regrow', (s) => `${num(s)} с`);
+  add('Соседям урона меньше на', 'guard', (s) => `${Math.round(s * 100)}%`);
   add('Соседи чаще на', 'buff', (s) => `${Math.round(s * 100)}%`);
   add('Взрыв', 'splash'); add('Задевает жуков', 'hits'); add('Дальность', 'range');
   add('Прочность', 'hp');
@@ -459,7 +459,7 @@ function tapCell(i, j) {
   if (p && p.type) { pop = pop === p ? null : p; sfx.tap(); return; }
   if (p && p.obstacle === 'weed') { pop = pop === p ? null : p; sfx.tap(); return; }
   const st = p ? null : stubAt(game, i, j);
-  if (st) { pop = pop === st ? null : st; sfx.tap(); return; } // roots of an eaten plant: grow it back or clear them
+  if (st) { pop = pop === st ? null : st; sfx.tap(); return; } // roots of an eaten plant: when it grows back
   if (pop) { pop = null; return; }
   if (p || (i === game.fruit[0] && j === game.fruit[1]) || game.entries.some((e) => e[0] === i && e[1] === j)) return;
   if (sel) plantAt(sel, i, j);
@@ -503,14 +503,13 @@ function handleEvents() {
       case 'shoot': bump(e.p, .12); sfx.shoot(PLANTS[e.p.type].shot, panOf(cellCenter(e.p.i, e.p.j)[0])); break;
       case 'bite': { angles.delete(e.b.id); const [x, y] = cellCenter(...game.fruit); fx.push({ k: 'dmg', x: x + 20, y: y - 30, t: 0, life: .9, txt: `-${BUGS[e.b.kind].bite}`, red: true }); appleMood('scream', .9); appleSay(T.screams[Math.floor(Math.random() * T.screams.length)]); sfx.bite(); hpShake = .5; break; }
       case 'place': bump(e.p, .35, true); dust(e.p); terrainDirty = true; sfx.plant(); break;
-      case 'regrow': bump(e.p, .35, true); dust(e.p); terrainDirty = true; sfx.regrow(); if (e.free) { const [x, y] = cellCenter(e.p.i, e.p.j); fx.push({ k: 'gain', x, y: y - 26, t: 0, life: 1, txt: T.regrown }); } break;
-      case 'heal':
+      case 'regrow': bump(e.p, .35, true); dust(e.p); terrainDirty = true; sfx.regrow(); { const [x, y] = cellCenter(e.p.i, e.p.j); fx.push({ k: 'gain', x, y: y - 26, t: 0, life: 1, txt: T.regrown }); } break;
       case 'upgrade': {
-        const [x, y] = cellCenter(e.p.i, e.p.j); for (let n = 0; n < (e.t === 'upgrade' ? 12 : 6); n++) fx.push({ k: 'spark', x: x + (Math.random() - .5) * 34, y: y - 6 - Math.random() * 36, t: n * .04, life: .6 }); bump(e.p, .4, true);
-        if (e.t === 'upgrade') { sfx.upgrade(); fx.push({ k: 'ringfx', x, y: y - 6, t: 0, life: .5, r: 30 }); fx.push({ k: 'note', x, y: y - 40, t: 0, life: 1.1, txt: e.p.lvl === 3 ? 'Максимум!' : `Уровень ${e.p.lvl}` }); } else sfx.heal();
+        const [x, y] = cellCenter(e.p.i, e.p.j); for (let n = 0; n < 12; n++) fx.push({ k: 'spark', x: x + (Math.random() - .5) * 34, y: y - 6 - Math.random() * 36, t: n * .04, life: .6 }); bump(e.p, .4, true);
+        sfx.upgrade(); fx.push({ k: 'ringfx', x, y: y - 6, t: 0, life: .5, r: 30 }); fx.push({ k: 'note', x, y: y - 40, t: 0, life: 1.1, txt: e.p.lvl === 3 ? 'Максимум!' : `Уровень ${e.p.lvl}` });
         break;
       }
-      case 'sell': case 'plantDead': dust(e.p); terrainDirty = true; if (pop === e.p) pop = null; if (e.t === 'sell') sfx.sell(); else { sfx.eaten(); banner(`${T.plant[e.p.type]} ${T.eaten[e.p.type]}!`, 1.4); if (!localStorage.getItem('fruit.rootsHint')) { banner(T.rootsHint, 8, true); localStorage.setItem('fruit.rootsHint', '1'); } } break;
+      case 'sell': case 'plantDead': dust(e.p); terrainDirty = true; if (pop === e.p) pop = null; if (e.t === 'sell') sfx.sell(); else { sfx.eaten(); banner(`${T.plant[e.p.type]} ${T.eaten[e.p.type]}!`, 1.4); if (!localStorage.getItem('fruit.rootsHint2')) { banner(T.rootsHint, 8, true); localStorage.setItem('fruit.rootsHint2', '1'); } } break;
       case 'chew': { const [x, y] = cellCenter(e.p.i, e.p.j); for (let n = 0; n < 6; n++) fx.push({ k: 'crumb', x, y: y - 6, vx: (Math.random() - .5) * 50, vy: -20 - Math.random() * 30, t: 0, life: .5, col: e.p.type === 'pumpkin' ? '#f7a23a' : '#6cc04a' }); bump(e.p, .2); sfx.chew(); break; }
       case 'wave': banner(T.wave(e.n, game.waves), 1.4); sfx.waveStart(); { const nb = newBugs(e.n).filter((k) => !isBoss(k)); if (nb.length && !(levelIdx === 0 && e.n === 1)) banner(T.freshBug(nb.map((k) => T.bug[k].toLowerCase())), 7, true); } if (AP.mood === 'happy') appleMood('idle', 0); break;
       case 'waveDone': appleMood('happy', 2.6); appleCheer(); banner(T.waveDone(e.bonus), 1.8); sfx.waveDone(); if (e.powers) hintOnce('powers', T.powersBack, 4); if (levelIdx === 0 && e.n === 1) { hintOnce('early', T.hint2, 6); hintOnce('trail', T.trailHint, 10); } if (levelIdx === 0 && e.n === 3) hintOnce('up', T.upHint, 9); break;
@@ -523,7 +522,7 @@ function handleEvents() {
   if (game.phase === 'build' && game.wave > 0 && game.events.some((e) => SAVED.has(e.t))) saveLevel();
   game.events.length = 0;
 }
-const SAVED = new Set(['place', 'upgrade', 'sell', 'weed', 'regrow', 'heal', 'waveDone']);
+const SAVED = new Set(['place', 'upgrade', 'sell', 'weed', 'waveDone']);
 function saveLevel() { if (game && game.phase === 'build' && game.wave > 0 && game.wave < game.waves) localStorage.setItem(SAVE, JSON.stringify(snapshot(game))); }
 let hpShake = 0;
 function heart(x, y, r) {
@@ -650,7 +649,7 @@ function drawGrid() {
   c.save();
   for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) {
     if (game.grid[j][i] || (i === game.fruit[0] && j === game.fruit[1]) || game.entries.some((e) => e[0] === i && e[1] === j)) continue;
-    const bad = blockCache.has(i + ',' + j) || game.tiles[j][i] === 'nettle', [cx, cy] = cellCenter(i, j), x = cx - CELL / 2, y = cy - CELL / 2;
+    const bad = blockCache.has(i + ',' + j) || game.tiles[j][i] === 'nettle' || !!stubAt(game, i, j), [cx, cy] = cellCenter(i, j), x = cx - CELL / 2, y = cy - CELL / 2;
     c.beginPath(); A.rrect(c, x + 4, y + 4, CELL - 8, CELL - 8, 8);
     if (bad) { c.fillStyle = 'rgba(235,70,70,.1)'; c.fill(); }
     c.lineWidth = 1; c.strokeStyle = bad ? 'rgba(200,40,40,.28)' : 'rgba(255,255,255,.17)'; c.stroke();
@@ -671,14 +670,13 @@ function drawPlant(p, t) {
   if (p.web > 0) A.hdWeb(c, x, y, 19);
   if (p.lvl === 3) { const q = (t * .8 + p.id * .37) % 1; c.save(); c.globalAlpha = Math.sin(q * Math.PI) * .9; A.fxStar(c, x - 12 + ((p.id * 7) % 24), y - 30 + q * 14, 3.2, '#fff6b0'); c.restore(); }
 }
-// Roots of an eaten plant: a sprout in the soil, with a ring that fills while an aloe grows it back.
+// Roots of an eaten plant: a sprout in the soil in a dashed ring; it grows back after the wave.
 const stubSprite = () => sprite('stub', PW, PH, (x) => A.hdPlant(x, 'pumpkin', PBX, PBY, 1, { noShadow: true, stage: 0 }));
 function drawStub(st, t) {
   const [x, y] = cellCenter(st.i, st.j), k = 1 + Math.sin(t * 5 + st.id) * .06;
   c.save(); c.translate(x, y + 14); c.scale(k, k); blit(stubSprite(), -PBX, -PBY); c.restore();
   c.save(); c.lineCap = 'round'; c.lineWidth = 3;
   c.beginPath(); c.arc(x, y + 4, 15, 0, A.TAU); c.setLineDash([4, 5]); c.strokeStyle = 'rgba(255,255,255,.75)'; c.stroke(); c.setLineDash([]);
-  if (st.grow > 0) { c.beginPath(); c.arc(x, y + 4, 15, -Math.PI / 2, -Math.PI / 2 + A.TAU * st.grow); c.strokeStyle = '#7be05a'; c.stroke(); }
   c.restore();
 }
 // coming out of the anthill: small and faint at its hole, full size a step later
@@ -1078,7 +1076,7 @@ function wideBtn(x, y, w, h, col, ol, label, price, fn, disabled = false) {
   ui.push({ x, y: y - 3, w, h: h + 6, fn: disabled ? () => sfx.cant() : fn, s: 'u' });
 }
 // The panel of a plant on the field: what it has now and what the next level gives (green), the trick of the third
-// level, and the buttons: upgrade, heal, sell. Roots and weeds get a small panel of their own.
+// level, and the buttons: upgrade, sell. Roots and weeds get a small panel of their own.
 function drawPop() {
   const p = pop, w = Math.min(236, UW - LX - RX - 12);
   const hc0 = CELL / 2 * ws / uk, [fx0, fy0, fw, fh] = faUI(), [ux, y0] = toUI(...cellCenter(p.i, p.j)), uy = clamp(y0, fy0 + hc0, fy0 + fh - hc0);
@@ -1105,16 +1103,16 @@ function drawPop() {
     wideBtn(x + 10, y + 36, w - 20, 28, '#e0884a', '#7a3a10', T.weed, WEED_COST, () => { clearWeed(game, p.i, p.j); }, game.dew < WEED_COST);
     return;
   }
-  if (game.stubs.includes(p)) { // roots: grow the plant back, or clear the cell for something else
-    const cost = regrowCost(p), [x, y] = placeAt(74), bw = (w - 26) / 2;
+  if (game.stubs.includes(p)) { // roots: the plant grows back after the wave (or by the rain), nothing else goes there
+    c.save(); c.font = '800 11.5px Nunito'; const lines = wrap(`${T.rootsWait}.${game.powers.rain ? ` ${T.rootsRain}` : ''}`, w - 24); c.restore();
+    const [x, y] = placeAt(34 + lines.length * 15 + 8);
     A.hdText(c, T.roots(T.plant[p.type]), x + 12, y + 18, 14, '#6a3e1c', { stroke: null, align: 'left' }); close(x, y);
-    wideBtn(x + 10, y + 36, bw, 28, '#5cc23e', '#1f5a14', 'Вырастить', cost, () => { if (regrow(game, p)) pop = null; }, game.dew < cost || !!placeProblem(game, p.i, p.j));
-    wideBtn(x + 16 + bw, y + 36, bw, 28, '#e0884a', '#7a3a10', 'Убрать', null, () => { clearStub(game, p); pop = null; sfx.sell(); });
+    lines.forEach((l, k) => A.hdText(c, l, x + 12, y + 40 + k * 15, 11.5, '#8a5a32', { stroke: null, align: 'left', weight: 800 }));
     return;
   }
-  const rows = statRows(p.type, p.lvl, p), up = upgradeCost(p), hc = healCost(p), fresh = isFresh(game, p), fert = game.tiles[p.j][p.i] === 'fertile';
+  const rows = statRows(p.type, p.lvl, p), up = upgradeCost(p), fresh = isFresh(game, p), fert = game.tiles[p.j][p.i] === 'fertile';
   c.save(); c.font = '900 11px Nunito'; const perk = wrap(`${p.lvl === 3 ? '★' : `${T.lvl3}:`} ${T.perk[p.type]}`, w - 24); c.restore();
-  const notes = (fert ? 1 : 0) + (p.web > 0 ? 1 : 0) + (p.buff > 0 ? 1 : 0) + (p.guard > 0 ? 1 : 0), h = 34 + rows.length * 16 + 6 + perk.length * 13 + notes * 14 + 8 + 30 + (hc ? 34 : 0) + 10;
+  const notes = (fert ? 1 : 0) + (p.web > 0 ? 1 : 0) + (p.buff > 0 ? 1 : 0) + (p.guard > 0 ? 1 : 0), h = 34 + rows.length * 16 + 6 + perk.length * 13 + notes * 14 + 8 + 30 + 10;
   const [x, y] = placeAt(h);
   A.hdText(c, T.plant[p.type], x + 12, y + 18, 15, '#6a3e1c', { stroke: null, align: 'left' });
   // the level: three pips after the name
@@ -1140,7 +1138,6 @@ function drawPop() {
   else wideBtn(x + 10, yy, bw, 28, '#5cc23e', '#1f5a14', T.up, up, () => { if (!upgrade(game, p)) sfx.cant(); }, game.dew < up);
   wideBtn(x + 16 + bw, yy, bw, 28, '#e0884a', '#7a3a10', `${T.sell} +${refund(game, p)}`, null, () => { removePlant(game, p); pop = null; });
   if (fresh) A.hdText(c, T.fullRefund, x + 16 + bw * 1.5, yy - 7, 9, '#a08060', { stroke: null });
-  if (hc) wideBtn(x + 10, yy + 34, w - 20, 28, '#4aa8ee', '#1a4f8a', T.healBtn, hc, () => { if (!heal(game, p)) sfx.cant(); }, game.dew < hc);
 }
 
 // ---------- long-press info ----------
@@ -1336,7 +1333,6 @@ function perkPic(k) {
   return pic(`perk:${k}`, 60, 60, (x) => {
     if (k === 'dew') A.hdDrop(x, 30, 32, 20);
     else if (k === 'heart') A.hdApple(x, 30, 34, 20, {});
-    else if (k === 'roots') A.hdPlant(x, 'pumpkin', 30, 44, 2, { stage: 0 });
     else if (k === 'clouds') { x.beginPath(); x.arc(30, 30, 24, 0, A.TAU); x.fillStyle = '#4aa8ee'; x.fill(); x.translate(30, 30); x.scale(1.5, 1.5); A.iconRain(0, 0, x); }
     else { x.beginPath(); x.arc(30, 30, 24, 0, A.TAU); x.fillStyle = '#e0884a'; x.fill(); A.hdDrop(x, 30, 32, 13); }
   });

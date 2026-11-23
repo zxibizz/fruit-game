@@ -33,7 +33,7 @@ const range = (s) => s.split(',').flatMap((p) => { const [a, b] = p.split('-').m
 const levels = range(opt('--levels', `1-${LEVELS.length}`)).map((n) => n - 1), TARGET = Number(opt('--target', 1.1)), ITER = Number(opt('--iter', 5)), jobs = Number(opt('--jobs', 2));
 const dry = args.includes('--dry'), TOL = .03; // the ordinary player's margin within 3% of the target is good enough: the noise of a level is more
 try { setPriority(19); } catch { /* as it is */ }
-const SMART = { route: 1, place: 'best', upgrades: 'greedy', meta: 'exp2', terrain: true, powers: true, early: true, repair: true };
+const SMART = { route: 1, place: 'best', upgrades: 'greedy', meta: 'exp2', terrain: true, powers: true, early: true };
 const med = (a) => { const s = [...a].sort((x, y) => x - y); return s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2; };
 const r1 = (v) => Math.round(v * 10) / 10, pct = (v) => `${Math.round(v * 100)}%`;
 // the draws of the waves a level is measured on, and data.js as it was (all the levels, the draw of data.js)

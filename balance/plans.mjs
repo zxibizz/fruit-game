@@ -18,7 +18,7 @@ import { LEVELS } from '../public/data.js';
 const STRATEGY = new URL('./strategy.json', import.meta.url);
 export const EXPERT = existsSync(STRATEGY) ? JSON.parse(readFileSync(STRATEGY, 'utf8')).policy : null;
 
-const SMART = { route: 1, place: 'best', upgrades: 'greedy', meta: 'exp2', terrain: true, powers: true, early: true, repair: true };
+const SMART = { route: 1, place: 'best', upgrades: 'greedy', meta: 'exp2', terrain: true, powers: true, early: true };
 const smart = (o = {}) => ({ ...SMART, ...o });
 // a lazy garden as strong as it can be: every perk, and all the dew the level gives (bugs, waves, early calls) in hand from
 // the first wave — more than any player ever has at once, but not more than the level holds
@@ -31,8 +31,8 @@ const smart = (o = {}) => ({ ...SMART, ...o });
 // both lose to a lazy garden with no maze at all, and the shooters by the fruit alone ('end') put the novice out by
 // the middle of every level: no player plays like that.)
 export const PLAYERS = {
-  novice: { cls: 'min', opts: { place: 'best', upgrades: 'first', meta: 'exp1', terrain: false, powers: false, early: false, repair: false } },
-  ordinary: { cls: 'mid', opts: { place: 'best', upgrades: 'greedy', meta: 'exp2', terrain: true, powers: 'eager', early: false, repair: true } },
+  novice: { cls: 'min', opts: { place: 'best', upgrades: 'first', meta: 'exp1', terrain: false, powers: false, early: false } },
+  ordinary: { cls: 'mid', opts: { place: 'best', upgrades: 'greedy', meta: 'exp2', terrain: true, powers: 'eager', early: false } },
 };
 const EXPLOIT = { route: 0, bank: 'level', meta: 'full' }; // every perk at once: a replay after the whole game
 
@@ -63,7 +63,6 @@ function forLevel(n, kind, routes) {
   add('skill', 'no powers', smart({ powers: false }));
   add('skill', 'eager powers', smart({ powers: 'eager' }));
   add('skill', 'no early', smart({ early: false }));
-  add('skill', 'no repair', smart({ repair: false }));
   add('skill', 'no upgrades', smart({ upgrades: 'none' }));
   add('skill', 'grow first', smart({ upgrades: 'first' }));
   add('skill', 'spread', smart({ place: 'spread' }));

@@ -1,13 +1,14 @@
 // Simulation: no DOM, plain data. The view reads the state and the events, and calls the actions below.
-import { COLS, ROWS, FRUIT_HP, PLANTS, BUGS, LEVELS, PERKS, BREAK, EARLY_DEW, REPAIR, REGROW, REFUND, CHEW_GROWTH, POWER_EVERY, POWER_MAX, wavePay, FERTILE, FERTILE_ADD, MUD, NETTLE, NETTLE_BOSS, WEED_COST, BROOD_REWARD, FLY_HP, TUNE, MARK_T } from './data.js';
+import { COLS, ROWS, FRUIT_HP, PLANTS, BUGS, LEVELS, PERKS, BREAK, EARLY_DEW, REFUND, CHEW_GROWTH, POWER_EVERY, POWER_MAX, wavePay, FERTILE, FERTILE_ADD, MUD, NETTLE, NETTLE_BOSS, WEED_COST, BROOD_REWARD, FLY_HP, TUNE, MARK_T } from './data.js';
 
-export const VERSION = '0.25.2';
+export const VERSION = '0.26.0';
 // The version of a saved level: raised when the balance changes so much that a garden grown under the old rules does
 // not belong in the new level (2: no fatigue, tight packs, one health rule; 3: the plants given their places and
 // every level retuned; 4: the waves retuned for the ordinary player, some levels with fewer and healthier bugs; 5: the
 // anthill of «Старый сад» moved to the edge, where an old garden could shut the trail; 6: diggers last in a wave;
-// 7: the anthills and the fruit of «Закат» moved; an older save is dropped).
-const SAVE_V = 7;
+// 7: the anthills and the fruit of «Закат» moved; 8: no healing, the roots grow back after the wave (an old garden
+// with its roots grown back could shut the trail); an older save is dropped).
+const SAVE_V = 8;
 export { COLS, ROWS, BREAK };
 
 const DIRS = [[-1, 0], [0, -1], [0, 1], [1, 0]]; // tie order: towards the fruit side first
@@ -28,7 +29,7 @@ export function createGame(levelIndex, seed = 1, meta = {}) {
     wave: 0, waves: L.waves.length, phase: 'build', nextIn: null, // nextIn: seconds until the next wave starts by itself
     bugs: [], shots: [], plants: [], stubs: [], events: [], queue: [], // stubs: roots of the eaten plants
     time: 0, waveTime: 0, powers: { frost: 1 + clouds, rain: 1 + clouds }, powerMax: POWER_MAX + clouds, nextId: 1, rand: mulberry32(seed),
-    regrow: REGROW * (tier('roots') || 1), refund: tier('refund') || REFUND,
+    refund: tier('refund') || REFUND,
     dist: null, dig: null, stats: { kills: 0, bites: 0, eaten: 0, earned: 0 },
   };
   g.entry = g.entries[0];
@@ -41,15 +42,16 @@ export function createGame(levelIndex, seed = 1, meta = {}) {
 const key = (i, j) => j * COLS + i;
 const inside = (i, j) => i >= 0 && j >= 0 && i < COLS && j < ROWS;
 
-// Distance (in steps) from every free cell to the fruit.
-export function computeDist(g, extra = -1) {
+// Distance (in steps) from every free cell to the fruit. extra: a cell taken as busy; roots: the roots of the eaten
+// plants too (they grow back after the wave).
+export function computeDist(g, extra = -1, roots = false) {
   const d = new Array(COLS * ROWS).fill(INF), q = [g.fruit];
   d[key(...g.fruit)] = 0;
   for (let h = 0; h < q.length; h++) {
     const [i, j] = q[h], k = d[key(i, j)];
     for (const [di, dj] of DIRS) {
       const ni = i + di, nj = j + dj, nk = key(ni, nj);
-      if (!inside(ni, nj) || d[nk] !== INF || g.grid[nj][ni] || nk === extra) continue;
+      if (!inside(ni, nj) || d[nk] !== INF || g.grid[nj][ni] || nk === extra || (roots && stubAt(g, ni, nj))) continue;
       d[nk] = k + 1; q.push([ni, nj]);
     }
   }
@@ -153,21 +155,27 @@ export function digTrails(g) {
 export const trails = (g, dist = g.dist) => g.entries.map((_, e) => trail(g, dist, e));
 const isEntry = (g, i, j) => g.entries.some((e) => e[0] === i && e[1] === j);
 
-// Why a plant cannot go to (i, j): null when it can. A plant may grow on a cell with bugs on it (a hole in a wall
-// is mended while they run through it): they step out of it, so they only need a way on from a cell next to it.
+// Why a plant cannot go to (i, j): null when it can. Not on roots: the eaten plant grows back there after the wave.
 export function placeProblem(g, i, j) {
   if (!inside(i, j)) return 'outside';
   if (g.grid[j][i]) return 'busy';
   if (isEntry(g, i, j) || (i === g.fruit[0] && j === g.fruit[1])) return 'busy';
   if (g.tiles[j][i] === 'nettle') return 'nettle';
-  const d = computeDist(g, key(i, j));
-  if (g.entries.some((e) => d[key(...e)] >= INF)) return 'blocks';
+  if (stubAt(g, i, j)) return 'roots';
+  return blocks(g, i, j) ? 'blocks' : null;
+}
+// Whether a plant on (i, j) would shut the bugs in. The way from every anthill has to stay open with all the roots
+// grown back too, as they will be after the wave. A plant may grow on a cell with bugs on it: they step out of it, so
+// they only need a way on from a cell next to it (with the roots as they are now: open).
+function blocks(g, i, j) {
+  const d = computeDist(g, key(i, j)), all = g.stubs.length ? computeDist(g, key(i, j), true) : d;
+  if (g.entries.some((e) => all[key(...e)] >= INF)) return true;
   const open = (ci, cj) => inside(ci, cj) && d[key(ci, cj)] < INF;
   for (const b of g.bugs) {
     if (b.fly || b.ti == null || BUGS[b.kind].dig || !inside(b.ti, b.tj)) continue;
-    if (b.ti === i && b.tj === j ? !DIRS.some(([di, dj]) => open(i + di, j + dj)) : !open(b.ti, b.tj)) return 'blocks';
+    if (b.ti === i && b.tj === j ? !DIRS.some(([di, dj]) => open(i + di, j + dj)) : !open(b.ti, b.tj)) return true;
   }
-  return null;
+  return false;
 }
 export function blockingCells(g) {
   const out = [];
@@ -178,13 +186,13 @@ export function previewTrails(g, i, j) { return trails(g, computeDist(g, key(i, 
 
 // A stat of a plant as it stands: its level, the player's perk for this plant and the soil under it.
 // p may be a plant or just { type, lvl, i, j } (i < 0: no cell yet).
-const BOOSTED = { dmg: 1, burn: 1, heal: 1, chomp: 1, hp: 1 };
+const BOOSTED = { dmg: 1, burn: 1, chomp: 1, hp: 1 };
 export function pstat(g, p, name) {
   let v = PLANTS[p.type][name]; if (v == null) return 0; if (Array.isArray(v)) v = v[p.lvl - 1];
   if (!v || typeof v !== 'number') return v;
   const perk = PERKS[p.type], tier = g.meta[p.type] || 0;
   if (tier && perk.stat === name) v = perk.mul ? v * perk.v[tier - 1] : v + perk.v[tier - 1];
-  if (g.tiles[p.j]?.[p.i] === 'fertile') { if (BOOSTED[name]) v *= FERTILE; else if (name === 'slow' || name === 'buff') v += FERTILE_ADD; else if (name === 'eat') v /= FERTILE; }
+  if (g.tiles[p.j]?.[p.i] === 'fertile') { if (BOOSTED[name]) v *= FERTILE; else if (name === 'slow' || name === 'buff' || name === 'guard') v += FERTILE_ADD; else if (name === 'eat') v /= FERTILE; }
   if (name === 'slow') v = Math.min(v, .6);
   return name === 'hp' ? Math.round(v) : v;
 }
@@ -224,20 +232,11 @@ export function plantOn(g, type, i, j) {
   g.events.length = n; g.dew = dew; g.grid[j][i] = old; g.plants.push(old); refresh(g);
   return false;
 }
-// Repairs. The roots of an eaten plant grow back into the same plant of the same level for a part of its price
-// (for nothing when an aloe or the rain does it); a bitten plant is healed for the same part of the missing health.
-export const regrowCost = (s) => Math.ceil(s.spent * REPAIR);
-export function regrow(g, s, free = false) {
-  if (!g.stubs.includes(s) || over(g) || (!free && g.dew < regrowCost(s)) || placeProblem(g, s.i, s.j)) return false;
-  if (!free) g.dew -= regrowCost(s);
-  g.events.push({ t: 'regrow', p: grow(g, s.type, s.i, s.j, s.lvl, s.spent), free });
-  return true;
-}
-export function clearStub(g, s) { const k = g.stubs.indexOf(s); if (k >= 0) g.stubs.splice(k, 1); }
-export const healCost = (p) => (p.hp < p.maxHp ? Math.max(1, Math.ceil(p.spent * REPAIR * (1 - p.hp / p.maxHp))) : 0);
-export function heal(g, p) {
-  const c = healCost(p); if (!c || g.dew < c || over(g) || !g.plants.includes(p)) return false;
-  g.dew -= c; p.hp = p.maxHp; g.events.push({ t: 'heal', p });
+// The roots of an eaten plant grow back into the same plant of the same level, for nothing: after the wave, or at
+// once by the rain. In a wave they wait while a bug would be shut in by them.
+function regrow(g, s, by) {
+  if (!g.stubs.includes(s) || g.grid[s.j][s.i] || blocks(g, s.i, s.j)) return false;
+  g.events.push({ t: 'regrow', p: grow(g, s.type, s.i, s.j, s.lvl, s.spent), by });
   return true;
 }
 export function upgradeCost(p) { return p.lvl < 3 ? PLANTS[p.type].up[p.lvl - 1] : null; }
@@ -258,7 +257,7 @@ export function clearWeed(g, i, j) {
 export function removePlant(g, p, sold = true) {
   const k = g.plants.indexOf(p); if (k < 0 || (sold && over(g))) return;
   g.plants.splice(k, 1); g.grid[p.j][p.i] = null; refresh(g);
-  if (sold) g.dew += refund(g, p); else { g.stats.eaten++; g.stubs.push({ id: g.nextId++, type: p.type, lvl: p.lvl, spent: p.spent, i: p.i, j: p.j, grow: 0 }); }
+  if (sold) g.dew += refund(g, p); else { g.stats.eaten++; g.stubs.push({ id: g.nextId++, type: p.type, lvl: p.lvl, spent: p.spent, i: p.i, j: p.j }); }
   g.events.push({ t: sold ? 'sell' : 'plantDead', p });
 }
 
@@ -326,7 +325,8 @@ export function usePower(g, kind) {
   if (!g.powers[kind] || over(g) || (kind === 'frost' && g.phase !== 'wave')) return false; // frost on an empty field is lost
   g.powers[kind]--;
   if (kind === 'frost') for (const b of g.bugs) freeze(b, BUGS[b.kind].boss ? 2 : 4, true);
-  if (kind === 'rain') { for (const p of g.plants) { p.hp = p.maxHp; p.web = 0; } auras(g); for (const s of g.stubs.slice()) regrow(g, s, true); g.hp = Math.min(g.maxHp, g.hp + 3); }
+  // rain: the roots grow back at once and the webs are washed off; it heals no bitten plant
+  if (kind === 'rain') { for (const p of g.plants) p.web = 0; auras(g); for (const s of g.stubs.slice()) regrow(g, s, 'rain'); g.hp = Math.min(g.maxHp, g.hp + 3); }
   g.events.push({ t: 'power', kind });
   return true;
 }
@@ -453,15 +453,7 @@ function updatePlant(g, p, dt) {
   if (p.web > 0) { p.web -= dt; if (p.web <= 0) auras(g); return; } // caught in a spider's web: does nothing
   if (!P.range || P.buff) return;
   const range = pstat(g, p, 'range');
-  if (P.heal) {
-    const near = (q) => within(q.i - p.i, q.j - p.j, range), heal = pstat(g, p, 'heal');
-    for (const q of g.plants) if (q.hp < q.maxHp && near(q)) q.hp = Math.min(q.maxHp, q.hp + heal * dt);
-    for (const s of g.stubs.slice()) {
-      if (!near(s)) continue;
-      s.grow = Math.min(1, s.grow + dt / pstat(g, p, 'regrow'));
-    }
-    return;
-  }
+  if (P.guard) return; // the aloe only guards (auras)
   const inRange = (b, air = P.air) => b.hp > 0 && (air || !b.fly) && b.x < COLS + .2 && within(b.x - px, b.y - py, (P.groundRange && !b.fly ? Math.min(range, P.groundRange) : range));
   const bugs = near(g, px, py, range).slice(); // the only bugs it can reach
   if (P.slow) {
@@ -537,8 +529,6 @@ export function step(g, dt) {
     while (g.queue.length && g.queue[0].at <= g.waveTime) { const q = g.queue.shift(); spawn(g, q.kind, q.e); }
   }
   for (const b of g.bugs) b.slow = 1;
-  // roots grow back by themselves (aloes add to it in updatePlant); where that would close the way, they wait
-  for (const s of g.stubs.slice()) { s.grow = Math.min(1, s.grow + dt / g.regrow); if (s.grow >= 1) regrow(g, s, true); }
   sortBugs(g); try { for (const p of g.plants.slice()) updatePlant(g, p, dt); } finally { bkOn = false; }
   for (const b of g.bugs.slice()) { if (b.hit > 0) b.hit -= dt; if (b.mark > 0) b.mark -= dt; if (b.hp > 0) updateBug(g, b, dt); }
   for (const s of g.shots) updateShot(g, s, dt);
@@ -548,6 +538,9 @@ export function step(g, dt) {
   if (g.phase === 'wave' && !g.queue.length && !g.bugs.length) {
     if (g.wave >= g.waves) { g.phase = 'won'; g.events.push({ t: 'won' }); }
     else {
+      // the garden grows back: the eaten plants out of their roots, the bitten ones to full health
+      for (const s of g.stubs.slice()) regrow(g, s, 'wave');
+      for (const p of g.plants) p.hp = p.maxHp;
       const bonus = wavePay(g.L, g.wave); g.phase = 'build'; g.nextIn = BREAK; gain(g, bonus);
       const powers = g.wave % POWER_EVERY === 0;
       if (powers) for (const k in g.powers) g.powers[k] = Math.min(g.powerMax, g.powers[k] + 1);
@@ -564,8 +557,8 @@ export function snapshot(g) {
   const cleared = g.L.obstacles.filter(([i, j, t]) => t === 'weed' && g.grid[j][i]?.obstacle !== 'weed').map(([i, j]) => [i, j]);
   return {
     v: SAVE_V, level: g.level, seed: g.seed, wave: g.wave, dew: g.dew, hp: g.hp, powers: { ...g.powers }, stats: { ...g.stats }, time: g.time, cleared,
-    plants: g.plants.map((p) => ({ type: p.type, lvl: p.lvl, i: p.i, j: p.j, hp: p.hp, spent: p.spent })),
-    stubs: g.stubs.map((s) => ({ type: s.type, lvl: s.lvl, i: s.i, j: s.j, spent: s.spent, grow: s.grow })),
+    // between waves the whole garden stands in full health (no roots: they grew back when the wave was over)
+    plants: g.plants.map((p) => ({ type: p.type, lvl: p.lvl, i: p.i, j: p.j, spent: p.spent })),
   };
 }
 export function restore(snap, meta = {}) {
@@ -574,10 +567,9 @@ export function restore(snap, meta = {}) {
   if (snap.wave >= g.waves) return null;
   for (const [i, j] of snap.cleared || []) if (g.grid[j]?.[i]?.obstacle === 'weed') g.grid[j][i] = null;
   for (const q of snap.plants) {
-    if (!PLANTS[q.type] || ![1, 2, 3].includes(q.lvl) || !Number.isFinite(q.hp) || !inside(q.i, q.j) || g.grid[q.j][q.i]) continue;
-    const p = grow(g, q.type, q.i, q.j, q.lvl, q.spent); p.hp = Math.min(p.maxHp, q.hp);
+    if (!PLANTS[q.type] || ![1, 2, 3].includes(q.lvl) || !Number.isFinite(q.spent) || !inside(q.i, q.j) || g.grid[q.j][q.i]) continue;
+    grow(g, q.type, q.i, q.j, q.lvl, q.spent);
   }
-  for (const s of snap.stubs || []) if (PLANTS[s.type] && [1, 2, 3].includes(s.lvl) && inside(s.i, s.j) && !g.grid[s.j][s.i]) g.stubs.push({ id: g.nextId++, ...s });
   Object.assign(g, { wave: snap.wave, dew: snap.dew, hp: Math.min(g.maxHp, snap.hp), time: snap.time || 0 });
   Object.assign(g.powers, snap.powers); Object.assign(g.stats, snap.stats);
   refresh(g);

@@ -5,7 +5,7 @@
 //   start — level, seed, perks, the fruit's health and the dew at the start, whether a saved party was resumed;
 //   wave  — one per wave: the garden as it stood when the wave was called (every plant with its level and cell, the
 //           roots of eaten ones), the trail through it, the dew and the fruit, the early call, what was done before
-//           the wave (built, grown, sold, mended…) and during it, frost and rain, the bugs killed and the bugs that bit
+//           the wave (built, grown, sold, grown back…) and during it, frost and rain, the bugs killed and the bugs that bit
 //           the fruit by kind, the plants eaten, the time it took (game and real seconds, paused, at what speed);
 //   end   — won or lost, the stars, the wave reached; quit — the level was left in the middle (the page closed, the
 //           home screen). A saved level taken up again goes on under the same party id (kept beside the save in
@@ -65,8 +65,7 @@ export function createTelemetry({ storage = globalThis.localStorage, post = null
           case 'place': act(['place', e.p.type, e.p.i, e.p.j]); break;
           case 'upgrade': act(['up', e.p.type, e.p.lvl, e.p.i, e.p.j]); break;
           case 'sell': act(['sell', e.p.type, e.p.lvl, e.p.i, e.p.j]); break;
-          case 'regrow': act(['regrow', e.p.type, e.p.i, e.p.j, e.free ? 1 : 0]); break;
-          case 'heal': act(['heal', e.p.type, e.p.i, e.p.j]); break;
+          case 'regrow': if (e.by === 'rain') act(['regrow', e.p.type, e.p.i, e.p.j, 1]); break; // by the rain; after the wave the whole garden grows back by itself
           case 'weed': act(['weed', e.i, e.j]); break;
           case 'power': act(['power', e.kind]); break;
           case 'early': party.early = e.bonus; break;

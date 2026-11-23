@@ -26,13 +26,16 @@ and in portrait (turned there).
   the dew is the pay for every wave got through, growing evenly over a level (`pay` of the level); a bug gives its own
   small reward, the same everywhere. Bosses are strong but a grown garden kills them. No
   plant makes dew (it comes from finished waves, beaten bugs and waves called early). Caterpillars bite plants, mole
-  crickets eat through walls; eaten plants leave roots that grow back by themselves, faster by an aloe, or at once
-  for dew. Freezes do not chain; flyers cross the maze in a straight line.
+  crickets eat through walls. **No plant is healed in a wave**: its health is all it has for the wave, an eaten plant
+  leaves roots — a hole the bugs walk through, where nothing can be planted — till the wave is over; then the whole
+  garden grows back for nothing, at its levels and in full health. The rain (rare: it comes back every tenth wave)
+  grows the roots back at once and washes the webs off, and heals no bitten plant. A plant elsewhere that would shut
+  the bugs in once the roots grow back cannot go in. Freezes do not chain; flyers cross the maze in a straight line.
 - **Every plant has its place**: the pumpkin is the wall; corn is the all-rounder for packs (a cob hits a few bugs);
   the pepper burns every bug around it, a little each — for dense crowds of small ones; the rose marks the bugs it
   pricks (they take more from every plant) and reaches flyers; the flytrap bites through armor and swallows whole a
   bug the others have worn down — for the few thick ones; the dandelion is the far shot at flyers; mint slows, the
-  bell makes neighbours shoot faster, the aloe mends what is eaten. `node balance/lab.mjs` measures each plant apart
+  bell makes neighbours shoot faster, the aloe guards the plants around (they take less damage). `node balance/lab.mjs` measures each plant apart
   from the levels (a fixed maze, a garden of one kind for a sum of dew, a pack of one kind of bug), and the matrix
   fails when a plant is not planted by the bot or when no level goes worse without it.
 - **Stars and perks**: up to three stars a level; they buy permanent perks (more dew at the start, a sturdier apple,
@@ -52,17 +55,17 @@ and in portrait (turned there).
 - `public/view.js` — drawing with cached sprites, input, HUD, the shelf, panels and the HTML screens. `?all` opens every level. `?dev` exposes `window.__fd` for scripted checks;
   `?dev&insets=top,right,bottom,left` fakes the safe areas (e.g. `0,59,21,59` for an iPhone on its side).
 - `server/` — Node 22, no dependencies: static files and `/healthz`.
-- `node --test test/*.test.js` — pathing and placement rules, economy, repairs, bosses, the ground, perks, saving, server, offline
+- `node --test test/*.test.js` — pathing and placement rules, economy, eaten plants and roots, bosses, the ground, perks, saving, server, offline
   cache list, no sudden walls of flyers in the waves, the two copies of the simulation against each other (see `sim/`
   below), and the balance on one seed: the smart bot (`sim/src/bot.rs`: a maze through mud and nettles; it values a
   garden by the bugs it stops — walkers and flyers apart, a crowd sharing a single shooter while corn and pepper hit
-  many; mended holes, frost and rain, the perks of two stars a level) must win every level; a garden beside the
+  many; frost and rain, the perks of two stars a level) must win every level; a garden beside the
   untouched trail must lose every level with the most perks there can be by then (three stars on every level before),
   planted any of four ways; half a garden or no powers must do worse. The suite takes half a minute and needs `cargo`
   (the bot is native); the full picture is the balance matrix below.
 - Party analytics: `public/telemetry.js` records every party wave by wave — the garden when a wave is called
   (every plant, its level and cell, the roots of eaten ones), the trail through it, the dew and the fruit, the early
-  call, what was built, grown, sold and mended before and during the wave, frost and rain, the bugs killed and the
+  call, what was built, grown, sold and grown back before and during the wave, frost and rain, the bugs killed and the
   bugs that bit the fruit by kind, the plants eaten, the time (game and real, paused, at what speed), and how the
   party ended (won, lost, left). Nothing personal: a random id of the device, the version. The records wait in
   localStorage until the server takes them (`POST /api/telemetry`), so offline parties are sent later; a dev page
@@ -80,7 +83,7 @@ and in portrait (turned there).
   per level, so tuning one level reruns only it): the smart bot on several seeds and on other draws of the waves; lazy
   gardens beside the untouched trail with real dew and the most perks of their time, planted best, by the end, by the
   start or at random (they must lose; with every perk at once — a replay — only a warning); "exploits" — the same with all the dew of the level at once (an upper bound, a warning
-  only); the smart bot with one skill off (ground, frost and rain, early calls, repairs, upgrades), with fewer or more
+  only); the smart bot with one skill off (ground, frost and rain, early calls, upgrades), with fewer or more
   perks, without one kind of plant, and on mazes of every length of the trail — straight (no maze), min (a fifth of
   the way to the longest maze found on the level), mid (half), above (three quarters), max — each length in every
   shape it can be built in (`sim/src/routes.rs`: upright walls bunched by the anthill, by the fruit, or spread wide,
@@ -146,7 +149,7 @@ and in portrait (turned there).
     only thing kept twice. The numbers of the game stay in `public/data.js` alone: `sim/js/export.mjs` hands them
     over as JSON with the overrides of a scenario applied and the waves put together, and a key the native side does
     not know is an error. The bot (`src/bot.rs`) lives here only. What the native side leaves out: what only the
-    screen needs, saving, and the player's actions the bot never takes (weeding, healing a plant, planting over
+    screen needs, saving, and the player's actions the bot never takes (weeding, planting over
     another).
   - The two copies must agree to the last bit, or a tuned level means nothing. `node sim/js/verify.mjs` (also
     `npm run parity`, and one of the tests) checks it in ten seconds: the native bot plays parts of five levels four

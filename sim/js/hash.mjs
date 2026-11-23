@@ -8,7 +8,7 @@ export function fields(g, out = []) {
   out.push(g.dew, g.hp, g.wave, PHASE[g.phase], g.time, g.waveTime, g.nextIn ?? -1, g.powers.frost, g.powers.rain, g.nextId, g.queue.length, g.stats.kills, g.stats.bites, g.stats.eaten, g.stats.earned);
   out.push(g.bugs.length); for (const b of g.bugs) out.push(b.id, b.hp, b.x, b.y, b.slow, b.frozen, b.burn, b.chew, b.thaw, b.chewCd, b.skill, b.rush, b.mark || 0, b.coming || 0, b.ti ?? -1, b.tj ?? -1);
   out.push(g.plants.length); for (const p of g.plants) out.push(p.id, p.lvl, p.i, p.j, p.hp, p.cd, p.web, p.buff, p.guard);
-  out.push(g.stubs.length); for (const s of g.stubs) out.push(s.id, s.i, s.j, s.grow);
+  out.push(g.stubs.length); for (const s of g.stubs) out.push(s.id, s.i, s.j);
   out.push(g.shots.length); for (const s of g.shots) out.push(s.id, s.x, s.y);
   return out;
 }
@@ -28,7 +28,7 @@ export function labels(g) {
   const out = ['dew', 'fruit hp', 'wave', 'phase', 'time', 'wave time', 'next wave in', 'frost', 'rain', 'next id', 'queue', 'kills', 'bites', 'eaten', 'earned', 'bugs'];
   for (const b of g.bugs) for (const k of ['id', 'hp', 'x', 'y', 'slow', 'frozen', 'burn', 'chew', 'thaw', 'chewCd', 'skill', 'rush', 'mark', 'coming', 'ti', 'tj']) out.push(`bug ${b.id} ${b.kind} ${k}`);
   out.push('plants'); for (const p of g.plants) for (const k of ['id', 'lvl', 'i', 'j', 'hp', 'cd', 'web', 'buff', 'guard']) out.push(`plant ${p.id} ${p.type} (${p.i},${p.j}) ${k}`);
-  out.push('roots'); for (const s of g.stubs) for (const k of ['id', 'i', 'j', 'grow']) out.push(`root ${s.id} ${s.type} (${s.i},${s.j}) ${k}`);
+  out.push('roots'); for (const s of g.stubs) for (const k of ['id', 'i', 'j']) out.push(`root ${s.id} ${s.type} (${s.i},${s.j}) ${k}`);
   out.push('shots'); for (const s of g.shots) for (const k of ['id', 'x', 'y']) out.push(`shot ${s.id} ${k}`);
   return out;
 }

@@ -28,7 +28,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 export const FEATURES = ['kind', 'reach', 'passes', 'heat', 'slowed', 'shooters near', 'along', 'fertile', 'wall'];
 export const MAZE = ['length', 'wall cells', 'best pepper cell', 'eight best cells', 'turns', 'the bot\'s own'];
 export const KINDS = ['pumpkin', 'rose', 'corn', 'mint', 'pepper', 'dandelion', 'flytrap', 'bell']; // the aloe has a rule of its own
-export const SMART = { route: 1, place: 'best', upgrades: 'greedy', meta: 'exp2', terrain: true, powers: true, early: true, repair: true };
+export const SMART = { route: 1, place: 'best', upgrades: 'greedy', meta: 'exp2', terrain: true, powers: true, early: true };
 // a flat vector of weights ↔ the policy the bot takes
 const NP = KINDS.length * FEATURES.length, NU = KINDS.length, DIM = NP + NU + MAZE.length;
 export function policyOf(x) {

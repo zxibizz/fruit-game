@@ -8,13 +8,13 @@ pub const ROWS: i32 = 8;
 pub const N: usize = (COLS * ROWS) as usize;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Stat { Range, Rate, Dmg, Mark, Multi, Splash, Hits, Heal, Regrow, Guard, Slow, Chill, Burn, BurnT, Stun, Eat, Chomp, Gulp, EatAir, Buff, Hp, Thorns }
-pub const NSTAT: usize = 22;
+pub enum Stat { Range, Rate, Dmg, Mark, Multi, Splash, Hits, Guard, Slow, Chill, Burn, BurnT, Stun, Eat, Chomp, Gulp, EatAir, Buff, Hp, Thorns }
+pub const NSTAT: usize = 20;
 fn stat_of(name: &str) -> Option<Stat> {
     use Stat::*;
     Some(match name {
-        "range" => Range, "rate" => Rate, "dmg" => Dmg, "mark" => Mark, "multi" => Multi, "splash" => Splash, "hits" => Hits, "heal" => Heal,
-        "regrow" => Regrow, "guard" => Guard, "slow" => Slow, "chill" => Chill, "burn" => Burn, "burnT" => BurnT, "stun" => Stun, "eat" => Eat,
+        "range" => Range, "rate" => Rate, "dmg" => Dmg, "mark" => Mark, "multi" => Multi, "splash" => Splash, "hits" => Hits,
+        "guard" => Guard, "slow" => Slow, "chill" => Chill, "burn" => Burn, "burnT" => BurnT, "stun" => Stun, "eat" => Eat,
         "chomp" => Chomp, "gulp" => Gulp, "eatAir" => EatAir, "buff" => Buff, "hp" => Hp, "thorns" => Thorns,
         _ => return None,
     })
@@ -41,7 +41,7 @@ pub struct Level {
     pub tiles: Vec<(i32, i32, Tile)>, pub entries: Vec<i32>, pub fruit: (i32, i32), pub waves: Vec<Vec<Group>>,
 }
 pub struct Data {
-    pub fruit_hp: f64, pub brk: f64, pub early_dew: f64, pub repair: f64, pub regrow: f64, pub refund: f64, pub chew_growth: f64,
+    pub fruit_hp: f64, pub brk: f64, pub early_dew: f64, pub refund: f64, pub chew_growth: f64,
     pub power_every: f64, pub power_max: f64, pub fertile: f64, pub fertile_add: f64, pub mud: f64, pub nettle: f64, pub nettle_boss: f64,
     pub weed_cost: f64, pub brood_reward: f64, pub fly_hp: f64, pub mark_t: f64, pub hp_growth: f64, pub boss_bite: f64,
     pub plants: Vec<PlantDef>, pub bugs: Vec<BugDef>, pub perks: Vec<(String, Perk)>, pub levels: Vec<Level>,
@@ -128,7 +128,7 @@ impl Data {
         let (pepper, pumpkin, aloe) = (plant_ix("pepper"), plant_ix("pumpkin"), plant_ix("aloe"));
         let cricket = bug_ix("cricket");
         Data {
-            fruit_hp: n("FRUIT_HP"), brk: n("BREAK"), early_dew: n("EARLY_DEW"), repair: n("REPAIR"), regrow: n("REGROW"), refund: n("REFUND"), chew_growth: n("CHEW_GROWTH"),
+            fruit_hp: n("FRUIT_HP"), brk: n("BREAK"), early_dew: n("EARLY_DEW"), refund: n("REFUND"), chew_growth: n("CHEW_GROWTH"),
             power_every: n("POWER_EVERY"), power_max: n("POWER_MAX"), fertile: n("FERTILE"), fertile_add: n("FERTILE_ADD"), mud: n("MUD"), nettle: n("NETTLE"), nettle_boss: n("NETTLE_BOSS"),
             weed_cost: n("WEED_COST"), brood_reward: n("BROOD_REWARD"), fly_hp: n("FLY_HP"), mark_t: n("MARK_T"), hp_growth: n("hpGrowth"), boss_bite: c.get("bossBite").map_or(1.0, |v| v.num()),
             plants, bugs, perks, levels, pepper, pumpkin, aloe, cricket,

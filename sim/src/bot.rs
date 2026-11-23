@@ -1,11 +1,11 @@
 // The bot that plays a level the way it is meant to be played, and worse on purpose: the balance matrix (balance/)
 // runs it. The smart bot builds a serpentine maze over the whole field, leads the trail through mud and nettles, puts
 // its best plants on fertile beds and where they see the most of the trail, mixes in mint and bells, upgrades what
-// pays most, mends holes, calls the waves early and uses frost and rain. Options switch its skills off:
+// pays most, calls the waves early and uses frost and rain. Options switch its skills off:
 //   route — the share of the maze walls it builds (0: the trail as it is), or maze — one of the mazes of routes.rs
 //   by name ("mid/fruit": a length of the trail and the way it winds); terrain: false — blind to the ground;
 //   plan — a garden laid out beforehand (balance/design.mjs): plants to put and to grow, cell by cell, in that
-//   order, each as soon as there is dew for it; the bot mends it, calls the waves and uses its powers as ever, and
+//   order, each as soon as there is dew for it; the bot calls the waves and uses its powers as ever, and
 //   spends what is left its own way once the plan is done;
 //   policy — a strategy (balance/strategy.mjs finds its weights): the bot weighs its steps as ever, and every
 //   planting is worth exp(w·f) times more, f being what the player sees in the cell for that kind of plant (feat()),
@@ -15,8 +15,8 @@
 //   upper bound for a lazy garden); meta — the perks bought; max_plants — a cap on the garden; place — where the
 //   shooters go: best (most damage for the dew), end / start (only by the last / first part of the trail), spread
 //   (any useful cell, picked at random); plants — the kinds it may plant; upgrades — greedy, none or first (grows
-//   what it has before planting more); early — calls every wave at once (else waits for the countdown); repair —
-//   closes holes for dew at once.
+//   what it has before planting more); early — calls every wave at once (else waits for the countdown).
+// No plant is mended in a wave (an eaten one is a hole till the wave is over), so the bot keeps no dew for that.
 use crate::data::*;
 use crate::game::*;
 use crate::jsmath;
@@ -31,13 +31,11 @@ pub enum Upgrades { Greedy, None, First }
 #[derive(Clone, Debug)]
 pub struct Opts {
     pub seed: u32, pub max_plants: f64, pub route: f64, pub maze: Option<String>, pub hp: f64, pub plan: Option<Vec<(Option<usize>, i32, i32)>>, pub policy: Option<Policy>, pub terrain: bool, pub powers: Powers, pub bank: Option<f64>, pub meta: Vec<(String, usize)>,
-    pub place: Where, pub plants: Option<Vec<usize>>, pub upgrades: Upgrades, pub early: bool, pub repair: bool, pub reserve: f64,
+    pub place: Where, pub plants: Option<Vec<usize>>, pub upgrades: Upgrades, pub early: bool,
     pub steps: usize, // the party stops after so many steps of the game (for the parity check: a part of a level is enough there)
 }
-// The share of the pay for a wave that the bot keeps for repairs once the diggers come.
-pub const RESERVE: f64 = 0.6;
 impl Default for Opts {
-    fn default() -> Opts { Opts { seed: 7, max_plants: f64::INFINITY, route: 1.0, maze: None, hp: 1.0, plan: None, policy: None, terrain: true, powers: Powers::On, bank: None, meta: Vec::new(), place: Where::Best, plants: None, upgrades: Upgrades::Greedy, early: true, repair: true, reserve: RESERVE, steps: usize::MAX } }
+    fn default() -> Opts { Opts { seed: 7, max_plants: f64::INFINITY, route: 1.0, maze: None, hp: 1.0, plan: None, policy: None, terrain: true, powers: Powers::On, bank: None, meta: Vec::new(), place: Where::Best, plants: None, upgrades: Upgrades::Greedy, early: true, steps: usize::MAX } }
 }
 // the garden as it stood when a wave began (Bot::gauge)
 #[derive(Clone, Copy, Debug)]
@@ -50,7 +48,7 @@ pub struct Res {
 }
 // what the bot did, for a replay by the JS simulation (sim/js/replay.mjs)
 #[derive(Clone, Debug)]
-pub enum Op { Step(u32), Place(usize, i32, i32), Up(i32, i32), Wave, Regrow(i32, i32), Sell(i32, i32), Power(Power), Dew(f64) }
+pub enum Op { Step(u32), Place(usize, i32, i32), Up(i32, i32), Wave, Sell(i32, i32), Power(Power), Dew(f64) }
 
 // A strategy: the weights of what a player sees in a cell (NF numbers, feat()) for every kind of plant, the weight
 // of growing every kind, and the weights of what is seen in a maze (routes::pool), if it picks its own.
@@ -256,7 +254,6 @@ impl<'a, 'o> Bot<'a, 'o> {
     fn place(&mut self, kind: usize, i: i32, j: i32) -> bool { self.rec(Op::Place(kind, i, j)); let r = self.g.place(kind, i, j); self.dew_seen = self.g.dew; r }
     fn upgrade(&mut self, pi: usize) -> bool { let (i, j) = (self.g.plants[pi].i, self.g.plants[pi].j); self.rec(Op::Up(i, j)); let r = self.g.upgrade(pi); self.dew_seen = self.g.dew; r }
     fn start_wave(&mut self) { self.rec(Op::Wave); self.g.start_wave(); self.dew_seen = self.g.dew; }
-    fn regrow(&mut self, k: usize) { let s = &self.g.stubs[k]; let (id, i, j) = (s.id, s.i, s.j); self.rec(Op::Regrow(i, j)); self.g.regrow_stub(id, false); self.dew_seen = self.g.dew; }
     fn sell(&mut self, pi: usize) { let p = &self.g.plants[pi]; let (id, i, j) = (p.id, p.i, p.j); self.rec(Op::Sell(i, j)); self.g.remove_plant(id, true); self.dew_seen = self.g.dew; }
     fn use_power(&mut self, kind: Power) { self.rec(Op::Power(kind)); self.g.use_power(kind); self.dew_seen = self.g.dew; }
 
@@ -389,31 +386,14 @@ impl<'a, 'o> Bot<'a, 'o> {
         }
     }
 
-    // from the first diggers on, some dew is always kept to close a hole at once
-    // (a share of the pay for the last wave: little dew comes in while a wave is on, and the upgrades are the dear
-    // part; in the last wave only a hole's worth: what is kept there is left over, and the matrix reads it as idle dew)
-    fn keep_dew(&self) -> f64 {
-        if (!self.walls.is_empty() || self.opt.plan.is_some()) && self.g.wave as i32 >= self.first_digger - 1 { if self.g.wave >= self.g.waves { 50.0 } else { (50.0f64).max(round(self.opt.reserve * self.lv.wave_pay(self.g.wave))) } } else { 0.0 }
-    }
     fn try_build(&mut self) {
         let d = self.d;
-        // repairs first: a hole the bugs run through is closed at once for dew; other roots grow back by themselves
         let mut tr = [false; N]; for &(i, j, _) in &trail_of(&self.g, &self.g.dist) { tr[key(i, j)] = true; }
-        if self.opt.repair {
-            let ids: Vec<u32> = self.g.stubs.iter().map(|s| s.id).collect();
-            for id in ids {
-                let Some(k) = self.g.stubs.iter().position(|s| s.id == id) else { continue };
-                let s = &self.g.stubs[k];
-                if self.g.phase == Phase::Wave && tr[key(s.i, s.j)] && self.g.dew >= self.g.regrow_cost(k) { self.regrow(k); }
-            }
-        }
-        // a garden laid out beforehand: its steps in their order, each when there is dew for it (with the dew for a
-        // hole kept, as the bot keeps it). A step that cannot be taken for good (the cell is taken, the plant is
+        // a garden laid out beforehand: its steps in their order, each when there is dew for it. A step that cannot be taken for good (the cell is taken, the plant is
         // grown) is done with; a plant of another kind in the cell is sold for the one of the plan; one that cannot be taken now (the plant is eaten and growing back, bugs would be shut
         // in) is left for later and the steps after it go on; the first step there is no dew for stops the rest
         let opt = self.opt;
         if let Some(plan) = &opt.plan {
-            let keep_dew = self.keep_dew();
             let mut left = false;
             for n in 0..plan.len() {
                 if self.done[n] { continue; }
@@ -428,32 +408,32 @@ impl<'a, 'o> Bot<'a, 'o> {
                             // could not go in after the old one is sold (a hole in the wall for good)
                             if self.g.phase != Phase::Build { left = true; continue; }
                             let back = if self.g.phase == Phase::Build && self.g.plants[pi].born == self.g.wave as i32 { self.g.plants[pi].spent } else { (self.g.plants[pi].spent * self.g.refund).floor() };
-                            if self.g.dew + back < d.plants[k].cost + keep_dew { left = true; break; }
+                            if self.g.dew + back < d.plants[k].cost { left = true; break; }
                             self.sell(pi); self.place(k, i, j); self.done[n] = true; continue;
                         }
                         if self.g.grid[key(i, j)] != Cell::Empty { self.done[n] = true; continue; }
                         if self.g.place_problem(i, j) { if self.g.phase == Phase::Build { self.done[n] = true; } else { left = true; } continue; }
-                        if self.g.dew < d.plants[k].cost + keep_dew { left = true; break; }
+                        if self.g.dew < d.plants[k].cost { left = true; break; }
                         self.place(k, i, j); self.done[n] = true;
                     }
                     None => {
                         // a plant not there yet: its own step is still to come (left for later), or it never will
                         let Some(pi) = self.g.plant_at(i, j) else { if (0..n).any(|m| !self.done[m] && plan[m].0.is_some() && (plan[m].1, plan[m].2) == (i, j)) { left = true; } else { self.done[n] = true; } continue };
                         let Some(c) = self.g.upgrade_cost(pi) else { self.done[n] = true; continue };
-                        if self.g.dew < c + keep_dew { left = true; break; }
+                        if self.g.dew < c { left = true; break; }
                         self.upgrade(pi); self.done[n] = true;
                     }
                 }
             }
             if left { return; }
         }
-        // an aloe where the plants keep being eaten: by two eaten ones that no aloe reaches yet, as near to all of them
-        // as a free cell off the trail gets; an aloe with much to mend around it is grown
+        // an aloe where the plants keep being eaten (it guards them): by two eaten ones that no aloe reaches yet, as
+        // near to all of them as a free cell off the trail gets; an aloe with many eaten around it is grown
         if self.aloe {
             let g = &self.g;
             let cover = |q: &(i32, i32)| g.plants.iter().any(|p| p.kind == d.aloe && within((p.i - q.0) as f64, (p.j - q.1) as f64, g.pstat(p.kind, p.lvl, p.i, p.j, Stat::Range)));
             let bare: Vec<(i32, i32)> = self.eaten_at.iter().filter(|q| !cover(q)).cloned().collect(); let r0 = d.plants[d.aloe].st[Stat::Range as usize][0];
-            if bare.len() >= 2 && self.room() && g.plants.iter().filter(|p| p.kind == d.aloe).count() < 6 && g.dew >= d.plants[d.aloe].cost + 50.0 { // with a hole's worth of dew kept
+            if bare.len() >= 2 && self.room() && g.plants.iter().filter(|p| p.kind == d.aloe).count() < 6 && g.dew >= d.plants[d.aloe].cost + 50.0 { // with some dew left for the rest
                 let mut top = None; let mut top_n = 1;
                 for i in 0..COLS { for j in 0..ROWS {
                     if g.grid[key(i, j)] != Cell::Empty || g.stub_at(i, j).is_some() || self.keep[key(i, j)] || tr[key(i, j)] || self.planned.iter().any(|&c| c == (i, j)) { continue; }
@@ -481,12 +461,11 @@ impl<'a, 'o> Bot<'a, 'o> {
                 if !self.place(d.pumpkin, i, j) { return; }
             }
         }
-        let keep_dew = self.keep_dew();
         // the best step is looked for again only when the field changed or the dew for the last one found is there
         for _ in 0..60 {
             let sig = (self.g.wave, self.g.phase, self.g.stubs.len(), self.g.plants.iter().fold(0.0, |t, p| t + p.id as f64 * 7.0 + p.lvl as f64));
             if Some(sig) == self.seen && self.g.dew < self.need { return; }
-            let a = self.best(); self.seen = Some(sig); self.need = a.map_or(f64::INFINITY, |a| a.cost + keep_dew);
+            let a = self.best(); self.seen = Some(sig); self.need = a.map_or(f64::INFINITY, |a| a.cost);
             let Some(a) = a else { return };
             if self.g.dew < self.need { return; }
             self.run(a.act);
@@ -579,7 +558,7 @@ pub fn play_level<'a>(d: &'a Data, level: usize, opt: &Opts, layouts: &dyn Fn(us
     (res, b.ops)
 }
 
-// A player with no plan at all, for the parity check (sim/js/verify.mjs): it plants, grows, sells, mends, calls waves and
+// A player with no plan at all, for the parity check (sim/js/verify.mjs): it plants (on roots too), grows, sells, calls waves and
 // spends frost and rain at random, often where it cannot, so the two copies of the rules meet states no bot gets
 // into. What it did goes to the list like a bot's party.
 pub fn play_random<'a>(d: &'a Data, level: usize, opt: &Opts) -> Vec<Op> {
@@ -596,7 +575,7 @@ pub fn play_random<'a>(d: &'a Data, level: usize, opt: &Opts) -> Vec<Op> {
                 0..=5 => { let kind = if rnd(8) == 0 { rnd(d.plants.len()) } else { lv.plants[rnd(lv.plants.len())] }; let (i, j) = (rnd(COLS as usize + 1) as i32, rnd(ROWS as usize + 1) as i32); if inside(i, j) || rnd(2) == 0 { b.place(kind, i.min(COLS), j.min(ROWS)); } }
                 6 | 7 => { if !b.g.plants.is_empty() { let k = rnd(b.g.plants.len()); b.upgrade(k); } }
                 8 => { if !b.g.plants.is_empty() && rnd(3) == 0 { let k = rnd(b.g.plants.len()); b.sell(k); } }
-                9 => { if !b.g.stubs.is_empty() { let k = rnd(b.g.stubs.len()); b.regrow(k); } }
+                9 => { if !b.g.stubs.is_empty() { let k = rnd(b.g.stubs.len()); let (i, j) = (b.g.stubs[k].i, b.g.stubs[k].j); let kind = lv.plants[rnd(lv.plants.len())]; b.place(kind, i, j); } } // not on roots
                 10 => { if rnd(6) == 0 { b.use_power(if rnd(2) == 0 { Power::Frost } else { Power::Rain }); } }
                 _ => { if rnd(3) == 0 { b.start_wave(); } }
             }

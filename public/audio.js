@@ -355,12 +355,6 @@ export const sfx = {
     note(semi(392, 28), { vol: 0.05, dur: 0.5, delay: 0.3 });
     knock(0.4, { f: 300 });
   },
-  heal() {   // a soft chime
-    if (!once('heal', 100)) return;
-    note(660, { vol: 0.14, a: 0.008, dur: 0.5 });
-    note(990, { vol: 0.08, a: 0.008, dur: 0.6, delay: 0.07 });
-    note(1320, { vol: 0.04, a: 0.008, dur: 0.6, delay: 0.14 });
-  },
   regrow() {   // a little sprout pushes up: "bloop"
     if (!once('regrow', 80)) return;
     const m = vary();

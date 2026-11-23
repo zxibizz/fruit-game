@@ -6,7 +6,7 @@
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import * as D from '../../public/data.js';
-import { createGame, step, place, upgrade, startWave, regrow, removePlant, usePower, stubAt } from '../../public/game.js';
+import { createGame, step, place, upgrade, startWave, removePlant, usePower } from '../../public/game.js';
 import { hash, dump } from './hash.mjs';
 
 const args = process.argv.slice(2), opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
@@ -28,7 +28,6 @@ function run(tr, checking) {
       case 'place': place(g, op[1], op[2], op[3]); break;
       case 'up': upgrade(g, g.grid[op[2]][op[1]]); break;
       case 'wave': startWave(g); break;
-      case 'regrow': regrow(g, stubAt(g, op[1], op[2])); break;
       case 'sell': removePlant(g, g.grid[op[2]][op[1]]); break;
       case 'power': usePower(g, op[1]); break;
       case 'dew': g.dew = op[1]; break;

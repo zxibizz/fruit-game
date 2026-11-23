@@ -50,7 +50,6 @@ fn load(file: &str) -> Party {
             "place" => Op::Place(data.plant(a[1].str()), n(2), n(3)),
             "up" => Op::Up(n(1), n(2)),
             "wave" => Op::Wave,
-            "regrow" => Op::Regrow(n(1), n(2)),
             "sell" => Op::Sell(n(1), n(2)),
             "power" => Op::Power(if a[1].str() == "frost" { Power::Frost } else { Power::Rain }),
             "dew" => Op::Dew(a[1].num()),
@@ -69,7 +68,6 @@ fn replay(p: &Party, check: bool, dump_at: Option<usize>) -> Option<usize> {
             Op::Place(kind, i, j) => { g.place(kind, i, j); }
             Op::Up(i, j) => { if let Some(pi) = g.plant_at(i, j) { g.upgrade(pi); } }
             Op::Wave => { g.start_wave(); }
-            Op::Regrow(i, j) => { if let Some(s) = g.stub_at(i, j) { let id = g.stubs[s].id; g.regrow_stub(id, false); } }
             Op::Sell(i, j) => { if let Cell::Plant(id) = g.grid[game::key(i, j)] { g.remove_plant(id, true); } }
             Op::Power(kind) => { g.use_power(kind); }
             Op::Dew(v) => g.dew = v,
@@ -107,8 +105,6 @@ fn opts_of(d: &Data, j: &J) -> Opts {
             "plants" => o.plants = if *v == J::Null { None } else { Some(v.arr().iter().map(|p| d.plant(p.str())).collect()) },
             "upgrades" => o.upgrades = match v.str() { "greedy" => Upgrades::Greedy, "none" => Upgrades::None, "first" => Upgrades::First, x => panic!("upgrades: {}", x) },
             "early" => o.early = v.truthy(),
-            "repair" => o.repair = v.truthy(),
-            "reserve" => o.reserve = v.num(),
             "steps" => o.steps = v.num() as usize,
             x => panic!("unknown option {}", x),
         }
@@ -131,7 +127,6 @@ fn ops_json(d: &Data, ops: &[Op]) -> String {
             Op::Place(kind, i, j) => s.push_str(&format!("[\"place\",\"{}\",{},{}]", d.plants[*kind].name, i, j)),
             Op::Up(i, j) => s.push_str(&format!("[\"up\",{},{}]", i, j)),
             Op::Wave => s.push_str("[\"wave\"]"),
-            Op::Regrow(i, j) => s.push_str(&format!("[\"regrow\",{},{}]", i, j)),
             Op::Sell(i, j) => s.push_str(&format!("[\"sell\",{},{}]", i, j)),
             Op::Power(p) => s.push_str(if *p == Power::Frost { "[\"power\",\"frost\"]" } else { "[\"power\",\"rain\"]" }),
             Op::Dew(v) => s.push_str(&format!("[\"dew\",{}]", num(*v))),

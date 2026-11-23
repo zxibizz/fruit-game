@@ -26,7 +26,7 @@ pub enum Power { Frost, Rain }
 #[derive(Clone, Debug)]
 pub struct Plant { pub id: u32, pub kind: usize, pub i: i32, pub j: i32, pub lvl: usize, pub hp: f64, pub max_hp: f64, pub cd: f64, pub spent: f64, pub web: f64, pub buff: f64, pub guard: f64, pub born: i32 }
 #[derive(Clone, Debug)]
-pub struct Stub { pub id: u32, pub kind: usize, pub lvl: usize, pub spent: f64, pub i: i32, pub j: i32, pub grow: f64 }
+pub struct Stub { pub id: u32, pub kind: usize, pub lvl: usize, pub spent: f64, pub i: i32, pub j: i32 }
 #[derive(Clone, Debug)]
 pub struct Bug {
     pub id: u32, pub kind: usize, pub hp: f64, pub max_hp: f64, pub speed: f64, pub fly: bool, pub armor: f64,
@@ -52,7 +52,7 @@ pub struct Game<'a> {
     pub dew: f64, pub hp: f64, pub max_hp: f64, pub wave: usize, pub waves: usize, pub phase: Phase, pub next_in: Option<f64>,
     pub bugs: Vec<Bug>, pub shots: Vec<Shot>, pub plants: Vec<Plant>, pub stubs: Vec<Stub>, pub events: Vec<Event>, pub queue: VecDeque<Queued>,
     pub time: f64, pub wave_time: f64, pub frost: f64, pub rain: f64, pub power_max: f64, pub next_id: u32, rng: u32,
-    pub regrow: f64, pub refund: f64, pub dist: [f64; N], pub dig: [f64; N], pub stats: Stats,
+    pub refund: f64, pub dist: [f64; N], pub dig: [f64; N], pub stats: Stats,
     seen: Vec<(f64, usize)>,
 }
 
@@ -63,14 +63,14 @@ impl<'a> Game<'a> {
         let tier_of = |k: &str| meta.iter().find(|(n, _)| n == k).map_or(0, |(_, t)| *t);
         let tier = |k: &str| { let t = tier_of(k); if t > 0 { d.perk(k).unwrap_or_else(|| panic!("no perk {}", k)).v[t - 1] } else { 0.0 } };
         let hp = d.fruit_hp + tier("heart"); let clouds = tier("clouds");
-        let roots = tier("roots"); let refund = tier("refund");
+        let refund = tier("refund");
         let mut g = Game {
             d, lv, level, seed, meta: d.plants.iter().map(|p| tier_of(&p.name)).collect(),
             grid: [Cell::Empty; N], tiles: [Tile::None; N], entries: lv.entries.iter().map(|&j| (COLS - 1, j)).collect(), fruit: lv.fruit,
             dew: lv.dew + tier("dew"), hp, max_hp: hp, wave: 0, waves: lv.waves.len(), phase: Phase::Build, next_in: None,
             bugs: Vec::new(), shots: Vec::new(), plants: Vec::new(), stubs: Vec::new(), events: Vec::new(), queue: VecDeque::new(),
             time: 0.0, wave_time: 0.0, frost: 1.0 + clouds, rain: 1.0 + clouds, power_max: d.power_max + clouds, next_id: 1, rng: seed,
-            regrow: d.regrow * (if roots != 0.0 { roots } else { 1.0 }), refund: if refund != 0.0 { refund } else { d.refund },
+            refund: if refund != 0.0 { refund } else { d.refund },
             dist: [INF; N], dig: [INF; N], stats: Stats::default(), seen: Vec::new(),
         };
         for &(i, j, weed) in &lv.obstacles { g.grid[key(i, j)] = if weed { Cell::Weed } else { Cell::Rock }; }
@@ -96,6 +96,11 @@ impl<'a> Game<'a> {
 
     // Distance (in steps) from every free cell to the fruit; `extra`: a cell taken as closed.
     pub fn compute_dist(&self, extra: i32) -> [f64; N] { dist_over(&self.grid, self.fruit, extra) }
+    // the same with the roots of the eaten plants closed too (they grow back after the wave)
+    fn dist_with_roots(&self, extra: i32) -> [f64; N] {
+        let mut grid = self.grid; for s in &self.stubs { grid[key(s.i, s.j)] = Cell::Rock; }
+        dist_over(&grid, self.fruit, extra)
+    }
     // Diggers eat through plants: a plant is a cell that takes as many steps as they would walk while eating it.
     fn dig_steps(&self, c: Cell) -> f64 {
         if let Cell::Plant(id) = c { let b = &self.d.bugs[self.d.cricket]; self.pidx(id).map_or(0.0, |k| self.plants[k].max_hp / b.dig * b.speed) } else { 0.0 }
@@ -168,15 +173,22 @@ impl<'a> Game<'a> {
         out
     }
 
-    // True when a plant cannot go to (i, j). A plant may grow on a cell with bugs on it: they step out of it, so they
-    // only need a way on from a cell next to it.
+    // True when a plant cannot go to (i, j). Not on roots: the eaten plant grows back there after the wave.
     pub fn place_problem(&self, i: i32, j: i32) -> bool {
         if !inside(i, j) { return true; }
         if self.grid[key(i, j)] != Cell::Empty { return true; }
         if self.entries.iter().any(|&e| e == (i, j)) || (i, j) == self.fruit { return true; }
         if self.tiles[key(i, j)] == Tile::Nettle { return true; }
+        if self.stub_at(i, j).is_some() { return true; }
+        self.blocks(i, j)
+    }
+    // Whether a plant on (i, j) would shut the bugs in. The way from every anthill has to stay open with all the roots
+    // grown back too, as they will be after the wave. A plant may grow on a cell with bugs on it: they step out of it,
+    // so they only need a way on from a cell next to it (with the roots as they are now: open).
+    fn blocks(&self, i: i32, j: i32) -> bool {
         let d = self.compute_dist(key(i, j) as i32);
-        if self.entries.iter().any(|&(a, b)| d[key(a, b)] >= INF) { return true; }
+        if !self.stubs.is_empty() { let all = self.dist_with_roots(key(i, j) as i32); if self.entries.iter().any(|&(a, b)| all[key(a, b)] >= INF) { return true; } }
+        else if self.entries.iter().any(|&(a, b)| d[key(a, b)] >= INF) { return true; }
         let open = |ci: i32, cj: i32| inside(ci, cj) && d[key(ci, cj)] < INF;
         for b in &self.bugs {
             if b.fly || !b.has_t || self.d.bugs[b.kind].dig != 0.0 || !inside(b.ti, b.tj) { continue; }
@@ -196,7 +208,7 @@ impl<'a> Game<'a> {
         let tier = self.meta[kind];
         if tier > 0 { if let Some(pk) = &p.perk { if pk.stat == Some(s) { v = if pk.mul { v * pk.v[tier - 1] } else { v + pk.v[tier - 1] }; } } }
         if inside(i, j) && self.tiles[key(i, j)] == Tile::Fertile {
-            match s { Stat::Dmg | Stat::Burn | Stat::Heal | Stat::Chomp | Stat::Hp => v *= d.fertile, Stat::Slow | Stat::Buff => v += d.fertile_add, Stat::Eat => v /= d.fertile, _ => {} }
+            match s { Stat::Dmg | Stat::Burn | Stat::Chomp | Stat::Hp => v *= d.fertile, Stat::Slow | Stat::Buff | Stat::Guard => v += d.fertile_add, Stat::Eat => v /= d.fertile, _ => {} }
         }
         if s == Stat::Slow { v = v.min(0.6); }
         if s == Stat::Hp { round(v) } else { v }
@@ -218,14 +230,12 @@ impl<'a> Game<'a> {
         let k = self.grow(kind, i, j, 1, cost); if self.phase == Phase::Build { self.plants[k].born = self.wave as i32; } // sold before the wave starts, it gives all its dew back
         true
     }
-    // Repairs. The roots of an eaten plant grow back into the same plant of the same level for a part of its price
-    // (for nothing when an aloe or the rain does it).
-    pub fn regrow_cost(&self, k: usize) -> f64 { (self.stubs[k].spent * self.d.repair).ceil() }
-    pub fn regrow_stub(&mut self, id: u32, free: bool) -> bool {
+    // The roots of an eaten plant grow back into the same plant of the same level, for nothing: after the wave, or at
+    // once by the rain. In a wave they wait while a bug would be shut in by them.
+    fn regrow_stub(&mut self, id: u32) -> bool {
         let Some(k) = self.stubs.iter().position(|s| s.id == id) else { return false };
-        let (i, j) = (self.stubs[k].i, self.stubs[k].j); let cost = self.regrow_cost(k);
-        if self.over() || (!free && self.dew < cost) || self.place_problem(i, j) { return false; }
-        if !free { self.dew -= cost; }
+        let (i, j) = (self.stubs[k].i, self.stubs[k].j);
+        if self.grid[key(i, j)] != Cell::Empty || self.blocks(i, j) { return false; }
         let (kind, lvl, spent) = (self.stubs[k].kind, self.stubs[k].lvl, self.stubs[k].spent);
         self.grow(kind, i, j, lvl, spent);
         true
@@ -248,7 +258,7 @@ impl<'a> Game<'a> {
         if sold { self.dew += self.refund_of(&p); }
         else {
             self.stats.eaten += 1.0; let sid = self.next_id; self.next_id += 1;
-            self.stubs.push(Stub { id: sid, kind: p.kind, lvl: p.lvl, spent: p.spent, i: p.i, j: p.j, grow: 0.0 });
+            self.stubs.push(Stub { id: sid, kind: p.kind, lvl: p.lvl, spent: p.spent, i: p.i, j: p.j });
             self.events.push(Event::PlantDead { i: p.i, j: p.j });
         }
     }
@@ -321,11 +331,12 @@ impl<'a> Game<'a> {
                 for b in self.bugs.iter_mut() { let t = if d.bugs[b.kind].boss { 2.0 } else { 4.0 }; freeze(b, t, true); }
             }
             Power::Rain => {
+                // the roots grow back at once and the webs are washed off; it heals no bitten plant
                 self.rain -= 1.0;
-                for p in self.plants.iter_mut() { p.hp = p.max_hp; p.web = 0.0; }
+                for p in self.plants.iter_mut() { p.web = 0.0; }
                 self.auras();
                 let ids: Vec<u32> = self.stubs.iter().map(|s| s.id).collect();
-                for id in ids { self.regrow_stub(id, true); }
+                for id in ids { self.regrow_stub(id); }
                 self.hp = self.max_hp.min(self.hp + 3.0);
             }
         }
@@ -473,13 +484,7 @@ impl<'a> Game<'a> {
         if !pd.has[Stat::Range as usize] || pd.has[Stat::Buff as usize] { return; }
         let st = |g: &Self, s: Stat| g.pstat(kind, lvl, i, j, s);
         let range = st(self, Stat::Range);
-        if pd.has[Stat::Heal as usize] {
-            let heal = st(self, Stat::Heal);
-            for q in self.plants.iter_mut() { if q.hp < q.max_hp && within((q.i - i) as f64, (q.j - j) as f64, range) { q.hp = q.max_hp.min(q.hp + heal * dt); } }
-            let rg = st(self, Stat::Regrow);
-            for s in self.stubs.iter_mut() { if within((s.i - i) as f64, (s.j - j) as f64, range) { s.grow = (s.grow + dt / rg).min(1.0); } }
-            return;
-        }
+        if pd.has[Stat::Guard as usize] { return; } // the aloe only guards (auras)
         let gr = pd.ground_range;
         let in_range = |b: &Bug, air: bool| b.hp > 0.0 && (air || !b.fly) && b.x < COLS as f64 + 0.2 && within(b.x - px, b.y - py, if gr != 0.0 && !b.fly { range.min(gr) } else { range });
         let n = self.bugs.len(); // the bugs there are when it looks round: what is born of its hits is not among them
@@ -577,15 +582,6 @@ impl<'a> Game<'a> {
             while self.queue.front().map_or(false, |q| q.at <= self.wave_time) { let q = self.queue.pop_front().unwrap(); self.spawn(q.kind, q.e, None); }
         }
         for b in self.bugs.iter_mut() { b.slow = 1.0; }
-        // roots grow back by themselves (aloes add to it in update_plant); where that would close the way, they wait
-        if !self.stubs.is_empty() {
-            let ids: Vec<u32> = self.stubs.iter().map(|s| s.id).collect();
-            for id in ids {
-                let Some(k) = self.stubs.iter().position(|s| s.id == id) else { continue };
-                let g = (self.stubs[k].grow + dt / self.regrow).min(1.0); self.stubs[k].grow = g;
-                if g >= 1.0 { self.regrow_stub(id, true); }
-            }
-        }
         for pi in 0..self.plants.len() { self.update_plant(pi, dt); }
         for bi in 0..self.bugs.len() { { let b = &mut self.bugs[bi]; if b.mark > 0.0 { b.mark -= dt; } } if self.bugs[bi].hp > 0.0 { self.update_bug(bi, dt); } }
         for si in 0..self.shots.len() { self.update_shot(si, dt); }
@@ -595,6 +591,10 @@ impl<'a> Game<'a> {
         if self.phase == Phase::Wave && self.queue.is_empty() && self.bugs.is_empty() {
             if self.wave >= self.waves { self.phase = Phase::Won; }
             else {
+                // the garden grows back: the eaten plants out of their roots, the bitten ones to full health
+                let ids: Vec<u32> = self.stubs.iter().map(|s| s.id).collect();
+                for id in ids { self.regrow_stub(id); }
+                for p in self.plants.iter_mut() { p.hp = p.max_hp; }
                 let bonus = self.lv.pay_at[self.wave - 1]; self.phase = Phase::Build; self.next_in = Some(self.d.brk); self.gain(bonus);
                 if (self.wave as f64) % self.d.power_every == 0.0 { self.frost = self.power_max.min(self.frost + 1.0); self.rain = self.power_max.min(self.rain + 1.0); }
                 self.events.push(Event::WaveDone { bonus });
@@ -612,7 +612,7 @@ impl<'a> Game<'a> {
         out.push(self.plants.len() as f64);
         for p in &self.plants { out.extend_from_slice(&[p.id as f64, p.lvl as f64, p.i as f64, p.j as f64, p.hp, p.cd, p.web, p.buff, p.guard]); }
         out.push(self.stubs.len() as f64);
-        for s in &self.stubs { out.extend_from_slice(&[s.id as f64, s.i as f64, s.j as f64, s.grow]); }
+        for s in &self.stubs { out.extend_from_slice(&[s.id as f64, s.i as f64, s.j as f64]); }
         out.push(self.shots.len() as f64);
         for s in &self.shots { out.extend_from_slice(&[s.id as f64, s.x, s.y]); }
     }

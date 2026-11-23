@@ -29,7 +29,7 @@ try { setPriority(19); } catch { /* as it is */ }
 let rs = Number(opt('--seed', 1)) * 2654435761 >>> 0;
 const rnd = () => { rs = (rs + 0x6D2B79F5) >>> 0; let t = rs; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 const pick = (a) => a[Math.floor(rnd() * a.length)], K = (i, j) => i + ',' + j;
-const SMART = { place: 'best', upgrades: 'greedy', meta: 'exp2', terrain: true, powers: true, early: true, repair: true, ...(from ? { maze: from } : { route: 1 }) };
+const SMART = { place: 'best', upgrades: 'greedy', meta: 'exp2', terrain: true, powers: true, early: true, ...(from ? { maze: from } : { route: 1 }) };
 const policy = START === 'expert' ? JSON.parse(readFileSync(new URL('./strategy.json', import.meta.url), 'utf8')).policy : null;
 const base = { ...resolve({ level, opts: SMART }), ...(policy ? { policy } : {}) }, kinds = LEVELS[level].plants;
 mkdirSync(dirname(out), { recursive: true }); // before the search: its result must have somewhere to go

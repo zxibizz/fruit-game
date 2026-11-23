@@ -5,7 +5,7 @@
 import { LEVELS, PLANTS, BUGS, PERKS, PERK_ORDER, TUNE, BREAK, EARLY_DEW, wavePay, makeWaves } from '../public/data.js';
 
 // The perks a player has by level n who took two stars on every level before it, and all of them.
-const BUY = ['dew', 'rose', 'heart', 'corn', 'pumpkin', 'mint', 'dew', 'roots', 'pepper', 'rose', 'clouds', 'corn', 'dandelion', 'heart', 'aloe', 'flytrap', 'bell', 'mint', 'pepper', 'dew'];
+const BUY = ['dew', 'rose', 'heart', 'corn', 'pumpkin', 'mint', 'dew', 'refund', 'pepper', 'rose', 'clouds', 'corn', 'dandelion', 'heart', 'aloe', 'flytrap', 'bell', 'mint', 'pepper', 'dew'];
 export function expectedMeta(level, perLevel = 2) {
   let stars = level * perLevel; const meta = {};
   for (const k of BUY) { const cost = PERKS[k].cost[meta[k] || 0]; if (cost == null || cost > stars) continue; stars -= cost; meta[k] = (meta[k] || 0) + 1; }

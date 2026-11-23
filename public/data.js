@@ -9,7 +9,7 @@ export const BREAK = 20, EARLY_DEW = 1;
 // The first level of a plant is cheap, so a trail is quick to shape; the upgrades are dear and there is never dew for
 // all of them: which plants to grow is the choice of the level.
 // Stats with three values are per plant level 1..3. The third level also brings a trick of its own (the last line
-// of every plant): thorns, multi, wide splash, guard, chill, long burn, stun, eating flyers, a wider aura.
+// of every plant): thorns, multi, wide splash, a stronger guard, chill, long burn, stun, eating flyers, a wider aura.
 // There is no plant that makes dew: dew comes from finished waves (most of it), beaten bugs and waves called early.
 export const PLANTS = {
   // thorns: a bug that bites or gnaws it loses this share of its health (per bite / per second of gnawing)
@@ -20,8 +20,9 @@ export const PLANTS = {
   // hits: how many bugs the kernels of one cob can hit (the closest to where it lands): against a tight pack a
   // splash with no such limit was worth as much as the pack was big
   corn: { cost: 35, up: [90, 180], hp: [60, 80, 100], range: [1.8, 1.9, 1.95], rate: [.6, .65, .7], dmg: [12, 18, 26], splash: [.8, .8, 1.15], hits: [3, 4, 5], shot: 'kernel', speed: 5 },
-  // heals the plants around and grows the eaten ones back (regrow: seconds for one); guard: plants around take that much less damage
-  aloe: { cost: 30, up: [70, 130], hp: [70, 90, 110], range: [2.2, 2.6, 3.2], heal: [3, 5, 8], regrow: [6, 4, 2.5], guard: [0, 0, .3] },
+  // guard: the plants around take that much less damage (FERTILE_ADD more on a fertile bed). It heals nothing: no plant is healed in a wave (a plant
+  // under a healer was a wall for good); until the guard goes over to the pumpkin (docs/redesign.md) it is the aloe's
+  aloe: { cost: 30, up: [70, 130], hp: [70, 90, 110], range: [2.2, 2.6, 3.2], guard: [.15, .22, .3] },
   // chill: every so many seconds the bugs around freeze for a second
   mint: { cost: 30, up: [80, 150], hp: [60, 80, 100], range: [1.5, 1.6, 1.7], slow: [.3, .4, .5], chill: [0, 0, 6], air: true },
   // burns every bug around it, however many: little to each, so it is for dense crowds of small bugs
@@ -38,11 +39,9 @@ export const PLANTS = {
 };
 export const MARK_T = 3;
 export const PLANT_ORDER = ['pumpkin', 'rose', 'corn', 'aloe', 'mint', 'pepper', 'dandelion', 'flytrap', 'bell'];
-// An eaten plant leaves its roots: growing it back at once costs this share of the dew spent on it, healing costs
-// the same share of the missing health.
-export const REPAIR = 1 / 3;
-// Left alone, the roots grow back by themselves in REGROW seconds; an aloe nearby adds its own speed to that.
-export const REGROW = 15;
+// No plant is healed or grown back in a wave: its health is all it has for the wave. An eaten plant leaves its roots,
+// a hole the bugs walk through till the wave is over (nothing can be planted there meanwhile); after the wave every
+// plant grows back as it was, at its level and in full health, for nothing. Only the rain grows the roots back at once.
 // A plant sold later than the build phase it was planted in gives this share of the dew spent on it back.
 export const REFUND = .5;
 // Plants get no stronger from wave to wave, so the bite of the plant eaters grows much slower than the bugs' health.
@@ -68,7 +67,7 @@ export const POWER_EVERY = 10, POWER_MAX = 2;
 // faded wave by wave.
 export const wavePay = (L, wave) => Math.round(L.pay[0] + (L.pay[1] - L.pay[0]) * Math.min(1, Math.max(0, wave - 1) / Math.max(1, L.count - 2)));
 
-// Ground that changes the game. fertile: a plant on it is FERTILE times stronger (damage, healing, health) and its
+// Ground that changes the game. fertile: a plant on it is FERTILE times stronger (damage, health) and its
 // aura FERTILE_ADD wider in effect; mud: walkers crawl at MUD of their speed; nettle: nothing can be planted, and a
 // walker loses NETTLE of its health a second on it (a boss NETTLE_BOSS).
 export const FERTILE = 1.3, FERTILE_ADD = .05, MUD = .55, NETTLE = .07, NETTLE_BOSS = .012;
@@ -80,20 +79,19 @@ export const WEED_COST = 30;
 export const PERKS = {
   dew: { cost: [1, 2, 3], v: [25, 50, 80] }, // more dew at the start
   heart: { cost: [1, 2, 3], v: [3, 6, 10] }, // a sturdier fruit
-  roots: { cost: [1, 2], v: [.7, .45] }, // roots grow back faster (time multiplier)
   clouds: { cost: [2, 3], v: [1, 2] }, // extra frost and rain at the start
   refund: { cost: [1, 2], v: [.7, .9] }, // selling gives more back
   pumpkin: { cost: [1, 2], v: [1.25, 1.5], stat: 'hp', mul: true },
   rose: { cost: [1, 2], v: [1.1, 1.2], stat: 'dmg', mul: true },
   corn: { cost: [1, 2], v: [1.1, 1.2], stat: 'dmg', mul: true },
-  aloe: { cost: [1, 2], v: [1.3, 1.6], stat: 'heal', mul: true },
+  aloe: { cost: [1, 2], v: [.03, .06], stat: 'guard' },
   mint: { cost: [1, 2], v: [.03, .06], stat: 'slow' },
   pepper: { cost: [1, 2], v: [1.25, 1.5], stat: 'burn', mul: true },
   dandelion: { cost: [1, 2], v: [1.1, 1.2], stat: 'dmg', mul: true },
   flytrap: { cost: [1, 2], v: [.88, .76], stat: 'eat', mul: true },
   bell: { cost: [1, 2], v: [.05, .1], stat: 'buff' },
 };
-export const PERK_ORDER = ['dew', 'heart', 'roots', 'clouds', 'refund', ...PLANT_ORDER];
+export const PERK_ORDER = ['dew', 'heart', 'clouds', 'refund', ...PLANT_ORDER];
 
 // w: the weight of a bug when a wave is put together. chew: bites the plants next to the trail in passing.
 // dig: goes straight for the fruit and eats through the plants in its way (damage per second).
@@ -104,7 +102,7 @@ export const BUGS = {
   ant: { hp: 12, speed: 1.0, bite: 1, reward: 2, w: 1 },
   aphid: { hp: 6, speed: 1.25, bite: 1, reward: 1, w: .5 },
   beetle: { hp: 44, armor: 2, speed: .7, bite: 2, reward: 5, w: 5 },
-  caterpillar: { hp: 34, speed: .65, bite: 2, reward: 5, chew: 8, w: 4 },
+  caterpillar: { hp: 34, speed: .65, bite: 2, reward: 5, chew: 4, w: 4 }, // chew 8 while the eaten grew back in a wave
   grasshopper: { hp: 18, speed: 1.7, bite: 1, reward: 3, w: 1.6 },
   snail: { hp: 70, speed: .42, bite: 2, reward: 8, noSlow: true, w: 8 },
   pillbug: { hp: 32, armor: 5, speed: .6, bite: 2, reward: 7, w: 6 },
@@ -168,7 +166,7 @@ export const LEVELS = [
       '.........R.R..',
       '.....f..S.....',
     ],
-    dew: 380, pay: [380, 700],
+    dew: 380, pay: [380, 660],
     plants: ['pumpkin', 'rose', 'corn', 'aloe', 'mint'],
     count: 22, budget: [8.7, 4.4], roster: [['ant', 1], ['aphid', 2], ['grasshopper', 3], ['beetle', 4], ['snail', 6], ['caterpillar', 8], ['cricket', 11]], boss: [[11, 'queen', 1], [22, 'queen', 2]],
   },

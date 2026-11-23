@@ -22,10 +22,10 @@ const kind = args.find((a) => a === 'fast' || a === 'full') || 'fast', jobs = Nu
 const range = (s) => s.split(',').flatMap((p) => { const [a, b] = p.split('-').map(Number); return b ? Array.from({ length: b - a + 1 }, (_, k) => a + k) : [a]; });
 const levels = (opt('--levels') ? range(opt('--levels')) : LEVELS.map((_, n) => n + 1)).map((n) => n - 1);
 // the fast set: parts of a few levels chosen so that between them every bug, boss, plant and kind of ground comes
-// up, played three ways — the smart bot (mazes, repairs, powers at the right time), the bot that leaves holes to grow
-// back by themselves and the one that spends frost and rain at once, a garden with all the dew at once (crowds of
+// up, played three ways — the smart bot (mazes, powers at the right time), the bot with no powers (holes stay till the
+// wave is over) and the one that spends frost and rain at once, a garden with all the dew at once (crowds of
 // plants, every upgrade) — and stopped after STEPS steps of the game (the bosses of the middle of a level are in)
-const STEPS = 26000, FAST = [[2, 'no repair'], [3, 'exploit spread'], [4, 'smart s7'], [5, 'smart s7'], [7, 'eager powers']];
+const STEPS = 26000, FAST = [[2, 'no powers'], [3, 'exploit spread'], [4, 'smart s7'], [5, 'smart s7'], [7, 'eager powers']];
 const all = plan('full', LEVELS.map((_, n) => n), routes(LEVELS.map((_, n) => n)));
 const tasks = (kind === 'full' ? all.filter((t) => levels.includes(t.level)) : FAST.filter(([n]) => levels.includes(n)).map(([n, name]) => {
   const t = all.find((x) => x.level === n && x.name === name); if (!t) throw new Error(`verify: no scenario '${name}' in balance/plans.mjs any more: pick another for the fast set`);

@@ -17,7 +17,7 @@ function call(bin, cmd, body, jobs) {
 }
 // scenarios: [{ level, opts, record?, random? }], opts as the bot takes them (balance/scenario.mjs resolve): seed,
 // route, terrain, powers (true, false, 'eager'), bank (dew), meta ({ perk: tier }), place, plants ([kinds] or null),
-// upgrades, early, repair, maxPlants, steps, maze (a maze of routes() by name, instead of route). Gives [{ res, ms }] in the same order, { err } for a party that broke;
+// upgrades, early, maxPlants, steps, maze (a maze of routes() by name, instead of route). Gives [{ res, ms }] in the same order, { err } for a party that broke;
 // res is the bot's own report (won, hp, maxHp, wave, waves, plants, grown, maxed, dew, eaten, income, kinds, bites,
 // powersUsed, trail, worth, time). record: a file the party is written to (every action and the hash of the state
 // after every step); random: a player with no plan plays instead of the bot (for the parity check).
