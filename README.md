@@ -147,6 +147,32 @@ and in portrait (turned there).
   Of the healths tried it takes the one where the maze pays most (the ordinary player furthest above the best lazy
   garden) with the hard rules kept on the game's own waves. A moderate 1.4 (fewer bugs, healthier) made the maze pay
   more on four levels; twice as healthy never did (the bosses grow too).
+- `node balance/studio.mjs [--port 8737] [--jobs N] [--nice]` — **the balance studio**, a page at http://localhost:8737
+  that answers, as the numbers change, what the matrix answers in minutes: for every level and every wave, the
+  gardens that hold that wave best for the dew a player has by then (the start, the pay of every wave before it and
+  the reward of every bug in them, all of it standing: the meta of the wave, an upper bound, not a plan of a party).
+  The native engine (`fruit-sim studio`, `sim/src/studio.rs`) searches on the real rules: a garden is a maze of the
+  pool of `routes.rs` (or its first walls) and a plant of some tier on every wall and on any free cell off the trail;
+  its worth is its **margin** on that wave played alone (how many times healthier every bug may be and nothing bites
+  the fruit; `∞` — 30 and more — is a garden that kills by shares of health: thorns, spikes, nettles and a flytrap
+  for the worn, no health of the bugs beats it). One best garden is kept for every composition (MAP-Elites: the
+  families of plants — a plant, or a plant on a branch — that take 15% of its dew or more), and the best garden of
+  one plant alone beside them, so the page shows the best *different* gardens of a wave and how far the best mix is
+  above the best monoculture (no further is the red flag: the meta is one plant everywhere). Mutations change a
+  plant or its tier, swap, move, add and take out plants, turn a whole family into another, change the maze; two
+  gardens are crossed along a column or a row; the waves next to each other lend their gardens. A garden is tried
+  against the elite of its niche first — a party at that margin, and only one that holds is measured on (by halving,
+  to 2%) — so most of the work goes into the few that do better. The page: the overview of every level and wave
+  (margin, the premium of the mix over one plant, the leading plant, the change against a pinned baseline), the
+  level wave by wave (which plants and branches the best gardens are made of), the wave (its bugs, its top gardens on
+  the field with their mazes, the best of one plant of each kind), and an editor of the overrides of `run.mjs --set`
+  (plants tier by tier, bugs, a level's dew, pay, waves and its field, `TUNE`). An override or a change of
+  `public/data.js` has every garden found played again on the new game first — the wave looked at in a few seconds,
+  their old margins shown as stale till then — and the search goes on from them; a change of the rules in `sim/src`
+  is rebuilt by cargo and the engine restarted with what was found. The wave looked at gets most of the work, its
+  level next, the rest a little (`/api/caps`). What it found is kept in `balance/.studio/` between runs. Some 1000
+  waves a second on four cores; a level of 20 waves gets good gardens in a minute or two and better ones the longer it
+  runs. The search is a search: the best it shows is the best it has found, a lower bound of what the wave allows.
 - `sim/` — the simulation once more, in Rust, and the bot that plays it (dev only, not in the image; `cargo` builds
   it, no dependencies). The balance matrix and the balance tests run on it: a party takes a tenth of a second where
   the JS simulation with a JS bot took three.

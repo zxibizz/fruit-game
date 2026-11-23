@@ -59,6 +59,14 @@ pub struct Game<'a> {
     pub refund: f64, pub dist: [f64; N], pub dig: [f64; N], pub stats: Stats,
     pub thorn: [f64; N], pub thorn_air: [f64; N], // the thorns of the pumpkins on every cell
     seen: Vec<(f64, usize)>,
+    // the balance studio's knob (studio.rs): every bug that many times healthier; 1 everywhere else, and a product
+    // with 1 is the number itself, so parties stay those of game.js to the bit
+    pub hp_scale: f64,
+    stat_tab: std::sync::Arc<Vec<f64>>,
+    // the bugs by the cell they are on, counted at the start of the plants' turn of a step (bugs do not move in it):
+    // a plant looks only at the bugs of the cells around it, in the order of the list as before (bk_n: how many bugs
+    // there were then; the ones born since are looked at too)
+    bk_start: Vec<u32>, bk_list: Vec<u32>, bk_n: usize, near_buf: Vec<usize>,
 }
 
 impl<'a> Game<'a> {
@@ -76,8 +84,10 @@ impl<'a> Game<'a> {
             bugs: Vec::new(), shots: Vec::new(), plants: Vec::new(), stubs: Vec::new(), events: Vec::new(), queue: VecDeque::new(),
             time: 0.0, wave_time: 0.0, frost: 1.0 + clouds, rain: 1.0 + clouds, power_max: d.power_max + clouds, next_id: 1, rng: seed,
             refund: if refund != 0.0 { refund } else { d.refund },
-            dist: [INF; N], dig: [INF; N], stats: Stats::default(), seen: Vec::new(), thorn: [0.0; N], thorn_air: [0.0; N],
+            dist: [INF; N], dig: [INF; N], stats: Stats::default(), seen: Vec::new(), thorn: [0.0; N], thorn_air: [0.0; N], hp_scale: 1.0, stat_tab: std::sync::Arc::new(Vec::new()),
+            bk_start: vec![0; BK_W * BK_H + 1], bk_list: Vec::new(), bk_n: 0, near_buf: Vec::new(),
         };
+        g.stat_tab = std::sync::Arc::new(Self::stat_table(d, &g.meta));
         for &(i, j, weed) in &lv.obstacles { g.grid[key(i, j)] = if weed { Cell::Weed } else { Cell::Rock }; }
         for &(i, j, t) in &lv.tiles { g.tiles[key(i, j)] = t; }
         g.refresh();
@@ -217,12 +227,25 @@ impl<'a> Game<'a> {
     // (i < 0: no cell yet). 0 when it has no such stat.
     #[inline]
     pub fn pstat(&self, kind: usize, lvl: usize, br: u8, i: i32, j: i32, s: Stat) -> f64 {
-        let d = self.d; let p = &d.plants[kind];
-        let mut v = p.st[s as usize][slot(lvl, br)];
+        let fert = inside(i, j) && self.tiles[key(i, j)] == Tile::Fertile;
+        self.stat_tab[((kind * 6 + slot(lvl, br)) * 2 + fert as usize) * NSTAT + s as usize]
+    }
+    // every stat of every plant on every tier, on plain ground and on fertile, with the perks of the party: they never
+    // change in a party, and the rules ask for them every step (counted once here, by the same arithmetic)
+    fn stat_table(d: &Data, meta: &[usize]) -> Vec<f64> {
+        let mut t = vec![0.0; d.plants.len() * 6 * 2 * NSTAT];
+        for kind in 0..d.plants.len() { for sl in 0..6 { for fert in 0..2 { for s in 0..NSTAT {
+            t[((kind * 6 + sl) * 2 + fert) * NSTAT + s] = Self::stat_of(d, meta, kind, sl, fert == 1, STATS[s]);
+        } } } }
+        t
+    }
+    fn stat_of(d: &Data, meta: &[usize], kind: usize, sl: usize, fert: bool, s: Stat) -> f64 {
+        let p = &d.plants[kind];
+        let mut v = p.st[s as usize][sl];
         if v == 0.0 { return v; }
-        let tier = self.meta[kind];
+        let tier = meta[kind];
         if tier > 0 { if let Some(pk) = &p.perk { if pk.stat.contains(&s) { v = if pk.mul { v * pk.v[tier - 1] } else { v + pk.v[tier - 1] }; } } }
-        if inside(i, j) && self.tiles[key(i, j)] == Tile::Fertile {
+        if fert {
             match s { Stat::Dmg | Stat::Burn | Stat::Hp | Stat::Thorns => v *= d.fertile, Stat::Slow | Stat::Frost | Stat::Guard => v += d.fertile_add, Stat::Eat => v /= d.fertile, _ => {} }
         }
         if s == Stat::Slow || s == Stat::Frost { v = v.min(0.6); }
@@ -313,7 +336,7 @@ impl<'a> Game<'a> {
     pub fn hp_mul(&self, wave: usize) -> f64 { 1.0 + self.d.hp_growth * (wave as f64 - 1.0) }
     pub fn bug_hp(&self, kind: usize, wave: usize) -> f64 {
         let b = &self.d.bugs[kind];
-        round(b.hp * self.lv.hp * (if b.fly { 1.0 + (self.hp_mul(wave) - 1.0) * self.d.fly_hp } else { self.hp_mul(wave) }))
+        round(b.hp * self.lv.hp * (if b.fly { 1.0 + (self.hp_mul(wave) - 1.0) * self.d.fly_hp } else { self.hp_mul(wave) }) * self.hp_scale)
     }
     fn chew_mul(&self) -> f64 { 1.0 + self.d.chew_growth * (self.wave as f64 - 1.0) }
 
@@ -544,6 +567,29 @@ impl<'a> Game<'a> {
         if self.hp <= 0.0 { self.hp = 0.0; self.phase = Phase::Lost; }
     }
 
+    #[inline] fn bk_cell(x: f64, y: f64) -> usize {
+        let cx = (x.floor().max(0.0) as usize).min(BK_W - 1); let cy = (y.floor().max(0.0) as usize).min(BK_H - 1); cy * BK_W + cx
+    }
+    fn bucket_bugs(&mut self) {
+        let nb = BK_W * BK_H; let start = &mut self.bk_start; for v in start.iter_mut() { *v = 0; }
+        for b in &self.bugs { start[Self::bk_cell(b.x, b.y) + 1] += 1; }
+        for c in 0..nb { start[c + 1] += start[c]; }
+        self.bk_list.clear(); self.bk_list.resize(self.bugs.len(), 0);
+        let mut fill: Vec<u32> = start[..nb].to_vec();
+        for (k, b) in self.bugs.iter().enumerate() { let c = Self::bk_cell(b.x, b.y); self.bk_list[fill[c] as usize] = k as u32; fill[c] += 1; }
+        self.bk_n = self.bugs.len();
+    }
+    // every bug that may be within r of (px, py), in the order of the list (a few more than that is no harm: the caller
+    // asks each one as it did of every bug)
+    fn near(&self, px: f64, py: f64, r: f64, out: &mut Vec<usize>) {
+        out.clear();
+        let (cx0, cy0) = (((px - r).floor().max(0.0) as usize).min(BK_W - 1), ((py - r).floor().max(0.0) as usize).min(BK_H - 1));
+        let (cx1, cy1) = (((px + r).floor().max(0.0) as usize).min(BK_W - 1), ((py + r).floor().max(0.0) as usize).min(BK_H - 1));
+        for cy in cy0..=cy1 { let a = self.bk_start[cy * BK_W + cx0] as usize; let b = self.bk_start[cy * BK_W + cx1 + 1] as usize; out.extend(self.bk_list[a..b].iter().map(|&k| k as usize)); }
+        out.sort_unstable();
+        out.extend(self.bk_n..self.bugs.len());
+    }
+
     fn update_plant(&mut self, pi: usize, dt: f64) {
         let d = self.d; let (kind, lvl, br, i, j) = { let p = &self.plants[pi]; (p.kind, p.lvl, p.br, p.i, p.j) };
         let (px, py) = (i as f64 + 0.5, j as f64 + 0.5);
@@ -555,24 +601,33 @@ impl<'a> Game<'a> {
         let slow = st(self, Stat::Slow);
         if slow != 0.0 { // the cold mint: every bug around slower, and with rime frozen now and then
             let mut any = false;
-            for b in self.bugs.iter_mut() { if in_range(b, air) { b.slow = b.slow.min(1.0 - slow); any = true; } }
-            let rime = st(self, Stat::Rime); if rime == 0.0 { return; }
-            let p = &mut self.plants[pi]; p.cd -= dt; if p.cd > 0.0 || !any { return; }
+            let mut near = std::mem::take(&mut self.near_buf); self.near(px, py, range, &mut near);
+            for &k in &near { let b = &mut self.bugs[k]; if in_range(b, air) { b.slow = b.slow.min(1.0 - slow); any = true; } }
+            let rime = st(self, Stat::Rime);
+            if rime == 0.0 { self.near_buf = near; return; }
+            let p = &mut self.plants[pi]; p.cd -= dt; if p.cd > 0.0 || !any { self.near_buf = near; return; }
             p.cd = rime;
-            for b in self.bugs.iter_mut() { if in_range(b, air) { let t = if d.bugs[b.kind].boss { 0.5 } else { 1.0 }; freeze(b, t, false); } }
-            return;
+            for &k in &near { let b = &mut self.bugs[k]; if in_range(b, air) { let t = if d.bugs[b.kind].boss { 0.5 } else { 1.0 }; freeze(b, t, false); } }
+            self.near_buf = near; return;
         }
         let lure = st(self, Stat::Lure);
         if lure != 0.0 { // the nectar of a lure flytrap: a flyer near turns to it, once
             let boss = st(self, Stat::LureBoss) != 0.0; let pid = self.plants[pi].id;
             for b in self.bugs.iter_mut() { if b.fly && b.hp > 0.0 && !b.lured && b.x < COLS as f64 + 0.2 && (boss || !d.bugs[b.kind].boss) && within(b.x - px, b.y - py, lure) { b.lured = true; b.lure = Some(pid); } }
         }
-        let n = self.bugs.len(); // the bugs there are when it looks round: what is born of its hits is not among them
         { let p = &mut self.plants[pi]; p.cd -= dt; if p.cd > 0.0 { return; } }
+        // the bugs there are when it looks round (what is born of its hits is not among them), those near it
+        let mut near = std::mem::take(&mut self.near_buf); self.near(px, py, range, &mut near);
+        let r = self.aim(pi, dt, &near, in_range, kind, lvl, br, i, j, air); self.near_buf = near; r
+    }
+    #[inline(always)]
+    fn aim(&mut self, pi: usize, _dt: f64, near: &[usize], in_range: impl Fn(&Bug, bool) -> bool, kind: usize, lvl: usize, br: u8, i: i32, j: i32, air: bool) {
+        let d = self.d; let (px, py) = (i as f64 + 0.5, j as f64 + 0.5);
+        let st = |g: &Self, s: Stat| g.pstat(kind, lvl, br, i, j, s);
         let eat = st(self, Stat::Eat);
         if eat != 0.0 { // swallows the worn bugs whole, the biggest it can first; a healthier bug it leaves alone
             let eat_air = st(self, Stat::EatAir) != 0.0; let gulp = st(self, Stat::Gulp); let heads = { let h = st(self, Stat::Heads); if h != 0.0 { h as usize } else { 1 } };
-            let mut meals: Vec<usize> = (0..n).filter(|&k| { let b = &self.bugs[k]; in_range(b, eat_air) && !d.bugs[b.kind].boss && b.hp <= gulp * b.max_hp }).collect();
+            let mut meals: Vec<usize> = near.iter().cloned().filter(|&k| { let b = &self.bugs[k]; in_range(b, eat_air) && !d.bugs[b.kind].boss && b.hp <= gulp * b.max_hp }).collect();
             meals.sort_by(|&a, &b| self.bugs[b].hp.partial_cmp(&self.bugs[a].hp).unwrap()); meals.truncate(heads);
             if meals.is_empty() { return; }
             self.plants[pi].cd = eat;
@@ -580,7 +635,7 @@ impl<'a> Game<'a> {
             return;
         }
         if st(self, Stat::Blaze) != 0.0 { // the heat chili: every walker around, a little each
-            let hit: Vec<usize> = (0..n).filter(|&k| in_range(&self.bugs[k], air)).collect(); if hit.is_empty() { return; }
+            let hit: Vec<usize> = near.iter().cloned().filter(|&k| in_range(&self.bugs[k], air)).collect(); if hit.is_empty() { return; }
             self.plants[pi].cd = 1.0 / st(self, Stat::Rate);
             let dmg = st(self, Stat::Dmg); let burn = st(self, Stat::Burn); let burn_t = st(self, Stat::BurnT); let spread = st(self, Stat::Spread) != 0.0;
             for k in hit { self.damage(k, dmg); let b = &mut self.bugs[k]; if b.hp > 0.0 && ignite(b, burn, burn_t) && spread { b.spread = true; } }
@@ -593,7 +648,7 @@ impl<'a> Game<'a> {
         let splash = st(self, Stat::Splash); let mark = st(self, Stat::Mark); let ground = st(self, Stat::Ground);
         let heavy = st(self, Stat::Heavy) != 0.0; let melt = st(self, Stat::Melt) != 0.0;
         let mut seen = std::mem::take(&mut self.seen); seen.clear();
-        for k in 0..n {
+        for &k in near {
             let b = &self.bugs[k];
             if in_range(b, air) && (splash != 0.0 || b.coming < b.hp) {
                 seen.push((if heavy { -b.hp } else if melt { -(b.armor * 1e6 + b.hp) } else { self.progress(b) + (if ground != 0.0 && !b.fly { 1e3 } else { 0.0 }) + (if mark != 0.0 && b.mark > 0.5 { 500.0 } else { 0.0 }) }, k));
@@ -666,6 +721,7 @@ impl<'a> Game<'a> {
             while self.queue.front().map_or(false, |q| q.at <= self.wave_time) { let q = self.queue.pop_front().unwrap(); self.spawn(q.kind, q.e, None); }
         }
         for b in self.bugs.iter_mut() { b.slow = 1.0; if b.slow_t > 0.0 { b.slow = b.slow_v; b.slow_t -= dt; } }
+        self.bucket_bugs();
         for pi in 0..self.plants.len() { self.update_plant(pi, dt); }
         for bi in 0..self.bugs.len() { { let b = &mut self.bugs[bi]; if b.mark > 0.0 { b.mark -= dt; } } if self.bugs[bi].hp > 0.0 { self.update_bug(bi, dt); } }
         for si in 0..self.shots.len() { self.update_shot(si, dt); }
@@ -712,6 +768,9 @@ impl<'a> Game<'a> {
         buf.iter().enumerate().map(|(k, v)| format!("{} {:016x} {}", k, (*v + 0.0).to_bits(), *v + 0.0)).collect::<Vec<_>>().join("\n")
     }
 }
+
+// the cells of the buckets of bugs: the field and the column the bugs come out of beyond it
+const BK_W: usize = COLS as usize + 2; const BK_H: usize = ROWS as usize;
 
 pub fn dist_over(grid: &[Cell; N], tiles: &[Tile; N], fruit: (i32, i32), extra: i32) -> [f64; N] {
     let mut d = [INF; N]; let mut q = [(0i32, 0i32); N]; let mut qn = 1; q[0] = fruit;

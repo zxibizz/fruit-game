@@ -13,6 +13,8 @@ pub enum Stat {
     Chain, Ground, GroundRange, Down, Air, Speed, Blaze, Spread, Melt, Crack, Frost, FrostT, Rime, Heavy, Stack, Heads, Lure, LureBoss,
 }
 pub const NSTAT: usize = 37;
+pub const STATS: [Stat; NSTAT] = { use Stat::*; [Range, Rate, Dmg, Mark, Multi, Splash, Hits, Guard, Slow, Burn, BurnT, Eat, Gulp, EatAir, Hp, Thorns, Spikes, Ward, ThornAir,
+    Chain, Ground, GroundRange, Down, Air, Speed, Blaze, Spread, Melt, Crack, Frost, FrostT, Rime, Heavy, Stack, Heads, Lure, LureBoss] };
 fn stat_of(name: &str) -> Option<Stat> {
     use Stat::*;
     Some(match name {

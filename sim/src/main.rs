@@ -21,6 +21,7 @@ mod game;
 mod jsmath;
 mod json;
 mod routes;
+mod studio;
 
 use bot::{Op, Opts, Powers, Res, Upgrades, Where};
 use data::Data;
@@ -207,6 +208,11 @@ fn main() {
             let walls = bot::layout(&d, j.at("level").num() as usize, j.at("terrain").truthy());
             println!("[{}]", walls.iter().map(|(c, g)| format!("[{},{}]", c, g)).collect::<Vec<_>>().join(","));
         }
+        Some("studio") => {
+            // the balance studio's engine: commands on stdin, what it finds on stdout (studio.rs)
+            let jobs = opt("--jobs").map_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get()), |v| v.parse().unwrap());
+            studio::serve(jobs);
+        }
         Some("routes") if files.len() == 1 => {
             let text = std::fs::read_to_string(files[0]).unwrap_or_else(|e| panic!("{}: {}", files[0], e));
             let j = J::parse(&text).unwrap_or_else(|e| panic!("{}: {}", files[0], e));
@@ -239,6 +245,6 @@ fn main() {
             println!("native total {:.1} ms over {} parties{}", total, files.len(), if bad > 0 { format!(", {} MISMATCHED", bad) } else { String::new() });
             std::process::exit(if bad > 0 { 1 } else { 0 });
         }
-        _ => { eprintln!("usage: fruit-sim run <batch.json> [--jobs N] | layout <request.json> | routes <request.json> | replay <party.json ...> [--no-check] [--repeat N] [--dump-at K]"); std::process::exit(2); }
+        _ => { eprintln!("usage: fruit-sim run <batch.json> [--jobs N] | studio [--jobs N] | layout <request.json> | routes <request.json> | replay <party.json ...> [--no-check] [--repeat N] [--dump-at K]"); std::process::exit(2); }
     }
 }
