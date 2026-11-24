@@ -53,6 +53,7 @@ const big = (e) => new Set(Object.keys(e.mix).filter((f) => e.mix[f] >= .1)), ap
 const unlike = []; for (const e of arch) { if (unlike.length >= 8 || e.margin < best.margin * .6) break; if (unlike.every((u) => apart(big(u), big(e)) >= 2)) unlike.push(e); }
 const mixRu = (e) => Object.entries(e.mix).sort((a, b) => b[1] - a[1]).filter(([, x]) => x >= .04).map(([f, x]) => `${famRu(f)} ${Math.round(x * 100)}%`).join(', ');
 const lacks = (e, f) => (f.includes('.') ? (e.mix[f] || 0) : ['', '.a', '.b'].reduce((t, s) => t + (e.mix[f + s] || 0), 0)) < .03;
+const ONLY = opt('--without') ? opt('--without').split(',') : null; // --without rose.a,pumpkin: those alone
 const open = LEVELS[level].plants.flatMap((k) => [...(LEVELS[level].plants.length > 1 ? [k] : []), ...['a', 'b'].filter((b) => data.PLANTS[k][b].from <= level + 1).map((b) => `${k}.${b}`)]);
 // What the level cannot do without: the best party of the game with a branch closed or a plant gone — a search of its
 // own on that game (a job each, side by side), from the best party and the best of the archive that have none of it,
@@ -64,7 +65,7 @@ const gone = (f) => { const [k, b] = f.split('.'), L = LEVELS[level];
   const was = L.plants; L.plants = was.filter((x) => x !== k); const d = exportData(); L.plants = was; return d; };
 const as = (plan, k, to) => plan.map((s) => (s[0] === k ? [to, s[1], s[2]] : s));
 const jobs = how.jobs || PAR, top = Math.max(0, Math.round(Math.log(Math.max(m.clean.margin, .75)) / Math.log(1.05)) + 2);
-const without = NOT ? [] : await pool(open, jobs, async (f) => { const d = gone(f), [k, b] = f.split('.');
+const without = NOT ? [] : await pool(open.filter((f) => !ONLY || ONLY.includes(f)), jobs, async (f) => { const d = gone(f), [k, b] = f.split('.');
   const none = (x) => (b ? [f] : [k, k + '.a', k + '.b']).every((g) => !x.mix[g]);
   const starts = [best.plan, ...[...arch.filter(none).slice(0, 3), ...arch.filter((x) => lacks(x, f) && !none(x)).slice(0, 1)].map((x) => x.plan), ...(b ? [] : LEVELS[level].plants.filter((x) => x !== k).map((x) => as(best.plan, k, x)))];
   const r = await searchAsync({ level, opts: base, plans: starts, bots, secs: BSECS, stall: BSTALL, goal: best.margin, data: d }, { bin: how.bin, jobs: 1 });

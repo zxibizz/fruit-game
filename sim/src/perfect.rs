@@ -297,7 +297,6 @@ fn holds_below(cx: &Ctx, plan: &[Step], top: i32) -> bool {
 // secs: the most it runs; stall: it stops once neither the best party nor the best of any make within six rungs of it has
 // risen for so long; goal: and once the best holds that rung (the question was whether a party as good as that is there)
 pub fn search(cx: &Ctx, seeds_plans: Vec<Vec<Step>>, secs: f64, stall: f64, goal: i32, jobs: usize, rng_seed: u64, log: &(dyn Fn(String) + Sync)) -> (Vec<Elite>, Vec<(f64, i32)>, u64) {
-    let t0 = Instant::now();
     // where every party given stands, and what its garden is made of
     let elite = |plan: Vec<Step>, k: i32| -> Option<Elite> { if k < K_MIN { return None; }
         let mix = cx.fitness(&plan, k, None).mix?; let runs = cx.fitness(&plan, (k + 1).min(K_MAX), None); Some(Elite { niche: niche_of(&mix), stat: make_of(cx, &plan), plan, k, runs, mix }) };
@@ -305,6 +304,7 @@ pub fn search(cx: &Ctx, seeds_plans: Vec<Vec<Step>>, secs: f64, stall: f64, goal
         let hs: Vec<_> = seeds_plans.into_iter().map(|mut p| sc.spawn(move || { tidy(&mut p); let k = level_of(cx, &p); elite(p, k) })).collect();
         hs.into_iter().map(|h| h.join().unwrap()).collect() });
     log(format!("the parties given hold: {}", starts.iter().map(|s| s.as_ref().map_or("nothing".to_string(), |e| format!("×{:.2}", rung(e.k)))).collect::<Vec<_>>().join(", ")));
+    let t0 = Instant::now(); // (the time of the search is counted from here: placing the parties given is not it)
     let mut arch: Vec<Elite> = Vec::new();
     for e in starts.into_iter().flatten() { match arch.iter().position(|x| x.niche == e.niche) { Some(q) => if e.k > arch[q].k { arch[q] = e; }, None => arch.push(e) } }
     if arch.is_empty() { return (arch, Vec::new(), 0); }

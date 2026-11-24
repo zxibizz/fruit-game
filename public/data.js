@@ -33,7 +33,7 @@ export const PLANTS = {
   //   (groundRange) and for the `ground` share of the damage; down (top) — a flyer (not a boss) left with no more
   //   than that share of its health falls onto the trail and walks on; a boss hangs still for a moment.
   rose: { cost: 25, up: [60], hp: [60, 80], range: 1.5, rate: [1.3, 1.5], dmg: [8, 11], air: 1, shot: 'thorn', speed: 9,
-    a: { from: 1, up: [120, 200], hp: [90, 100], range: [1.5, 1.6], rate: [1.6, 1.7], dmg: [11, 13], multi: 2, mark: .45, chain: [0, 2], air: 1, shot: 'thorn', speed: 9 },
+    a: { from: 1, up: [120, 200], hp: [90, 100], range: [1.5, 1.6], rate: [1.6, 1.7], dmg: [11, 13], multi: 2, mark: .3, chain: [0, 2], air: 1, shot: 'thorn', speed: 9 },
     b: { from: 3, up: [120, 200], hp: [70, 80], range: [3.5, 3.8], rate: [.8, .9], dmg: [40, 55], ground: .35, groundRange: 1.5, down: [0, .5], air: 1, shot: 'fluff', speed: 11 } },
   // Fire (the pepper is the chili now). Lobs a pepper that bursts where it lands: it hits up to `hits` walkers within
   // `splash` of it and sets them burning (burn a second for burnT seconds). Fire is weak against armor: a burning bug's
@@ -57,13 +57,13 @@ export const PLANTS = {
     b: { from: 2, up: [130, 220], hp: [80, 100], range: 1.6, rate: [.4, .45], dmg: [120, 160], frost: .15, frostT: .6, heavy: 1, air: 1, stack: [0, .25], shot: 'icicleBig', speed: 7 } },
   // Finishing off. Every `eat` seconds swallows whole a walker (not a boss) with no more than `gulp` of its full health
   // left; a healthier bug it does not touch at all: its job is to make sure, not to deal damage.
-  // a, Glutton: weaker bugs too and quicker; heads (top) — two at once.
-  // b, Lure: nectar — a flyer within `lure` turns to it, sniffs it a moment and flies on to the fruit (every flyer
+  // a, Glutton: quicker; heads (top) — two at once.
+  // b, Lure: healthier bugs than the glutton does, slower; nectar — a flyer within `lure` turns to it, sniffs it a moment and flies on to the fruit (every flyer
   //   once): into the reach of the plants around; it swallows worn flyers too (eatAir); lureBoss (top) — the hornet too
   //   (it is not swallowed).
   flytrap: { cost: 60, up: [140], hp: [70, 90], range: 1.5, eat: [3, 2.5], gulp: [.4, .5],
-    a: { from: 2, up: [170, 260], hp: [100, 120], range: [1.5, 1.6], eat: [1.5, 1.2], gulp: .65, heads: [1, 2] },
-    b: { from: 3, up: [150, 250], hp: [90, 110], range: 1.5, eat: [2.5, 2.2], gulp: .5, eatAir: 1, lure: [3, 5], lureBoss: [0, 1] } },
+    a: { from: 2, up: [170, 260], hp: [100, 120], range: [1.5, 1.6], eat: [1.5, 1.2], gulp: .55, heads: [1, 2] },
+    b: { from: 3, up: [130, 220], hp: [90, 110], range: 1.5, eat: [2, 1.6], gulp: .6, eatAir: 1, lure: [3, 5], lureBoss: [0, 1] } },
 };
 export const BRANCHES = ['a', 'b'];
 // A stat of a plant of type P at level lvl on branch br (levels 3 and 4): null when it has no such stat.
@@ -233,7 +233,7 @@ export const LEVELS = [
       'BB+........+BB',
       'BB++++++++++RB',
     ],
-    dew: 340, pay: [290, 580],
+    dew: 340, pay: [290, 580], fly: .3,
     plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
     swell: [1, 1, 1, 1.05, 1.05, .85, 1.25, 2.1, 2, 1.45, .65, 1.8, .65, 2.5, 1.4, 2.05, 2.2, 1],
     hp: 1.15, count: 18, budget: [5.2, 2.9], roster: [['ant', 1], ['butterfly', 2], ['beetle', 3], ['snail', 5], ['wasp', 6], ['caterpillar', 8], ['cricket', 12]], boss: [[18, 'hornet', 3]],
@@ -301,7 +301,7 @@ export const LEVELS = [
       '..S......WW...',
       '.........W....',
     ],
-    dew: 410, pay: [415, 930],
+    dew: 410, pay: [415, 930], fly: .3,
     plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
     swell: [1, 1, 1.1, .6, 1, .6, .9, 1, .9, .95, .85, 1, 1.25, 1.4, 2.2, .95, .9, 1.5, 1.85, .85, 1, .75, .5, 1],
     hp: 2.01, count: 24, budget: [6.5, 3], roster: [['ant', 1], ['butterfly', 3], ['beetle', 4], ['caterpillar', 6], ['cricket', 10], ['snail', 13], ['aphid', 16]], boss: [[12, 'hornet', 1], [24, 'hornet', 2]],
@@ -410,7 +410,8 @@ function rng(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.im
 // A wave is a list of groups: [bug, count, seconds between bugs (TUNE.gap makes them packs), delay before the group].
 // Every fifth wave is a big one and the wave after it is a breather; a bug new to the level first comes as a small group.
 export const FLY_SHARE = .18; // the most of a wave's budget that flyers take (before a new bug's quarter)
-export function makeWaves(L, seed, { flyShare = FLY_SHARE } = {}) {
+// (a level's own share: L.fly — the levels of flyers, «Большая поляна» and «Пруд»)
+export function makeWaves(L, seed, { flyShare = L.fly ?? FLY_SHARE } = {}) {
   const R = rng(seed), out = [];
   for (let w = 1; w <= L.count; w++) {
     let budget = (L.budget[0] + L.budget[1] * (w - 1)) * (w % 5 === 0 ? 1.35 : w % 5 === 1 && w > 1 ? .8 : 1) * (L.swell?.[w - 1] ?? 1);
