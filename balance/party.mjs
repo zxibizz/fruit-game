@@ -1,5 +1,5 @@
 // The best perfect party of a level: node balance/party.mjs --level 7 [--secs 300] [--runs 2] [--meta exp3] [--mono]
-//   [--keep] [--jobs N] [--out FILE] [--rng N] [--stall 60] [--check]
+//   [--keep] [--jobs N] [--out FILE] [--rng N] [--stall 60] [--check] [--no-without] [--ban-secs S] [--ban-stall S]
 // Looks for the party that gets through the level with the fruit never bitten against the healthiest bugs
 // (sim/src/perfect.rs: a whole party at a time, a plant on any cell, the maze built and broken a cell at a time; a party
 // counts on a rung of health when it is clean on five seeds of the game there and on every rung below, from ×0.75 up). It starts from
@@ -13,12 +13,12 @@
 // level in turn (a fifth of the time each). --keep: it is kept in balance/perfect/ if it holds more than the one there.
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { LEVELS } from '../public/data.js';
+import { LEVELS, PLANTS } from '../public/data.js';
 import { exportData } from '../sim/js/export.mjs';
 import { build } from '../sim/js/play.mjs';
 import { resolve } from './scenario.mjs';
 import { EXPERT } from './plans.mjs';
-import { scan, search, TARGET, SEEDS } from './scan.mjs';
+import { scan, search, searchAsync, pool, PAR, TARGET, SEEDS } from './scan.mjs';
 
 const args = process.argv.slice(2), opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const level = Number(opt('--level', 4)) - 1, SECS = Number(opt('--secs', 600)), STALL = Number(opt('--stall', 60)), RUNS = Number(opt('--runs', 1)), META = opt('--meta', 'exp3');
@@ -53,8 +53,24 @@ const big = (e) => new Set(Object.keys(e.mix).filter((f) => e.mix[f] >= .1)), ap
 const unlike = []; for (const e of arch) { if (unlike.length >= 8 || e.margin < best.margin * .6) break; if (unlike.every((u) => apart(big(u), big(e)) >= 2)) unlike.push(e); }
 const mixRu = (e) => Object.entries(e.mix).sort((a, b) => b[1] - a[1]).filter(([, x]) => x >= .04).map(([f, x]) => `${famRu(f)} ${Math.round(x * 100)}%`).join(', ');
 const lacks = (e, f) => (f.includes('.') ? (e.mix[f] || 0) : ['', '.a', '.b'].reduce((t, s) => t + (e.mix[f + s] || 0), 0)) < .03;
-const open = LEVELS[level].plants.flatMap((k) => [k, ...['a', 'b'].filter((b) => data.PLANTS[k][b].from <= level + 1).map((b) => `${k}.${b}`)]);
-const without = open.map((f) => { const e = arch.find((x) => lacks(x, f)); return { f, found: !!e, margin: e ? e.margin : 0, cost: 1 - (e ? e.margin : 0) / best.margin }; });
+const open = LEVELS[level].plants.flatMap((k) => [...(LEVELS[level].plants.length > 1 ? [k] : []), ...['a', 'b'].filter((b) => data.PLANTS[k][b].from <= level + 1).map((b) => `${k}.${b}`)]);
+// What the level cannot do without: the best party of the game with a branch closed or a plant gone — a search of its
+// own on that game (a job each, side by side), from the best party and the best of the archive that have none of it,
+// till it is as good as the best of all or stops rising. (The bot plays a step of the plan it cannot take its own way:
+// a closed branch becomes the open one; where a whole plant is gone its plants are given as each of the others in turn.)
+const NOT = args.includes('--no-without'), BSECS = Number(opt('--ban-secs', Math.max(20, SECS / 4))), BSTALL = Number(opt('--ban-stall', Math.max(8, STALL / 3)));
+const gone = (f) => { const [k, b] = f.split('.'), L = LEVELS[level];
+  if (b) { const was = PLANTS[k][b].from; PLANTS[k][b].from = 99; const d = exportData(); PLANTS[k][b].from = was; return d; }
+  const was = L.plants; L.plants = was.filter((x) => x !== k); const d = exportData(); L.plants = was; return d; };
+const as = (plan, k, to) => plan.map((s) => (s[0] === k ? [to, s[1], s[2]] : s));
+const jobs = how.jobs || PAR, top = Math.max(0, Math.round(Math.log(Math.max(m.clean.margin, .75)) / Math.log(1.05)) + 2);
+const without = NOT ? [] : await pool(open, jobs, async (f) => { const d = gone(f), [k, b] = f.split('.');
+  const none = (x) => (b ? [f] : [k, k + '.a', k + '.b']).every((g) => !x.mix[g]);
+  const starts = [best.plan, ...[...arch.filter(none).slice(0, 3), ...arch.filter((x) => lacks(x, f) && !none(x)).slice(0, 1)].map((x) => x.plan), ...(b ? [] : LEVELS[level].plants.filter((x) => x !== k).map((x) => as(best.plan, k, x)))];
+  const r = await searchAsync({ level, opts: base, plans: starts, bots, secs: BSECS, stall: BSTALL, goal: best.margin, data: d }, { bin: how.bin, jobs: 1 });
+  const s = r.plan?.length ? scan([party(r.plan)], { data: d, to: top, bin: how.bin, jobs: 1, quiet: true })[0].margin : 0, margin = Math.min(s, m.clean.margin);
+  log(`  without ${f}: ${pc(margin)} (${r.tried} tried)`);
+  return { f, margin, cost: 1 - margin / m.clean.margin, tried: r.tried }; });
 console.log(`L${level + 1} ${LEVELS[level].name} (hp ${LEVELS[level].hp}, the perks ${META})`);
 console.log(`  the runs ended on ${runs.map((r) => pc(r.margin)).join(', ')} (${runs.map((r) => r.tried).join(', ')} parties tried)${Math.max(...runs.map((r) => r.margin)) / Math.min(...runs.map((r) => r.margin)) <= 1.06 ? ': they agree' : ': THEY DO NOT AGREE — the search has not settled'}`);
 console.log(`  the best, on ${m.clean.seeds} seed(s): the fruit whole against bugs ${pc(m.clean.margin)}; three stars ${pc(m.stars.margin)}; won ${pc(m.won.margin)}${m.won.open ? '+' : ''}`);
@@ -65,12 +81,14 @@ if (arch.length) {
   console.log(`  разные способы пройти (${arch.length} составов в архиве; запас на всех сидах / на сидах поиска):`);
   unlike.forEach((e, q) => { e.scanned = ms[q].margin; }); unlike.sort((a, b) => b.scanned - a.scanned); unlike.length = Math.min(unlike.length, 6);
   unlike.forEach((e, q) => console.log(`    ${q + 1}. ${pc(e.scanned)} / ${pc(e.margin)}  ${mixRu(e)}`));
-  const row = (lo, hi, whole) => without.filter((w) => w.found && w.f.includes('.') !== whole && w.cost >= lo && w.cost < hi).sort((a, b) => b.cost - a.cost).map((w) => `${famRu(w.f)} −${Math.round(Math.max(0, w.cost) * 100)}%`).join(', ') || '—';
-  console.log(`  без ветки (лучшая партия архива, где её нет, на сидах поиска) — единственный путь (−30% и больше): ${row(.3, 9, false)}`);
+}
+if (without.length) {
+  const show = (w) => `${famRu(w.f)} ${w.margin ? `−${Math.round(Math.max(0, w.cost) * 100)}%` : 'чисто не пройти'}`;
+  const row = (lo, hi, whole) => without.filter((w) => w.f.includes('.') !== whole && w.cost >= lo && w.cost < hi).sort((a, b) => b.cost - a.cost).map(show).join(', ') || '—';
+  console.log(`  без ветки (лучшая партия игры, где ветка закрыта; все сиды) — единственный путь (−30% и больше): ${row(.3, 9, false)}`);
   console.log(`      выбор (−8…−30%): ${row(.08, .3, false)}`);
   console.log(`      не нужна (меньше −8%): ${row(-9, .08, false)}`);
-  const none = without.filter((w) => !w.found).map((w) => famRu(w.f)); if (none.length) console.log(`      партии без них в архиве нет (не нашлась за этот прогон или её не бывает): ${none.join(', ')}`);
-  console.log(`  без растения целиком: ${without.filter((w) => w.found && !w.f.includes('.')).sort((a, b) => b.cost - a.cost).map((w) => `${RU[w.f]} −${Math.round(Math.max(0, w.cost) * 100)}%`).join(', ') || '—'}`);
+  console.log(`  без растения целиком: ${without.filter((w) => !w.f.includes('.')).sort((a, b) => b.cost - a.cost).map(show).join(', ') || '—'}`);
 }
 if (one) console.log(`  one plant alone: ${one.kind} ${pc(one.margin)} — ${Math.round(one.margin / m.clean.margin * 100)}% of the best`);
 const hp = m.clean.margin > 0 ? Math.round(LEVELS[level].hp * m.clean.margin / TARGET * 100) / 100 : null;

@@ -334,15 +334,18 @@ pub fn search(cx: &Ctx, seeds_plans: Vec<Vec<Step>>, secs: f64, stall: f64, goal
             let mut found: Option<(i32, Runs)> = None;
             for &t in &rungs { let runs = cx.fitness(&child, t, if t == pk + 1 { Some((&parent, &pruns)) } else { None }); if runs.fit >= cx.seeds.len() as f64 { found = Some((t, runs)); break; } }
             let Some((target, runs)) = found else { continue };
-            // A new best has to be clean on the rungs below too, down to the floor; a rival of a make's best on the two rungs
-            // below (a hole lower down is for the scan to find); a party of a new make is taken as it is.
-            if target > best { if !holds_below(cx, &child, target - 1) { continue; } }
-            else if rival.is_some() && !(target - 2..target).rev().filter(|&k| k >= K_FLOOR).all(|k| cx.all_clean(&child, k)) { continue; }
-            // as far up as it goes before the first rung it is bitten on (it was bitten on the rung tried before this one, if any)
-            let top = rungs.iter().cloned().filter(|&t| t > target).min().map_or(K_MAX, |t| t - 1);
-            let mut k = target; let mut mix = runs.mix.clone().unwrap(); let mut next = cx.fitness(&child, (k + 1).min(K_MAX), None);
-            while k < top && k + 1 < K_MAX && next.fit >= cx.seeds.len() as f64 { k += 1; mix = next.mix.clone().unwrap(); next = cx.fitness(&child, k + 1, None); }
-            if k > best && target <= best && !holds_below(cx, &child, k) { continue; }
+            // Every party kept is clean on the rungs below its own too, down to the floor (holds_below). One with a hole
+            // lower down stands on the rung under the hole, and is kept there if that is still the best of its make.
+            let n = cx.seeds.len() as f64; let (mut k, mut mix, mut next);
+            if holds_below(cx, &child, target - 1) {
+                // as far up as it goes before the first rung it is bitten on (it was bitten on the rung tried before this one, if any)
+                let top = rungs.iter().cloned().filter(|&t| t > target).min().map_or(K_MAX, |t| t - 1);
+                k = target; mix = runs.mix.clone().unwrap(); next = cx.fitness(&child, (k + 1).min(K_MAX), None);
+                while k < top && k + 1 < K_MAX && next.fit >= n { k += 1; mix = next.mix.clone().unwrap(); next = cx.fitness(&child, k + 1, None); }
+            } else {
+                k = level_of(cx, &child); if k < K_MIN || k > best || rival.map_or(false, |rk| k <= rk) { continue; }
+                let at = cx.fitness(&child, k, None); let Some(m) = at.mix.clone() else { continue }; mix = m; next = cx.fitness(&child, k + 1, None);
+            }
             let e = Elite { niche: niche_of(&mix), stat, plan: child, k, runs: next, mix };
             let mut s = st.lock().unwrap(); let el = t0.elapsed().as_secs_f64(); let now = s.arch.iter().map(|x| x.k).max().unwrap();
             let took = match s.arch.iter().position(|x| x.niche == e.niche) { Some(q) => if e.k > s.arch[q].k { s.arch[q] = e; true } else { false }, None => { s.arch.push(e); true } };
