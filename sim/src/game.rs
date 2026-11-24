@@ -573,7 +573,8 @@ impl<'a> Game<'a> {
     }
 
     #[inline] fn bk_cell(x: f64, y: f64) -> usize {
-        let cx = (x.floor().max(0.0) as usize).min(BK_W - 1); let cy = (y.floor().max(0.0) as usize).min(BK_H - 1); cy * BK_W + cx
+        // (a cast cuts towards zero: for a number not below zero that is its floor, and it is no call)
+        let cx = (x.max(0.0) as usize).min(BK_W - 1); let cy = (y.max(0.0) as usize).min(BK_H - 1); cy * BK_W + cx
     }
     fn bucket_bugs(&mut self) {
         let nb = BK_W * BK_H; let start = &mut self.bk_start; for v in start.iter_mut() { *v = 0; }
@@ -584,17 +585,16 @@ impl<'a> Game<'a> {
         for (k, b) in self.bugs.iter().enumerate() { let c = Self::bk_cell(b.x, b.y); self.bk_list[fill[c] as usize] = k as u32; fill[c] += 1; }
         self.bk_n = self.bugs.len();
     }
-    // every bug that may be within r of (px, py), in the order of the list (a few more than that is no harm: the caller
-    // asks each one as it did of every bug)
+    // every bug that may be within r of (px, py) (a few more than that is no harm: the caller asks each one as it did of
+    // every bug), in no order: a caller to whom the order of the list matters puts the few it takes in that order itself
     fn near(&self, px: f64, py: f64, r: f64, out: &mut Vec<usize>) {
         out.clear();
         // (a little wider than the reach: a bug at 0.9999999999999999 is in the row above the one its distance, rounded,
         // puts it within reach of — verify.mjs caught a flytrap not seeing such a bug)
         let r = r + 1e-6;
-        let (cx0, cy0) = (((px - r).floor().max(0.0) as usize).min(BK_W - 1), ((py - r).floor().max(0.0) as usize).min(BK_H - 1));
-        let (cx1, cy1) = (((px + r).floor().max(0.0) as usize).min(BK_W - 1), ((py + r).floor().max(0.0) as usize).min(BK_H - 1));
+        let (cx0, cy0) = (((px - r).max(0.0) as usize).min(BK_W - 1), ((py - r).max(0.0) as usize).min(BK_H - 1));
+        let (cx1, cy1) = (((px + r).max(0.0) as usize).min(BK_W - 1), ((py + r).max(0.0) as usize).min(BK_H - 1));
         for cy in cy0..=cy1 { let a = self.bk_start[cy * BK_W + cx0] as usize; let b = self.bk_start[cy * BK_W + cx1 + 1] as usize; out.extend(self.bk_list[a..b].iter().map(|&k| k as usize)); }
-        out.sort_unstable();
         out.extend(self.bk_n..self.bugs.len());
     }
 
@@ -636,6 +636,7 @@ impl<'a> Game<'a> {
         if eat != 0.0 { // swallows the worn bugs whole, the biggest it can first; a healthier bug it leaves alone
             let eat_air = st(self, Stat::EatAir) != 0.0; let gulp = st(self, Stat::Gulp); let heads = { let h = st(self, Stat::Heads); if h != 0.0 { h as usize } else { 1 } };
             let mut meals: Vec<usize> = near.iter().cloned().filter(|&k| { let b = &self.bugs[k]; in_range(b, eat_air) && !d.bugs[b.kind].boss && b.hp <= gulp * b.max_hp }).collect();
+            meals.sort_unstable(); // (the order of the list, as game.js has them before its own sort)
             meals.sort_by(|&a, &b| self.bugs[b].hp.partial_cmp(&self.bugs[a].hp).unwrap()); meals.truncate(heads);
             if meals.is_empty() { return; }
             self.plants[pi].cd = eat;
@@ -643,7 +644,7 @@ impl<'a> Game<'a> {
             return;
         }
         if st(self, Stat::Blaze) != 0.0 { // the heat chili: every walker around, a little each
-            let hit: Vec<usize> = near.iter().cloned().filter(|&k| in_range(&self.bugs[k], air)).collect(); if hit.is_empty() { return; }
+            let mut hit: Vec<usize> = near.iter().cloned().filter(|&k| in_range(&self.bugs[k], air)).collect(); if hit.is_empty() { return; } hit.sort_unstable();
             self.plants[pi].cd = 1.0 / st(self, Stat::Rate);
             let dmg = st(self, Stat::Dmg); let burn = st(self, Stat::Burn); let burn_t = st(self, Stat::BurnT); let spread = st(self, Stat::Spread) != 0.0;
             for k in hit { self.damage(k, dmg); let b = &mut self.bugs[k]; if b.hp > 0.0 && ignite(b, burn, burn_t) && spread { b.spread = true; } }
@@ -663,7 +664,7 @@ impl<'a> Game<'a> {
             }
         }
         if seen.is_empty() { self.seen = seen; return; }
-        seen.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        seen.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap().then(a.1.cmp(&b.1))); // (of two as near, the one earlier in the list: game.js sorts the list as it stands)
         self.plants[pi].cd = 1.0 / st(self, Stat::Rate);
         let stack = st(self, Stat::Stack);
         for &(_, k) in seen.iter().take(multi) {

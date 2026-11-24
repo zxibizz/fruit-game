@@ -53,7 +53,7 @@ impl Rng {
 pub type Snaps = Vec<Arc<bot::Saved<'static>>>;
 // What a plan did on a rung: how well (see fitness), and its build phases on every seed it was played on there.
 #[derive(Clone)]
-pub struct Runs { pub at: i32, pub fit: f64, per_seed: Vec<Option<Arc<Snaps>>> }
+pub struct Runs { pub at: i32, pub fit: f64, per_seed: Vec<Option<Arc<Snaps>>>, fail: Option<usize> } // fail: the seed (its place in the list) it was bitten on
 
 pub struct Ctx<'a> {
     j_data: &'a J, pub d: &'static Data, pub level: usize, pub base: Opts, pub seeds: Vec<u32>,
@@ -94,8 +94,16 @@ impl<'a> Ctx<'a> {
     // parent's party had not looked at by some build phase, the party goes on from that build phase.
     pub fn fitness(&self, plan: &[Step], k: i32, parent: Option<(&[Step], &Runs)>) -> Runs {
         let same = parent.map_or(0, |(pp, _)| pp.iter().zip(plan.iter()).take_while(|(a, b)| a == b).count());
-        let mut runs = Runs { at: k, fit: 0.0, per_seed: vec![None; self.seeds.len()] };
-        for (n, &seed) in self.seeds.iter().enumerate() {
+        let mut runs = Runs { at: k, fit: 0.0, per_seed: vec![None; self.seeds.len()], fail: None };
+        // The seed the parent was bitten on comes first: a change that does no better is bitten there too, and is told so
+        // by one party cut short, not after whole parties on the seeds the parent was clean on. Those seeds, not played
+        // then, are taken as clean still (the count is of the seeds believed clean); once it gets past the parent's
+        // seed, they are played like the rest.
+        let first = parent.and_then(|(_, pr)| if pr.at == k { pr.fail } else { None });
+        let order: Vec<usize> = first.into_iter().chain((0..self.seeds.len()).filter(|&n| Some(n) != first)).collect();
+        let believed = parent.map_or(0, |(_, pr)| (pr.fit.floor() as usize).min(self.seeds.len() - 1));
+        for (done, &n) in order.iter().enumerate() {
+            let seed = self.seeds[n];
             let mut mine: Snaps = Vec::new(); let mut from: Option<Arc<bot::Saved<'static>>> = None;
             if let Some((_, pr)) = parent { if pr.at == k { if let Some(ps) = &pr.per_seed[n] {
                 if let Some(ix) = (0..ps.len()).rev().find(|&i| ps[i].seen_to <= same) { mine.extend(ps[..ix].iter().cloned()); from = Some(ps[ix].clone()); self.saved.fetch_add(ix as u64, Ordering::Relaxed); }
@@ -106,7 +114,8 @@ impl<'a> Ctx<'a> {
             runs.per_seed[n] = Some(Arc::new(mine));
             if Self::clean(&r) { continue; }
             // bitten in wave r.wave of r.waves, r.time seconds in: the later, the nearer to clean
-            runs.fit = n as f64 + 0.98 * (r.time / (r.time + 60.0 * (r.waves as f64 - r.wave as f64 + 1.0))).min(1.0);
+            let clean_so_far = if done == 0 && first.is_some() { believed } else { done };
+            runs.fit = clean_so_far as f64 + 0.98 * (r.time / (r.time + 60.0 * (r.waves as f64 - r.wave as f64 + 1.0))).min(1.0); runs.fail = Some(n);
             return runs;
         }
         runs.fit = self.seeds.len() as f64; runs
