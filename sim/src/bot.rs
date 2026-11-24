@@ -31,7 +31,7 @@ pub enum Where { Best, End, Start, Spread }
 pub enum Upgrades { Greedy, None, First }
 #[derive(Clone, Debug)]
 pub struct Opts {
-    pub seed: u32, pub max_plants: f64, pub route: f64, pub maze: Option<String>, pub hp: f64, pub plan: Option<Vec<(Option<usize>, i32, i32)>>, pub policy: Option<Policy>, pub terrain: bool, pub powers: Powers, pub bank: Option<f64>, pub meta: Vec<(String, usize)>,
+    pub seed: u32, pub max_plants: f64, pub route: f64, pub maze: Option<String>, pub hp: f64, pub plan: Option<Vec<(Option<usize>, i32, i32, u8)>>, pub policy: Option<Policy>, pub terrain: bool, pub powers: Powers, pub bank: Option<f64>, pub meta: Vec<(String, usize)>,
     pub place: Where, pub plants: Option<Vec<usize>>, pub upgrades: Upgrades, pub early: bool, pub top: usize, pub trust: Vec<f64>,
     pub steps: usize, // the party stops after so many steps of the game (for the parity check: a part of a level is enough there)
 }
@@ -462,7 +462,7 @@ impl<'a, 'o> Bot<'a, 'o> {
             let mut left = false;
             for n in 0..plan.len() {
                 if self.done[n] { continue; }
-                let (kind, i, j) = plan[n];
+                let (kind, i, j, _) = plan[n];
                 if self.g.stub_at(i, j).is_some() { left = true; continue; }
                 match kind {
                     Some(k) => {
@@ -484,7 +484,7 @@ impl<'a, 'o> Bot<'a, 'o> {
                     None => {
                         // a plant not there yet: its own step is still to come (left for later), or it never will
                         let Some(pi) = self.g.plant_at(i, j) else { if (0..n).any(|m| !self.done[m] && plan[m].0.is_some() && (plan[m].1, plan[m].2) == (i, j)) { left = true; } else { self.done[n] = true; } continue };
-                        let br = self.branch_for(pi);
+                        let br = { let want = plan[n].3; let p = &self.g.plants[pi]; if want != 0 && p.lvl == 2 && self.g.branch_open(p.kind, want) { want } else { self.branch_for(pi) } };
                         let Some(c) = self.g.upgrade_cost(pi, br) else { self.done[n] = true; continue };
                         if self.g.dew < c { left = true; break; }
                         self.upgrade(pi, br); self.done[n] = true;

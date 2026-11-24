@@ -1,0 +1,710 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Студия баланса</title>
+<style>
+:root{
+  color-scheme: light dark;
+  --bg:#f4f5f7; --panel:#fff; --fg:#1d2330; --muted:#6a7385; --line:#d9dde5; --accent:#2563eb; --bad:#c62828; --badbg:#fde8e8; --good:#2e7d32; --warn:#b26a00;
+  --chg:#fff3c4; --shadow:0 1px 2px rgba(0,0,0,.08);
+  --t-grass:#bfe3a8; --t-A:#e5484d; --t-E:#7a4b2a; --t-R:#8d949e; --t-S:#9b7653; --t-L:#a47c52; --t-W:#6cb4ee; --t-X:#6f9a4a; --t-B:#3f8a4a;
+  --t-f:#8fd16b; --t-m:#a98f6b; --t-n:#c8e07a; --t-_:#d8d2c2; --t-plus:#e9c9a0; --trail:#1d2330;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+  --bg:#12151c; --panel:#1b202b; --fg:#e4e8f0; --muted:#8e98ad; --line:#2d3444; --accent:#6ea0ff; --bad:#ff8a80; --badbg:#3a1d1f; --good:#7bd88f; --warn:#ffb74d;
+  --chg:#4a3f12; --shadow:none;
+  --t-grass:#3c5a33; --t-A:#e5484d; --t-E:#a8703f; --t-R:#5d6470; --t-S:#6b5236; --t-L:#76583a; --t-W:#2f6a9e; --t-X:#4b6a32; --t-B:#25562d;
+  --t-f:#4f7f36; --t-m:#6b5a40; --t-n:#7c8a3b; --t-_:#59564c; --t-plus:#6f5a40; --trail:#f2f4f8;}
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font:13px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow-x:hidden}
+button,input,select,textarea{font:inherit;color:inherit}
+button{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:4px 9px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+input,select,textarea{background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:3px 6px;min-width:0}
+input[type=number]{width:70px}
+.chg{background:var(--chg)!important}
+header{position:sticky;top:0;z-index:20;background:var(--panel);border-bottom:1px solid var(--line);padding:8px 16px;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center}
+header h1{font-size:16px;margin:0;font-weight:650}
+.pill{display:inline-block;border-radius:99px;padding:1px 9px;font-size:12px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.pill.ok{color:var(--good);border-color:var(--good)} .pill.bad{color:var(--bad);border-color:var(--bad)} .pill.wait{color:var(--warn);border-color:var(--warn)}
+.ctl{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.ctl label{color:var(--muted);font-size:12px}
+.sp{flex:1}
+#banner{margin:8px 16px 0}
+.err{background:var(--badbg);color:var(--bad);border:1px solid var(--bad);border-radius:6px;padding:6px 10px;margin-bottom:6px;white-space:pre-wrap;word-break:break-word}
+.err pre{margin:4px 0 0;max-height:160px;overflow:auto;font-size:11px;white-space:pre-wrap}
+main{padding:8px 16px 40px;transition:padding-right .15s}
+@media (min-width:1100px){ body.drawer main{padding-right:456px} body.drawer header{padding-right:456px} }
+section.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-top:12px;box-shadow:var(--shadow)}
+section.card>h2{font-size:14px;margin:0 0 8px;display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center}
+h2 .sub{font-weight:400;color:var(--muted);font-size:12px}
+.seg{display:inline-flex;gap:0}
+.seg button{border-radius:0;margin-left:-1px;padding:2px 9px;font-size:12px}
+.seg button:first-child{border-radius:6px 0 0 6px;margin-left:0}.seg button:last-child{border-radius:0 6px 6px 0}
+/* overview */
+#ovbox{overflow:auto;max-width:100%;border:1px solid var(--line);border-radius:6px}
+table.ov{border-collapse:separate;border-spacing:1px;font-size:11px}
+table.ov th{font-weight:500;color:var(--muted);padding:1px 3px;white-space:nowrap;text-align:center;position:sticky;top:0;background:var(--panel);z-index:1}
+table.ov th.rl{text-align:left;position:sticky;left:0;z-index:2;cursor:pointer;color:var(--fg);padding:2px 6px;min-width:120px}
+table.ov th.rl:hover{color:var(--accent)} table.ov th.rl.sel{background:var(--chg)}
+table.ov td{min-width:34px;height:24px;text-align:center;cursor:pointer;border-radius:3px;position:relative;font-variant-numeric:tabular-nums;padding:0 2px}
+table.ov td.e{background:var(--line);opacity:.35;cursor:default}
+table.ov td.st{opacity:.55} table.ov td.st::after{content:"↻";position:absolute;right:1px;top:-1px;font-size:8px;color:var(--muted)}
+table.ov td.sel{outline:2px solid var(--fg);outline-offset:-1px;z-index:1}
+table.ov td.inf{font-weight:700}
+.legendrow{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:6px;font-size:12px;color:var(--muted);align-items:center}
+.sw{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-1px;margin-right:4px}
+.grad{display:inline-block;width:110px;height:10px;border-radius:3px;vertical-align:-1px}
+/* level */
+.lvgrid{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:12px}
+@media (max-width:900px){.lvgrid{grid-template-columns:minmax(0,1fr)}}
+.chartbox{overflow-x:auto}
+svg.chart{width:100%;min-width:560px;height:auto;display:block}
+svg text{fill:var(--muted);font-size:10px}
+table.t{border-collapse:collapse;width:100%}
+table.t th,table.t td{padding:2px 6px;border-bottom:1px solid var(--line);text-align:right;font-variant-numeric:tabular-nums}
+table.t th:first-child,table.t td:first-child{text-align:left}
+table.t th{color:var(--muted);font-weight:500;font-size:12px}
+.fam{display:inline-flex;align-items:center;gap:4px}
+/* wave */
+.chips{display:flex;flex-wrap:wrap;gap:4px}
+.chip{border:1px solid var(--line);border-radius:5px;padding:1px 7px;background:var(--bg);font-size:12px;white-space:nowrap}
+.chip.boss{background:var(--badbg);border-color:var(--bad);color:var(--bad);font-weight:600}
+.chip.x{cursor:pointer} .chip.x:hover{border-color:var(--bad)}
+.stats{display:flex;flex-wrap:wrap;gap:4px 16px;color:var(--muted);margin:6px 0}
+.stats b{color:var(--fg);font-weight:600}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;margin-top:8px}
+.gcard{border:1px solid var(--line);border-radius:8px;padding:6px;cursor:pointer;background:var(--bg);min-width:0}
+.gcard:hover{border-color:var(--accent)}
+.gcard.stale{opacity:.6}
+.gcard .hd{display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}
+.gcard .rk{font-weight:700;color:var(--muted)}
+.gcard .mg{font-size:17px;font-weight:700}
+.gcard .dl{font-size:12px}
+.gcard .mt{display:flex;justify-content:space-between;color:var(--muted);font-size:11px;margin:2px 0 4px;gap:6px;flex-wrap:wrap}
+.up{color:var(--good)} .down{color:var(--bad)}
+svg.map{width:100%;height:auto;display:block;border-radius:4px}
+.mixbar{display:flex;height:12px;border-radius:3px;overflow:hidden;margin-top:4px;background:var(--line)}
+.mixbar i{display:block;height:100%}
+.mixleg{font-size:11px;color:var(--muted);margin-top:2px}
+.monos{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;align-items:center}
+.monos button{display:flex;gap:5px;align-items:center;padding:2px 8px}
+.monos button.flag{border-color:var(--bad)}
+.hint{color:var(--muted);font-size:12px}
+.flagnote{color:var(--bad);font-weight:600}
+/* overlay */
+#ovl{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:40;display:none;align-items:center;justify-content:center;padding:12px}
+#ovl.show{display:flex}
+#ovl .box{background:var(--panel);border-radius:10px;padding:12px;max-width:1000px;width:100%;max-height:96vh;overflow:auto;display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:12px;position:relative}
+@media (max-width:800px){#ovl .box{grid-template-columns:minmax(0,1fr)}}
+#ovl .x{position:absolute;right:8px;top:8px;z-index:2}
+/* drawer */
+#drawer{position:fixed;top:0;right:0;bottom:0;width:444px;max-width:100vw;background:var(--panel);border-left:1px solid var(--line);z-index:30;transform:translateX(105%);transition:transform .15s;display:flex;flex-direction:column;box-shadow:-4px 0 16px rgba(0,0,0,.15)}
+body.drawer #drawer{transform:none}
+#drawer .dh{padding:8px 12px;border-bottom:1px solid var(--line);display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+#drawer .dh h3{margin:0;font-size:14px;flex:1}
+#drawer .tabs{padding:6px 12px 0;display:flex;gap:4px;flex-wrap:wrap}
+#drawer .tabs button{border-radius:6px 6px 0 0}
+#dbody{padding:10px 12px;overflow:auto;flex:1}
+#chips{padding:6px 12px;border-bottom:1px solid var(--line);display:flex;gap:4px;flex-wrap:wrap;align-items:center;max-height:96px;overflow:auto}
+table.ed{border-collapse:collapse;font-size:12px}
+table.ed th,table.ed td{padding:1px 2px;border-bottom:1px solid var(--line);text-align:center}
+table.ed th{color:var(--muted);font-weight:500}
+table.ed td:first-child,table.ed th:first-child{text-align:left;padding-right:6px;white-space:nowrap}
+table.ed input{width:46px;padding:2px 3px;text-align:right}
+table.ed td.na{color:var(--muted);opacity:.5}
+.edwrap{overflow-x:auto;max-width:100%}
+.row{display:flex;gap:6px;align-items:center;margin:5px 0;flex-wrap:wrap}
+.row label{width:84px;color:var(--muted)}
+.row textarea{flex:1;min-width:180px;height:56px;font-family:ui-monospace,Menlo,monospace;font-size:11px}
+.mapgrid{display:grid;grid-template-columns:repeat(14,1fr);gap:1px;background:var(--line);border:1px solid var(--line);touch-action:none;user-select:none;max-width:420px}
+.mapgrid div{aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:10px;color:rgba(0,0,0,.55);font-weight:600}
+.pal{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0}
+.pal button{display:flex;gap:4px;align-items:center;padding:2px 6px;font-size:11px}
+.pal button.on{outline:2px solid var(--accent)}
+.pal .sw{margin:0;border:1px solid rgba(0,0,0,.25)}
+.pbtn{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px}
+.camp{margin-top:10px;border-top:1px solid var(--line);padding-top:8px}.camp .hint{font-size:12px}.camplog{font-size:11px;max-height:9em;overflow:auto;background:var(--bg);padding:6px;border-radius:6px;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<header>
+  <h1>Студия баланса</h1>
+  <span id="pEngine" class="pill">…</span>
+  <span id="pRate" class="pill"></span>
+  <div class="ctl">
+    <label>Перки <select id="cMeta">
+      <option value="none">нет</option><option value="exp1">одна звезда на уровень</option><option value="exp2">две звезды</option><option value="full">все</option></select></label>
+    <label>Допуск укусов <input id="cTol" type="number" min="0" step="1"></label>
+    <label><input id="cEarly" type="checkbox"> ранний вызов</label>
+  </div>
+  <div class="ctl">
+    <button id="bPin">Запомнить как базу</button>
+    <button id="bClear" hidden>Сбросить базу</button>
+    <span id="baseInfo" class="hint"></span>
+  </div>
+  <span class="sp"></span>
+  <button id="bDrawer">Редактор <span id="ovCount"></span></button>
+</header>
+<div id="banner"></div>
+<main>
+  <section class="card" id="secOv">
+    <h2>Карта меты
+      <span class="seg" id="modeSeg">
+        <button data-m="margin">Запас</button><button data-m="prem">Премия смеси</button><button data-m="main">Главное</button><button data-m="delta">Δ к базе</button>
+      </span>
+      <span class="sub" id="modeHint"></span>
+    </h2>
+    <div id="ovbox"></div>
+    <div class="legendrow" id="ovLegend"></div>
+  </section>
+
+  <section class="card" id="secLevel">
+    <h2><span id="lvTitle">Уровень</span><span class="sub">доли пятёрки лучших садов по волнам, запас лучшего (сплошная) и лучшего моно (пунктир точками)</span></h2>
+    <div class="lvgrid">
+      <div class="chartbox" id="lvChart"></div>
+      <div id="lvTable"></div>
+    </div>
+    <div class="legendrow" id="lvLegend"></div>
+    <div class="camp"><button id="campBtn">Проверить полной партией</button> <span class="hint">медленно (минуты): лучшие сады студии становятся планом на весь уровень, его играет бот с экономикой, поеданием, морозом и дождём, план дорабатывается; запас уровня сравнивается с ботом-экспертом, по которому настроена матрица</span><div id="campOut"></div></div>
+  </section>
+
+  <section class="card" id="secWave">
+    <h2><span id="wvTitle">Волна</span></h2>
+    <div id="wvComp" class="chips"></div>
+    <div id="wvStats" class="stats"></div>
+    <div id="wvMono" class="monos"></div>
+    <div id="wvCards" class="cards"></div>
+  </section>
+</main>
+
+<div id="ovl"><div class="box" id="ovlBox"></div></div>
+
+<aside id="drawer">
+  <div class="dh"><h3>Редактор</h3><button id="bResetAll">Сбросить всё</button><button id="bClose">✕</button></div>
+  <div id="chips"></div>
+  <div class="tabs" id="tabs">
+    <button data-t="plants">Растения</button><button data-t="bugs">Жуки</button><button data-t="level">Уровень</button><button data-t="gen">Общее</button>
+  </div>
+  <div id="dbody"></div>
+</aside>
+
+<script>
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const lsGet = (k, d) => { try { const v = localStorage.getItem('studio.' + k); return v == null ? d : v; } catch { return d; } };
+const lsSet = (k, v) => { try { localStorage.setItem('studio.' + k, v); } catch {} };
+const api = (path, body) => fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json()).catch(() => null);
+
+// ---------- names, colours ----------
+const PLANT_RU = { pumpkin: 'Тыква', rose: 'Роза', pepper: 'Чили', mint: 'Мята', flytrap: 'Мухоловка' };
+const PLANT_LET = { pumpkin: 'Т', rose: 'Р', pepper: 'Ч', mint: 'М', flytrap: 'Мх' };
+const BR_RU = { pumpkin: { a: 'Панцирь', b: 'Колючие плети' }, rose: { a: 'Охотница', b: 'Дальнобойная' }, pepper: { a: 'Жар', b: 'Прожиг' },
+  mint: { a: 'Холод', b: 'Сосулька' }, flytrap: { a: 'Обжора', b: 'Ловчая' } };
+const BUG_RU = { ant: 'Муравей', aphid: 'Тля', beetle: 'Бронзовка', caterpillar: 'Гусеница', grasshopper: 'Кузнечик', snail: 'Улитка', pillbug: 'Мокрица', butterfly: 'Бабочка',
+  wasp: 'Оса', firefly: 'Светлячок', cricket: 'Медведка', rhino: 'Жук-носорог', queen: 'Матка', slugking: 'Король слизней', hornet: 'Шершень', spider: 'Паучиха' };
+const TIERS = ['1', '2', '3А', '4А', '3Б', '4Б'];
+const tierBranch = (t) => (t < 2 ? null : t < 4 ? 'a' : 'b');
+const PBASE = { pumpkin: '#f08c00', rose: '#e64980', pepper: '#c92a2a', mint: '#15aabf', flytrap: '#37b24d' };
+const hex2 = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+const mix = (a, b, t) => { const x = hex2(a), y = hex2(b); return '#' + x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, '0')).join(''); };
+const lum = (h) => { const [r, g, b] = hex2(h); return (0.299 * r + 0.587 * g + 0.114 * b) / 255; };
+const shade = (p, br) => { const c = PBASE[p] || '#888888'; return br === 'a' ? mix(c, '#ffffff', .0) : br === 'b' ? mix(c, '#000000', .42) : mix(c, '#ffffff', .5); };
+const famParts = (f) => { const [p, br] = f.split('.'); return [p, br || null]; };
+const famColor = (f) => { const [p, br] = famParts(f); return shade(p, br); };
+const famName = (f) => { const [p, br] = famParts(f); return br ? (BR_RU[p]?.[br] || p + '.' + br) : (PLANT_RU[p] || p); };
+const famFull = (f) => { const [p, br] = famParts(f); return br ? (PLANT_RU[p] || p) + ' · ' + (BR_RU[p]?.[br] || br) : (PLANT_RU[p] || p) + ' (1–2)'; };
+const famSwatch = (f) => { const [, br] = famParts(f); const c = famColor(f); return `<span class="sw" style="background:${br === 'b' ? `repeating-linear-gradient(45deg,${c} 0 3px,${mix(c, '#ffffff', .3)} 3px 6px)` : c}"></span>`; };
+const famOrder = (f) => { const [p, br] = famParts(f); return Object.keys(PLANT_RU).indexOf(p) * 3 + (br === 'a' ? 1 : br === 'b' ? 2 : 0); };
+const BIGM = 30;
+const isInf = (m) => m >= BIGM;
+const fmtM = (m, d = 1) => (!(m > 0) ? '–' : isInf(m) ? '∞' : m >= 10 ? m.toFixed(d === 2 ? 1 : 0) : m.toFixed(d));
+const lvName = (l) => `${l + 1}. ${S.ui?.levels[l]?.name ?? ''}`;
+
+// ---------- state ----------
+const S = {
+  ui: null, ov: {}, config: { meta: 'exp2', tol: 0, early: false }, focus: { level: 5, wave: null }, caps: { focus: 20000, other: 1500 }, errors: [], engine: 'starting', buildLog: '',
+  status: null, baseline: null, sums: {}, sel: { level: 5, wave: 1 }, store: { level: -1, waves: {} }, conn: false,
+  mode: lsGet('mode', 'margin'), tab: lsGet('tab', 'plants'), plant: lsGet('plant', 'rose'), drawer: lsGet('drawer', '0') === '1', big: null,
+};
+const sumOf = (l, w) => S.sums[l + ':' + w];
+const baseOf = (l, w) => S.baseline?.waves?.[l + ':' + w];
+
+// ---------- scheduling ----------
+const dirty = { header: false, ov: new Set(), ovAll: false, level: false, wave: false, status: false, editor: false, chips: false };
+let raf = 0;
+function kick() { if (!raf) raf = requestAnimationFrame(flush); }
+let lastWaveAt = 0, waveTimer = 0;
+function flush() {
+  raf = 0;
+  if (dirty.header) { dirty.header = false; paintHeader(); }
+  if (dirty.status) { dirty.status = false; paintStatus(); }
+  if (dirty.ovAll) { dirty.ovAll = false; dirty.ov.clear(); buildOverview(); }
+  else if (dirty.ov.size) { for (const k of dirty.ov) { const [l, w] = k.split(':'); paintCell(+l, +w); } dirty.ov.clear(); }
+  if (dirty.level) { dirty.level = false; paintLevel(); }
+  if (dirty.wave) {
+    const now = performance.now();
+    if (now - lastWaveAt < 350) { if (!waveTimer) waveTimer = setTimeout(() => { waveTimer = 0; dirty.wave = true; kick(); }, 350); }
+    else { dirty.wave = false; lastWaveAt = now; paintWave(); }
+  }
+  if (dirty.chips) { dirty.chips = false; paintChips(); }
+  if (dirty.editor) { const a = document.activeElement; if (!(a && $('#dbody').contains(a) && /INPUT|TEXTAREA/.test(a.tagName))) { dirty.editor = false; paintEditor(); } }
+}
+
+// ---------- header ----------
+function paintHeader() {
+  const e = S.engine, pe = $('#pEngine');
+  const names = { starting: 'запуск', building: 'сборка движка', loading: 'загрузка', running: 'работает', 'build failed': 'сборка не удалась', crashed: 'движок упал' };
+  pe.textContent = S.conn ? (names[e] || e) : 'нет связи';
+  pe.className = 'pill ' + (!S.conn ? 'bad' : e === 'running' ? 'ok' : (e === 'build failed' || e === 'crashed') ? 'bad' : 'wait');
+  const set = (el, v) => { if (document.activeElement !== el) { if (el.type === 'checkbox') el.checked = !!v; else el.value = v; } };
+  set($('#cMeta'), S.config.meta); set($('#cTol'), S.config.tol); set($('#cEarly'), S.config.early);
+  $('#bClear').hidden = !S.baseline;
+  $('#baseInfo').textContent = S.baseline ? 'база: ' + S.baseline.label : 'базы нет';
+  const n = Object.keys(S.ov).length; $('#ovCount').textContent = n ? `(${n})` : '';
+  let h = '';
+  for (const er of S.errors || []) h += `<div class="err">${esc(er)}</div>`;
+  if ((e === 'build failed' || e === 'crashed') && S.buildLog) h += `<div class="err"><b>${e === 'crashed' ? 'Движок упал' : 'Сборка не удалась'}</b><pre>${esc(S.buildLog)}</pre></div>`;
+  $('#banner').innerHTML = h;
+}
+function paintStatus() {
+  const s = S.status, el = $('#pRate');
+  if (!s) { el.textContent = ''; return; }
+  el.textContent = s.idle ? 'ждёт' : `${Math.round(s.rate || 0)} прогонов/с`;
+}
+
+// ---------- overview ----------
+const MODE_HINT = { margin: 'запас лучшего сада: красный < 1 < зелёный, фиолетовый = ∞', prem: 'лучший / лучший моно; ≤ 1.05 — красный флаг «моно не хуже смеси»',
+  main: 'цвет семейства с наибольшей долей в пятёрке лучших', delta: 'лучший запас относительно базы' };
+function maxWaves() { return Math.max(0, ...S.ui.levels.map((l) => l.waves.length)); }
+function buildOverview() {
+  if (!S.ui) return;
+  const W = maxWaves();
+  let h = '<table class="ov"><thead><tr><th class="rl" style="cursor:default"></th>';
+  for (let w = 1; w <= W; w++) h += `<th>${w}</th>`;
+  h += '</tr></thead><tbody>';
+  S.ui.levels.forEach((lv, l) => {
+    h += `<tr><th class="rl" data-l="${l}">${l + 1} ${esc(lv.name)}</th>`;
+    for (let w = 1; w <= W; w++) h += w <= lv.waves.length ? `<td data-l="${l}" data-w="${w}"></td>` : '<td class="e"></td>';
+    h += '</tr>';
+  });
+  $('#ovbox').innerHTML = h + '</tbody></table>';
+  S.ui.levels.forEach((lv, l) => { for (let w = 1; w <= lv.waves.length; w++) paintCell(l, w); });
+  paintSel(); paintOvLegend();
+}
+const lerp = (a, b, t) => a + (b - a) * Math.min(1, Math.max(0, t));
+function marginStyle(m) {
+  if (!(m > 0)) return ['', ''];
+  if (isInf(m)) return ['rgba(124,77,255,.6)', 'inf'];
+  const t = Math.log2(m);
+  return t < 0 ? [`rgba(214,50,48,${lerp(.15, .8, -t / 2.5).toFixed(2)})`, ''] : [`rgba(34,160,80,${lerp(.12, .75, t / 3.2).toFixed(2)})`, ''];
+}
+function ratioOf(a, b) { // a/b with ∞ handling
+  if (!(a > 0) || !(b > 0)) return null;
+  if (isInf(a) && isInf(b)) return 1;
+  return Math.min(a, 60) / Math.min(b, 60) * (isInf(a) && !isInf(b) ? 1 : 1);
+}
+function paintCell(l, w) {
+  const td = $(`#ovbox td[data-l="${l}"][data-w="${w}"]`); if (!td) return;
+  const s = sumOf(l, w); let bg = '', txt = '·', cls = '', col = '';
+  if (s && s.best > 0) {
+    if (S.mode === 'margin') { [bg, cls] = marginStyle(s.best); txt = fmtM(s.best); }
+    else if (S.mode === 'prem') {
+      const r = ratioOf(s.best, s.monoBest || 0);
+      if (r == null) { txt = s.monoBest > 0 ? '·' : '∞×'; bg = 'rgba(34,160,80,.6)'; if (!(s.monoBest > 0)) txt = 'нет моно'; }
+      else { const hue = lerp(0, 130, (r - 1.05) / 0.55); bg = `hsla(${hue.toFixed(0)},70%,48%,.6)`; txt = r > 9.9 ? '9.9+' : r.toFixed(2); }
+    } else if (S.mode === 'main') {
+      let bf = null, bv = 0; for (const [f, v] of Object.entries(s.pick || {})) if (v > bv) { bv = v; bf = f; }
+      if (bf) { const c = famColor(bf), [p, br] = famParts(bf); bg = c; col = lum(c) > .6 ? '#111' : '#fff'; txt = PLANT_LET[p] + (br === 'a' ? 'А' : br === 'b' ? 'Б' : ''); }
+    } else if (S.mode === 'delta') {
+      const b = baseOf(l, w);
+      if (!b || !(b.best > 0)) txt = S.baseline ? '?' : '·';
+      else {
+        const r = ratioOf(s.best, b.best);
+        if (isInf(s.best) && isInf(b.best)) txt = '=';
+        else { const q = isInf(s.best) ? 9 : isInf(b.best) ? .1 : s.best / b.best; [bg] = marginStyle(Math.exp(Math.log(q) * 1.4)); const pc = (q - 1) * 100;
+          txt = Math.abs(pc) < .5 ? '=' : isInf(s.best) ? '∞↑' : isInf(b.best) ? '↓' : (pc > 0 ? '+' : '−') + Math.abs(pc).toFixed(Math.abs(pc) < 10 ? 1 : 0) + '%'; if (txt === '=') bg = ''; }
+      }
+    }
+  }
+  td.textContent = txt; td.style.background = bg; td.style.color = col;
+  td.className = (cls ? cls + ' ' : '') + (s && (s.stale > 0 || s.bestStale) ? 'st' : '') + (S.sel.level === l && S.sel.wave === w ? ' sel' : '');
+}
+function paintSel() {
+  $$('#ovbox td.sel').forEach((e) => e.classList.remove('sel'));
+  const td = $(`#ovbox td[data-l="${S.sel.level}"][data-w="${S.sel.wave}"]`); if (td) td.classList.add('sel');
+  $$('#ovbox th.rl').forEach((e) => e.classList.toggle('sel', +e.dataset.l === S.sel.level));
+}
+function $$(s, r = document) { return [...r.querySelectorAll(s)]; }
+function paintOvLegend() {
+  const g = (stops) => `<span class="grad" style="background:linear-gradient(90deg,${stops})"></span>`;
+  let h = '';
+  if (S.mode === 'margin' || S.mode === 'delta') h = `${S.mode === 'margin' ? '×0.25' : 'хуже'} ${g('rgba(214,50,48,.8),rgba(214,50,48,.15),rgba(34,160,80,.12),rgba(34,160,80,.75)')} ${S.mode === 'margin' ? '×8' : 'лучше'}` + (S.mode === 'margin' ? ' <span><span class="sw" style="background:rgba(124,77,255,.6)"></span>∞</span>' : '');
+  else if (S.mode === 'prem') h = `≤1.05 ${g('hsla(0,70%,48%,.6),hsla(65,70%,48%,.6),hsla(130,70%,48%,.6)')} ≥1.6`;
+  else h = Object.keys(PLANT_RU).map((p) => `<span>${famSwatch(p)}${PLANT_LET[p]} ${PLANT_RU[p]}</span>`).join('') + '<span>суффикс А/Б — ветка</span>';
+  h += ' <span>↻ — часть результатов от прошлых данных</span>';
+  $('#ovLegend').innerHTML = h; $('#modeHint').textContent = MODE_HINT[S.mode];
+  $$('#modeSeg button').forEach((b) => b.classList.toggle('on', b.dataset.m === S.mode));
+}
+function mixText(mix) { return Object.entries(mix || {}).sort((a, b) => b[1] - a[1]).map(([f, v]) => `${famName(f)} ${Math.round(v * 100)}%`).join(', '); }
+$('#ovbox').addEventListener('click', (e) => {
+  const td = e.target.closest('td[data-l]'), th = e.target.closest('th[data-l]');
+  if (td) selectWave(+td.dataset.l, +td.dataset.w, true); else if (th) selectLevel(+th.dataset.l, true);
+});
+$('#ovbox').addEventListener('mouseover', (e) => {
+  const td = e.target.closest('td[data-l]'); if (!td || td.title) return;
+  const l = +td.dataset.l, w = +td.dataset.w, s = sumOf(l, w);
+  td.title = !s ? 'ещё нет данных' : `Уровень ${l + 1}, волна ${w}\nзапас ${fmtM(s.best, 2)}${s.stale ? ' (↻ ' + s.stale + ')' : ''}; лучшее моно ${fmtM(s.monoBest, 2)}\nсмесь лучшего: ${mixText(s.mix) || '–'}\nмоно: ${Object.entries(s.mono || {}).map(([k, v]) => PLANT_RU[k] + ' ' + fmtM(v.m, 2)).join(', ') || '–'}\nбюджет ${Math.round(s.budget)}, садов ${s.niches}, прогонов ${s.plays}`;
+  td.addEventListener('mouseleave', () => { td.removeAttribute('title'); }, { once: true });
+});
+$('#modeSeg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; S.mode = b.dataset.m; lsSet('mode', S.mode); dirty.ovAll = true; kick(); paintOvLegend(); });
+
+// ---------- focus ----------
+let focusSeq = 0;
+function selectLevel(l, scroll) { selectWave(l, S.sel.level === l ? S.sel.wave : 1, scroll, true); }
+function selectWave(l, w, scroll, levelOnly) {
+  const lvChanged = S.sel.level !== l;
+  S.sel = { level: l, wave: w }; S.focus = { level: l, wave: levelOnly ? null : w };
+  if (lvChanged || S.store.level !== l) S.store = { level: l, waves: {} };
+  paintSel(); dirty.level = dirty.wave = dirty.editor = true; kick();
+  const seq = ++focusSeq;
+  api('/api/focus', { level: l, wave: levelOnly ? null : w }).then((r) => {
+    if (!r || seq !== focusSeq) return;
+    for (const rep of r.waves || []) if (rep.level === S.store.level) { const o = S.store.waves[rep.wave]; if (!o || o.gen <= rep.gen) S.store.waves[rep.wave] = rep; }
+    dirty.wave = dirty.level = true; kick();
+  });
+  if (scroll && innerWidth < 900) $('#secLevel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ---------- level view ----------
+function paintLevel() {
+  if (!S.ui) return;
+  const L = S.sel.level, lv = S.ui.levels[L]; if (!lv) return;
+  const n = lv.waves.length;
+  $('#lvTitle').textContent = `Уровень ${L + 1} — ${lv.name}`;
+  const sums = []; for (let w = 1; w <= n; w++) sums.push(sumOf(L, w) || null);
+  // bars
+  const X0 = 34, X1 = 890, step = (X1 - X0) / n, bw = Math.max(4, step - 3), BH = 130, TOP = 8, LTOP = TOP + BH + 22, LH = 120, H = LTOP + LH + 22;
+  const fams = new Set(); sums.forEach((s) => s && Object.keys(s.pick || {}).forEach((f) => fams.add(f)));
+  let h = `<svg class="chart" viewBox="0 0 900 ${H}" preserveAspectRatio="xMidYMid meet">`;
+  for (const q of [0, .5, 1]) h += `<line x1="${X0}" x2="${X1}" y1="${TOP + BH * (1 - q)}" y2="${TOP + BH * (1 - q)}" stroke="var(--line)" stroke-width=".7"/><text x="${X0 - 4}" y="${TOP + BH * (1 - q) + 3}" text-anchor="end">${q * 100}%</text>`;
+  sums.forEach((s, i) => {
+    const x = X0 + i * step + (step - bw) / 2, w = i + 1;
+    if (S.sel.wave === w) h += `<rect x="${X0 + i * step}" y="${TOP - 4}" width="${step}" height="${H - TOP}" fill="var(--chg)" opacity=".6"/>`;
+    if (s) {
+      const ent = Object.entries(s.pick || {}).sort((a, b) => famOrder(a[0]) - famOrder(b[0])), tot = ent.reduce((a, e) => a + e[1], 0) || 1; let y = TOP + BH;
+      for (const [f, v] of ent) { const hh = BH * v / tot; y -= hh; h += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${hh.toFixed(1)}" fill="${famColor(f)}"${famParts(f)[1] === 'b' ? ' stroke="rgba(255,255,255,.55)" stroke-width=".6"' : ''}><title>${esc(famFull(f))} ${Math.round(v / tot * 100)}%</title></rect>`; }
+    }
+    h += `<text x="${(X0 + i * step + step / 2).toFixed(1)}" y="${LTOP + LH + 12}" text-anchor="middle">${w}</text>`;
+    h += `<rect class="hit" data-w="${w}" x="${X0 + i * step}" y="${TOP}" width="${step}" height="${H - TOP}" fill="transparent" style="cursor:pointer"/>`;
+  });
+  // lines (log2 axis 0.25 .. 32)
+  const LO = -2, HI = 5, yv = (m) => LTOP + LH * (1 - (Math.min(HI, Math.max(LO, Math.log2(m))) - LO) / (HI - LO)), xv = (i) => X0 + i * step + step / 2;
+  for (const m of [.25, .5, 1, 2, 4, 8, 16, 32]) h += `<line x1="${X0}" x2="${X1}" y1="${yv(m)}" y2="${yv(m)}" stroke="${m === 1 ? 'var(--fg)' : 'var(--line)'}" stroke-width="${m === 1 ? 1 : .7}" ${m === 1 ? 'opacity=".5"' : ''}/><text x="${X0 - 4}" y="${yv(m) + 3}" text-anchor="end">${m >= 30 ? '∞' : m}</text>`;
+  const line = (get, color, dash, wd) => {
+    let d = '', pen = false;
+    for (let i = 0; i < n; i++) { const v = get(i); if (!(v > 0)) { pen = false; continue; } d += `${pen ? 'L' : 'M'}${xv(i).toFixed(1)},${yv(v).toFixed(1)}`; pen = true; }
+    let dots = ''; for (let i = 0; i < n; i++) { const v = get(i); if (v > 0) dots += isInf(v) ? `<text x="${xv(i).toFixed(1)}" y="${yv(v) + 3}" text-anchor="middle" style="fill:${color};font-weight:700">∞</text>` : `<circle cx="${xv(i).toFixed(1)}" cy="${yv(v).toFixed(1)}" r="2.2" fill="${color}"/>`; }
+    return `<path d="${d}" fill="none" stroke="${color}" stroke-width="${wd}" ${dash ? `stroke-dasharray="${dash}"` : ''}/>` + dots;
+  };
+  h += line((i) => baseOf(L, i + 1)?.best, 'var(--muted)', '6 3', 1.4);
+  h += line((i) => sums[i]?.monoBest, '#e8590c', '2 3', 1.6);
+  h += line((i) => sums[i]?.best, 'var(--accent)', '', 2);
+  h += '</svg>';
+  $('#lvChart').innerHTML = h;
+  $('#lvLegend').innerHTML = '<span><span class="sw" style="background:var(--accent)"></span>запас лучшего</span><span><span class="sw" style="background:#e8590c"></span>лучшее моно</span>' + (S.baseline ? '<span>- - - лучший в базе</span>' : '') + [...fams].sort((a, b) => famOrder(a) - famOrder(b)).map((f) => `<span>${famSwatch(f)}${esc(famFull(f))}</span>`).join('');
+  // table
+  const ag = {}, cnt = {}; let have = 0;
+  sums.forEach((s) => { if (!s || !s.best) return; have++; const tot = Object.values(s.pick || {}).reduce((a, b) => a + b, 0) || 1; for (const [f, v] of Object.entries(s.pick || {})) { ag[f] = (ag[f] || 0) + v / tot; if (v / tot >= .15) cnt[f] = (cnt[f] || 0) + 1; } });
+  let t = `<table class="t"><tr><th>Семейство</th><th title="средняя доля в пятёрке лучших">средн.</th><th title="волн с долей ≥ 15%">волн ≥15%</th></tr>`;
+  for (const f of Object.keys(ag).sort((a, b) => ag[b] - ag[a])) t += `<tr><td><span class="fam">${famSwatch(f)}${esc(famFull(f))}</span></td><td>${Math.round(ag[f] / have * 100)}%</td><td>${cnt[f] || 0} / ${have}</td></tr>`;
+  $('#lvTable').innerHTML = have ? t + '</table>' : '<span class="hint">данных пока нет</span>';
+}
+$('#lvChart').addEventListener('click', (e) => { const r = e.target.closest('.hit'); if (r) selectWave(S.sel.level, +r.dataset.w); });
+
+// ---------- gardens ----------
+const TERR = { '.': 'grass', A: 'A', E: 'E', R: 'R', S: 'S', L: 'L', W: 'W', X: 'X', B: 'B', f: 'f', m: 'm', n: 'n', _: '_', '+': 'plus' };
+const TERR_RU = { '.': 'трава', A: 'плод', E: 'муравейник', R: 'камень', S: 'пень', L: 'бревно', W: 'вода', X: 'сорняки', B: 'кусты', f: 'плодородная почва', m: 'грязь', n: 'крапива', _: 'каменная дорожка', '+': 'грядка' };
+function mapSvg(g, cs = 20, withLabels = true) {
+  const lv = S.ui.levels[S.sel.level], rows = lv.map, C = 14, R = 8, W = C * cs, H = R * cs;
+  let h = `<svg class="map" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">`;
+  for (let j = 0; j < R; j++) for (let i = 0; i < C; i++) {
+    const ch = rows[j]?.[i] || '.', x = i * cs, y = j * cs;
+    h += `<rect x="${x}" y="${y}" width="${cs}" height="${cs}" style="fill:var(--t-${TERR[ch] || 'grass'})" stroke="rgba(0,0,0,.1)" stroke-width=".5"/>`;
+    if (ch === 'A') h += `<circle cx="${x + cs / 2}" cy="${y + cs / 2}" r="${cs * .36}" fill="#fff" opacity=".85"/><circle cx="${x + cs / 2}" cy="${y + cs / 2}" r="${cs * .26}" fill="#e5484d"/>`;
+    else if (ch === 'E') h += `<path d="M${x + 2} ${y + cs - 2}L${x + cs / 2} ${y + 3}L${x + cs - 2} ${y + cs - 2}Z" fill="#3b2412" opacity=".8"/>`;
+    else if (ch === 'W') h += `<path d="M${x + 3} ${y + cs * .45}q${cs * .17} -3 ${cs * .35} 0t${cs * .3} 0" stroke="#fff" stroke-width=".8" fill="none" opacity=".6"/>`;
+    else if (ch === 'R' || ch === 'S' || ch === 'L' || ch === 'B' || ch === 'X') h += `<circle cx="${x + cs / 2}" cy="${y + cs / 2}" r="${cs * .3}" fill="rgba(0,0,0,.18)"/>`;
+  }
+  const cell = (k) => [(k % 14) * cs + cs / 2, Math.floor(k / 14) * cs + cs / 2];
+  // trail: split where non-adjacent
+  const tr = g.trail || []; let seg = [];
+  const flush = () => { if (seg.length > 1) h += `<polyline points="${seg.map((k) => cell(k).map((v) => v.toFixed(1)).join(',')).join(' ')}" fill="none" stroke="var(--trail)" stroke-width="${cs * .13}" stroke-dasharray="${cs * .3} ${cs * .18}" stroke-linejoin="round" stroke-linecap="round" opacity=".85"/>`; seg = []; };
+  for (const k of tr) { if (seg.length) { const p = seg[seg.length - 1]; if (Math.abs((p % 14) - (k % 14)) > 1 || Math.abs(Math.floor(p / 14) - Math.floor(k / 14)) > 1) flush(); } seg.push(k); }
+  flush();
+  const walls = new Set(g.walls || []);
+  for (const [k, p, t] of g.cells || []) {
+    const [cx, cy] = cell(k), br = tierBranch(t), c = shade(p, br), tc = lum(c) > .62 ? '#111' : '#fff';
+    if (walls.has(k)) h += `<rect x="${cx - cs / 2 + 1}" y="${cy - cs / 2 + 1}" width="${cs - 2}" height="${cs - 2}" fill="none" stroke="var(--fg)" stroke-width="1" stroke-dasharray="2 2" opacity=".7"/>`;
+    h += `<circle cx="${cx}" cy="${cy}" r="${cs * .38}" fill="${c}" stroke="${br === 'b' ? '#fff' : 'rgba(0,0,0,.4)'}" stroke-width="${br === 'b' ? 1.3 : .8}"/>`;
+    if (withLabels) h += `<text x="${cx}" y="${cy + cs * .08}" text-anchor="middle" style="fill:${tc};font-weight:700;font-size:${cs * (PLANT_LET[p].length > 1 ? .3 : .4)}px">${PLANT_LET[p]}</text><text x="${cx + cs * .36}" y="${cy + cs * .46}" text-anchor="end" style="fill:var(--fg);font-weight:700;font-size:${cs * .3}px;paint-order:stroke;stroke:var(--bg);stroke-width:2px">${TIERS[t]}</text>`;
+  }
+  return h + '</svg>';
+}
+function mixBar(mix) {
+  const ent = Object.entries(mix || {}).sort((a, b) => famOrder(a[0]) - famOrder(b[0])); const tot = ent.reduce((a, e) => a + e[1], 0) || 1;
+  return `<div class="mixbar">${ent.map(([f, v]) => `<i style="width:${v / tot * 100}%;background:${famColor(f)}" title="${esc(famFull(f))} ${Math.round(v / tot * 100)}%"></i>`).join('')}</div><div class="mixleg">${esc(mixText(mix))}</div>`;
+}
+function deltaHtml(m, b) {
+  if (!b || !(b.best > 0) || !(m > 0)) return '';
+  if (isInf(m) && isInf(b.best)) return '<span class="dl hint">= базе</span>';
+  const q = isInf(m) ? Infinity : isInf(b.best) ? 0 : m / b.best, pc = (q - 1) * 100;
+  if (!isFinite(q)) return '<span class="dl up">↑ к базе (∞)</span>'; if (q === 0) return '<span class="dl down">↓ к базе (было ∞)</span>';
+  return `<span class="dl ${pc > .5 ? 'up' : pc < -.5 ? 'down' : 'hint'}">${pc >= 0 ? '+' : '−'}${Math.abs(pc).toFixed(1)}% к базе</span>`;
+}
+let shownGardens = [];
+function trailExtra() { const r = S.store.waves[S.sel.wave]; return r && r.trailBase != null ? ` (без лабиринта ${r.trailBase}, макс ${r.trailMax})` : ''; }
+function gardenCard(g, i, bud, b, label) {
+  return `<div class="gcard${g.stale ? ' stale' : ''}" data-i="${i}">
+    <div class="hd"><span class="rk">${label ?? '#' + (i + 1)}</span><span class="mg">${isInf(g.m) ? '∞' : '×' + g.m.toFixed(2)}</span>${g.stale ? '<span class="hint" title="результат от прошлых данных, пересчитывается">↻</span>' : ''}${deltaHtml(g.m, b)}</div>
+    <div class="mt"><span>цена ${Math.round(g.cost)} / ${Math.round(bud)}</span><span>тропа ${g.len}${trailExtra()}</span><span>растений ${g.cells?.length ?? 0}</span></div>
+    ${mapSvg(g)}${mixBar(g.mix)}</div>`;
+}
+function waveSig(r) { return r ? [r.gen, r.tried, r.plays, r.stale, (r.top || []).map((g) => g.m + (g.stale ? 's' : '')).join(','), Object.values(r.mono || {}).map((g) => g.m).join(',')].join('|') : ''; }
+let wvSig = '';
+function paintWave() {
+  if (!S.ui) return;
+  const L = S.sel.level, W = S.sel.wave, lv = S.ui.levels[L]; if (!lv || !lv.waves[W - 1]) return;
+  $('#wvTitle').textContent = `Волна ${W} — уровень ${L + 1}, ${lv.name}`;
+  $('#wvComp').innerHTML = lv.waves[W - 1].map(([b, c, gap, delay]) => `<span class="chip${S.ui.BUGS[b]?.boss ? ' boss' : ''}" title="интервал ${gap} с, задержка ${delay} с, жизнь ${S.ui.BUGS[b]?.hp ?? '?'}">${esc(BUG_RU[b] || b)} ×${c}${S.ui.BUGS[b]?.boss ? ' (босс)' : ''}</span>`).join('');
+  const r = S.store.level === L ? S.store.waves[W] : null, s = sumOf(L, W), base = baseOf(L, W);
+  const sig = L + ':' + W + ':' + waveSig(r) + ':' + (s ? s.tried + '/' + s.plays : '') + ':' + (base ? base.best : '') + ':' + JSON.stringify(S.big ? 1 : 0);
+  if (sig === wvSig) return; wvSig = sig;
+  const st = r || s;
+  $('#wvStats').innerHTML = st ? `<span>бюджет <b>${Math.round(st.budget)}</b> росы</span><span>перебрано <b>${st.tried}</b></span><span>прогонов <b>${st.plays}</b></span><span>составов <b>${st.niches}</b></span><span>устарело <b>${st.stale}</b></span>` + (base ? `<span>база: <b>${fmtM(base.best, 2)}</b> ${esc(mixText(base.top?.[0]?.mix))}</span>` : '') : '<span>данных пока нет</span>';
+  if (!r) { $('#wvCards').innerHTML = '<div class="hint">загружаем сады…</div>'; $('#wvMono').innerHTML = ''; shownGardens = []; return; }
+  const top = (r.top || []).slice(0, 10); shownGardens = top.slice();
+  $('#wvCards').innerHTML = top.map((g, i) => gardenCard(g, i, r.budget, base)).join('') || '<div class="hint">пока нет ни одного сада</div>';
+  const best = r.top?.[0]?.m || 0, monos = Object.entries(r.mono || {}).sort((a, b) => b[1].m - a[1].m);
+  const flag = best > 0 && monos.length && best / (monos[0][1].m || 1) <= 1.05 && !(isInf(best) && !isInf(monos[0][1].m));
+  $('#wvMono').innerHTML = '<span class="hint">Моно (одно растение):</span>' + (monos.map(([p, g], i) => { shownGardens[100 + i] = g; g._mono = p; return `<button data-mono="${100 + i}" class="${flag && i === 0 ? 'flag' : ''}">${famSwatch(p)}${PLANT_RU[p]} <b>${isInf(g.m) ? '∞' : '×' + g.m.toFixed(2)}</b>${g.stale ? ' ↻' : ''}</button>`; }).join('') || '<span class="hint">нет</span>') + (flag ? '<span class="flagnote">моно не хуже смеси</span>' : '');
+}
+$('#wvCards').addEventListener('click', (e) => { const c = e.target.closest('.gcard'); if (c) openBig(shownGardens[+c.dataset.i], '#' + (+c.dataset.i + 1), +c.dataset.i); });
+$('#wvMono').addEventListener('click', (e) => { const b = e.target.closest('button[data-mono]'); if (b) openBig(shownGardens[+b.dataset.mono], 'моно'); });
+let bigReq = null;
+function openBig(g, label, rank) {
+  if (!g) return; S.big = g; bigReq = rank != null ? { rank } : { mono: g._mono }; const bigWave = { level: S.sel.level, wave: S.sel.wave };
+  const r = S.store.waves[S.sel.wave], tally = {};
+  for (const [, p, t] of g.cells || []) { const k = p + ':' + t; tally[k] = (tally[k] || 0) + 1; }
+  const rows = Object.entries(tally).sort().map(([k, n]) => { const [p, t] = k.split(':'); const br = tierBranch(+t); return `<tr><td><span class="fam">${famSwatch(p + (br ? '.' + br : ''))}${PLANT_RU[p]}</span></td><td>${TIERS[t]}${br ? ' · ' + BR_RU[p][br] : ''}</td><td>${n}</td></tr>`; }).join('');
+  $('#ovlBox').innerHTML = `<button class="x" id="ovlX">✕</button><div><h2 style="margin:0 0 6px;font-size:14px">${label}: ${isInf(g.m) ? '∞' : '×' + g.m.toFixed(2)} · цена ${Math.round(g.cost)}${r ? ' / ' + Math.round(r.budget) : ''} · тропа ${g.len}${trailExtra()} · уровень ${S.sel.level + 1}, волна ${S.sel.wave}</h2>${mapSvg(g, 44)}</div>
+  <div><h3 style="margin:0 0 4px;font-size:13px">Состав</h3>${mixBar(g.mix)}<div class="row"><button id="explainBtn">Кто работает?</button><button id="verifyBtn">Проверить на 8 сидах</button></div><div id="explainOut"></div><div id="verifyOut"></div><table class="t" style="margin-top:8px"><tr><th>Растение</th><th>уровень</th><th>шт.</th></tr>${rows}</table>
+  <h3 style="margin:10px 0 4px;font-size:13px">Обозначения</h3><div class="hint">Круг — растение (буква — вид, цифра справа — уровень: 1, 2, 3А, 4А, 3Б, 4Б); светлый — базовое, цветной — ветка А, тёмный с белой каймой — ветка Б. Пунктирная ломаная — тропа жуков от муравейника к плоду. Пунктирный квадрат — стена лабиринта.</div>
+  <div class="legendrow">${Object.entries(TERR_RU).map(([c, n]) => `<span><span class="sw" style="background:var(--t-${TERR[c]})"></span>${n}</span>`).join('')}</div></div>`;
+  $('#ovl').classList.add('show');
+}
+const closeBig = () => { $('#ovl').classList.remove('show'); S.big = null; };
+$('#ovl').addEventListener('click', (e) => {
+  if (e.target.id === 'verifyBtn') {
+    const out = $('#verifyOut'), L = S.sel.level, W = S.sel.wave; out.innerHTML = '<span class="hint">играем на 8 сидах…</span>'; e.target.disabled = true;
+    api('/api/verify', { level: L, wave: W, ...bigReq }).then((r) => {
+      e.target.disabled = false;
+      if (!r || !r.margins) { out.innerHTML = '<span class="flagnote">не удалось посчитать</span>'; return; }
+      const xs = [...r.margins].sort((a, b) => a - b), lo = xs[0], med = xs[xs.length >> 1], hi = xs[xs.length - 1];
+      out.innerHTML = `<div class="hint" style="margin-top:6px">запас на 8 сидах (откуда летят летающие, куда падает выводок): мин <b>${fmtM(lo, 2)}</b>, медиана <b>${fmtM(med, 2)}</b>, макс ${fmtM(hi, 2)}${hi > lo * 1.1 ? ' — <span class="flagnote">сильно зависит от случая</span>' : ' — устойчиво'}</div>`;
+    });
+    return;
+  }
+  if (e.target.id === 'explainBtn') {
+    const out = $('#explainOut'), L = S.sel.level, W = S.sel.wave; out.innerHTML = '<span class="hint">считаем…</span>'; e.target.disabled = true;
+    api('/api/explain', { level: L, wave: W, ...bigReq }).then((r) => {
+      e.target.disabled = false;
+      if (!r || !r.without) { out.innerHTML = '<span class="flagnote">не удалось посчитать</span>'; return; }
+      const base = r.base, rows = Object.entries(r.without).map(([f, m]) => ({ f, m, drop: isInf(base) ? (isInf(m) ? 0 : 1) : base > 0 ? 1 - m / base : 0 })).sort((a, b) => b.drop - a.drop);
+      out.innerHTML = `<table class="t" style="margin-top:6px"><tr><th>Без семейства</th><th>${fmtM(base, 2)} →</th><th>падение</th></tr>${rows.map((x) => `<tr><td><span class="fam">${famSwatch(x.f)}${esc(famFull(x.f))}</span></td><td>${fmtM(x.m, 2)}</td><td class="${x.drop > .3 ? 'down' : ''}">${Math.round(x.drop * 100)}%</td></tr>`).join('')}</table><div class="hint">чем больше падение, тем важнее семейство; если одно семейство даёт почти всё — это не комбинация.</div>`;
+    });
+    return;
+  } if (e.target.id === 'ovl' || e.target.id === 'ovlX') closeBig(); });
+addEventListener('keydown', (e) => { if (e.key === 'Escape') closeBig(); });
+
+// ---------- overrides / editor ----------
+let sendTimer = 0, pending = false;
+function setOv(key, val) { if (val === undefined) delete S.ov[key]; else S.ov[key] = val; schedule(); dirty.chips = true; kick(); }
+function schedule() { pending = true; clearTimeout(sendTimer); sendTimer = setTimeout(() => { pending = false; api('/api/overrides', { set: S.ov }); }, 600); dirty.header = true; kick(); }
+function paintChips() {
+  const ks = Object.keys(S.ov);
+  $('#chips').innerHTML = ks.length ? ks.map((k) => `<span class="chip x" data-k="${esc(k)}" title="убрать">${esc(k)} = ${esc(JSON.stringify(S.ov[k]).slice(0, 40))} ✕</span>`).join('') : '<span class="hint">правок нет</span>';
+  $('#ovCount').textContent = ks.length ? `(${ks.length})` : '';
+}
+$('#chips').addEventListener('click', (e) => { const c = e.target.closest('.chip'); if (c) { setOv(c.dataset.k, undefined); dirty.editor = true; } });
+$('#bResetAll').addEventListener('click', () => { S.ov = {}; schedule(); dirty.chips = dirty.editor = true; kick(); });
+$('#bDrawer').addEventListener('click', () => setDrawer(!S.drawer)); $('#bClose').addEventListener('click', () => setDrawer(false));
+function setDrawer(v) { S.drawer = v; lsSet('drawer', v ? '1' : '0'); document.body.classList.toggle('drawer', v); if (v) dirty.editor = true; kick(); }
+$('#tabs').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { S.tab = b.dataset.t; lsSet('tab', S.tab); dirty.editor = true; kick(); } });
+
+const num = (v) => (v === '' || v == null || isNaN(+v) ? null : +v);
+const cur = (key, uiVal) => (key in S.ov ? S.ov[key] : uiVal);
+let editBuf = null;
+function paintEditor() {
+  $$('#tabs button').forEach((b) => b.classList.toggle('on', b.dataset.t === S.tab));
+  if (!S.ui || !S.drawer) return;
+  const el = $('#dbody'); editBuf = null;
+  if (S.tab === 'plants') el.innerHTML = plantsTab(); else if (S.tab === 'bugs') el.innerHTML = bugsTab(); else if (S.tab === 'level') { el.innerHTML = levelTab(); initMapEd(); } else el.innerHTML = genTab();
+}
+const isNum = (v) => typeof v === 'number';
+function plantsTab() {
+  const P = S.ui.PLANTS, k = P[S.plant] ? S.plant : Object.keys(P)[0], p = P[k];
+  const skip = new Set(['cost', 'up', 'from', 'shot', 'a', 'b']), stats = [];
+  for (const src of [p, p.a, p.b]) for (const [key, v] of Object.entries(src || {})) if (!skip.has(key) && !stats.includes(key) && (isNum(v) || (Array.isArray(v) && v.every(isNum)))) stats.push(key);
+  const cols = [[null, 0], [null, 1], ['a', 0], ['a', 1], ['b', 0], ['b', 1]];
+  const val = (src, key, idx) => { const v = src?.[key]; return v === undefined ? undefined : Array.isArray(v) ? v[idx] : v; };
+  const inp = (key, br, idx, v, full) => v === undefined ? '<td class="na">—</td>' : `<td><input type="number" step="any" value="${v}" class="${full in S.ov ? 'chg' : ''}" data-ed="stat" data-p="${k}" data-br="${br || ''}" data-key="${key}" data-idx="${idx}"></td>`;
+  let h = `<div class="pbtn">${Object.keys(P).map((x) => `<button data-plant="${x}" class="${x === k ? 'on' : ''}">${PLANT_RU[x]}</button>`).join('')}</div><div class="edwrap"><table class="ed"><tr><th></th>${TIERS.map((t) => `<th>${t}</th>`).join('')}</tr>`;
+  const kk = (br, key) => `PLANTS.${k}.${br ? br + '.' : ''}${key}`;
+  h += `<tr><td>цена</td>${inp('cost', null, 0, p.cost, kk(null, 'cost'))}<td class="na" colspan="5"></td></tr>`;
+  h += `<tr><td>улучшение (цена)</td><td class="na">—</td>${inp('up', null, 0, p.up?.[0], kk(null, 'up'))}${inp('up', 'a', 0, p.a?.up?.[0], kk('a', 'up'))}${inp('up', 'a', 1, p.a?.up?.[1], kk('a', 'up'))}${inp('up', 'b', 0, p.b?.up?.[0], kk('b', 'up'))}${inp('up', 'b', 1, p.b?.up?.[1], kk('b', 'up'))}</tr>`;
+  h += `<tr><td class="hint">ветка с волны</td><td class="na" colspan="2"></td><td class="na" colspan="2">${p.a?.from ?? ''}</td><td class="na" colspan="2">${p.b?.from ?? ''}</td></tr>`;
+  for (const key of stats) h += `<tr><td>${esc(key)}</td>${cols.map(([br, idx]) => inp(key, br, idx, val(br ? p[br] : p, key, idx), kk(br, key))).join('')}</tr>`;
+  h += `</table></div><div class="hint" style="margin-top:6px">Ветки: ${esc(BR_RU[k].a)} (А), ${esc(BR_RU[k].b)} (Б). «—» — параметра у ветки нет. Правки применяются сами через ~0,6 с.</div>`;
+  return h;
+}
+function bugsTab() {
+  const B = S.ui.BUGS, keys = []; for (const b of Object.values(B)) for (const [k, v] of Object.entries(b)) if (isNum(v) && !keys.includes(k)) keys.push(k);
+  let h = `<div class="edwrap"><table class="ed"><tr><th></th>${keys.map((k) => `<th>${k}</th>`).join('')}<th>особое</th></tr>`;
+  for (const [id, b] of Object.entries(B)) {
+    h += `<tr><td${b.boss ? ' style="color:var(--bad);font-weight:600"' : ''}>${esc(BUG_RU[id] || id)}${b.boss ? ' ★' : ''}${b.fly ? ' ✈' : ''}</td>`;
+    for (const k of keys) h += b[k] === undefined ? '<td class="na">·</td>' : `<td><input type="number" step="any" value="${b[k]}" class="${'BUGS.' + id + '.' + k in S.ov ? 'chg' : ''}" data-ed="num" data-key="BUGS.${id}.${k}"></td>`;
+    h += `<td style="white-space:nowrap;font-size:11px;color:var(--muted)">${esc(Object.entries(b).filter(([k, v]) => !isNum(v) && k !== 'boss' && k !== 'fly').map(([k, v]) => k + ':' + JSON.stringify(v)).join(' '))}</td></tr>`;
+  }
+  return h + '</table></div><div class="hint" style="margin-top:6px">★ босс, ✈ летает. Массивы (особое) здесь только для чтения.</div>';
+}
+const PAL = ['.', 'A', 'E', 'R', 'S', 'L', 'W', 'X', 'B', 'f', 'm', 'n', '_', '+'];
+function levelTab() {
+  const L = S.sel.level, lv = S.ui.levels[L], K = (x) => `L${L + 1}.${x}`, chg = (x) => (K(x) in S.ov ? 'chg' : '');
+  const n = (x) => `<input type="number" step="any" value="${lv[x]}" class="${chg(x)}" data-ed="num" data-key="${K(x)}">`;
+  const tx = (x, v) => `<input type="text" size="10" value="${esc(v)}" class="${chg(x)}" data-ed="str" data-key="${K(x)}">`;
+  const js = (x, v) => `<div class="row"><label>${x}</label><textarea data-js="${x}" class="${chg(x)}">${esc(JSON.stringify(v))}</textarea><button data-applyjs="${x}">Применить</button></div>`;
+  editBuf = { L, map: lv.map.map((r) => r.split('')), ch: editBuf?.ch || '.' };
+  return `<h3 style="margin:0 0 6px;font-size:13px">Уровень ${L + 1} — ${esc(lv.name)} <span class="hint">(выбранный на странице)</span></h3>
+  <div class="row"><label>роса (dew)</label>${n('dew')}<label>здоровье ×</label>${n('hp')}<label>число (count)</label>${n('count')}</div>
+  <div class="row"><label>выплата pay</label>${tx('pay', (lv.pay || []).join('/'))}<label>бюджет</label>${tx('budget', (lv.budget || []).join('/'))}</div>
+  <div class="hint">растения уровня: ${(lv.plants || []).map((p) => PLANT_RU[p]).join(', ')}${lv.feature ? ' · ' + esc(JSON.stringify(lv.feature)) : ''}</div>
+  ${js('roster', lv.roster)}${js('boss', lv.boss)}
+  <h3 style="margin:10px 0 4px;font-size:13px">Карта</h3>
+  <div class="pal">${PAL.map((c) => `<button data-pal="${c}" class="${c === editBuf.ch ? 'on' : ''}"><span class="sw" style="background:var(--t-${TERR[c]})"></span>${esc(c)} ${TERR_RU[c]}</button>`).join('')}</div>
+  <div class="mapgrid" id="mapEd"></div>
+  <div class="row"><button id="mapApply">Применить карту</button><button id="mapRevert">Вернуть текущую</button><span id="mapWarn" class="flagnote"></span></div>`;
+}
+function paintMapEd() {
+  const g = $('#mapEd'); if (!g || !editBuf) return;
+  g.innerHTML = editBuf.map.map((row, j) => row.map((c, i) => `<div data-i="${i}" data-j="${j}" style="background:var(--t-${TERR[c] || 'grass'})">${c === '.' ? '' : esc(c)}</div>`).join('')).join('');
+  const flat = editBuf.map.flat(), w = [];
+  if (flat.filter((c) => c === 'A').length !== 1) w.push('нужен ровно один плод (A)'); if (!editBuf.map.some((r) => r[13] === 'E')) w.push('нужен муравейник E в последнем столбце');
+  $('#mapWarn').textContent = w.join('; ');
+}
+function initMapEd() {
+  paintMapEd(); const g = $('#mapEd'); if (!g) return; let down = false;
+  const paint = (e) => { const t = document.elementFromPoint(e.clientX, e.clientY); if (!t || !g.contains(t) || t.dataset.i === undefined) return; const i = +t.dataset.i, j = +t.dataset.j; if (editBuf.map[j][i] === editBuf.ch) return; editBuf.map[j][i] = editBuf.ch; t.style.background = `var(--t-${TERR[editBuf.ch]})`; t.textContent = editBuf.ch === '.' ? '' : editBuf.ch; };
+  g.addEventListener('pointerdown', (e) => { down = true; paint(e); e.preventDefault(); });
+  g.addEventListener('pointermove', (e) => { if (down) paint(e); });
+  addEventListener('pointerup', () => { if (down) { down = false; paintMapEd(); } });
+}
+function genTab() {
+  const T = S.ui.TUNE || {};
+  const row = (key, v, ph) => `<div class="row"><label style="width:120px">${esc(key)}</label><input type="number" step="any" value="${v ?? ''}" placeholder="${ph || ''}" class="${key in S.ov ? 'chg' : ''}" data-ed="num" data-key="${key}"></div>`;
+  return `<h3 style="margin:0 0 6px;font-size:13px">Общие параметры</h3>${['hpGrowth', 'bossEscort', 'gap'].map((k) => row('TUNE.' + k, cur('TUNE.' + k, T[k]))).join('')}${row('FLY_SHARE', S.ov.FLY_SHARE, 'по умолчанию')}
+  <h3 style="margin:14px 0 6px;font-size:13px">Поиск садов</h3>
+  <div class="row"><label style="width:120px">выбранный уровень</label><input type="number" id="capF" value="${S.caps.focus}" step="500"></div>
+  <div class="row"><label style="width:120px">остальные</label><input type="number" id="capO" value="${S.caps.other}" step="100"></div>
+  <div class="hint">Сколько садов пробовать на волну (чем больше, тем точнее, но медленнее).</div>`;
+}
+// delegated editor events
+const edTimers = {};
+$('#dbody').addEventListener('input', (e) => {
+  const t = e.target, ed = t.dataset.ed; if (!ed) return;
+  if (ed === 'stat') {
+    const { p, br, key, idx } = t.dataset, v = num(t.value); if (v == null) return;
+    const full = `PLANTS.${p}.${br ? br + '.' : ''}${key}`, src = br ? S.ui.PLANTS[p][br] : S.ui.PLANTS[p], base = cur(full, src[key]);
+    let nv; if (key === 'cost') nv = v; else { const pair = Array.isArray(base) ? base.slice() : [base, base]; pair[+idx] = v; nv = key === 'up' && !br ? [pair[0]] : pair; }
+    t.classList.add('chg'); setOv(full, nv);
+  } else if (ed === 'num') { const v = num(t.value); if (v == null) { if (t.dataset.key === 'FLY_SHARE') { t.classList.remove('chg'); setOv('FLY_SHARE', undefined); } return; } t.classList.add('chg'); setOv(t.dataset.key, v); }
+});
+$('#dbody').addEventListener('change', (e) => {
+  const t = e.target;
+  if (t.dataset.ed === 'str') { if (/^\s*[\d.]+\s*\/\s*[\d.]+\s*$/.test(t.value)) { t.classList.add('chg'); setOv(t.dataset.key, t.value.replace(/\s/g, '')); } else t.style.outline = '2px solid var(--bad)'; }
+  if (t.id === 'capF' || t.id === 'capO') api('/api/caps', { focus: +$('#capF').value, other: +$('#capO').value });
+});
+$('#dbody').addEventListener('click', (e) => {
+  const t = e.target;
+  if (t.dataset.plant) { S.plant = t.dataset.plant; lsSet('plant', S.plant); dirty.editor = true; kick(); }
+  else if (t.dataset.pal !== undefined || t.closest('[data-pal]')) { const b = t.closest('[data-pal]'); editBuf.ch = b.dataset.pal; $$('.pal button').forEach((x) => x.classList.toggle('on', x === b)); }
+  else if (t.id === 'mapApply') { setOv(`L${S.sel.level + 1}.map`, editBuf.map.map((r) => r.join(''))); }
+  else if (t.id === 'mapRevert') { editBuf = null; dirty.editor = true; document.activeElement.blur(); kick(); }
+  else if (t.dataset.applyjs) {
+    const x = t.dataset.applyjs, ta = $(`textarea[data-js="${x}"]`);
+    try { const v = JSON.parse(ta.value); if (!Array.isArray(v)) throw 0; ta.style.outline = ''; ta.classList.add('chg'); setOv(`L${S.sel.level + 1}.${x}`, v); } catch { ta.style.outline = '2px solid var(--bad)'; }
+  }
+});
+
+// ---------- config + baseline ----------
+const sendCfg = () => api('/api/config', { meta: $('#cMeta').value, tol: +$('#cTol').value || 0, early: $('#cEarly').checked });
+let cfgT = 0; const cfgDeb = () => { clearTimeout(cfgT); cfgT = setTimeout(sendCfg, 500); };
+$('#cMeta').addEventListener('change', sendCfg); $('#cEarly').addEventListener('change', sendCfg); $('#cTol').addEventListener('input', cfgDeb);
+$('#bPin').addEventListener('click', () => { const n = Object.keys(S.ov).length; api('/api/baseline', { action: 'pin', label: new Date().toLocaleTimeString('ru-RU') + (n ? `, правок: ${n}` : ', без правок') }); });
+$('#bClear').addEventListener('click', () => api('/api/baseline', { action: 'clear' }));
+
+// ---------- SSE ----------
+let es = null, retry = 0;
+// ---------- the campaign: a whole level from the studio's gardens ----------
+const CAMP_RU = { expert: 'эксперт (матрица)', 'smart bot': 'умный бот', 'studio plan': 'план студии', 'refined plan': 'план, доработанный' };
+function paintCamp() {
+  const c = S.campaign, out = $('#campOut'), btn = $('#campBtn'); if (!out) return;
+  btn.textContent = c?.running ? 'Остановить' : 'Проверить полной партией';
+  if (!c) { out.innerHTML = ''; return; }
+  const lv = S.ui?.levels[c.level]?.name ?? '';
+  let h = `<div class="hint">уровень ${c.level + 1} ${esc(lv)}${c.running ? ' — идёт…' : ''}</div>`;
+  if (c.result?.margins) {
+    const ms = c.result.margins, ex = ms.find((m) => m.name === 'expert');
+    h += `<table class="t" style="margin-top:4px;max-width:520px"><tr><th>кто играет</th><th>запас уровня</th><th>по трём раскладам волн</th></tr>${ms.map((m) => `<tr><td>${CAMP_RU[m.name] || esc(m.name)}</td><td><b>${m.median.bound === 'above' ? '≥' : m.median.bound === 'below' ? '≤' : ''}${Math.round(m.median.at * 100)}%</b>${ex && m !== ex ? ` <span class="${m.median.at > ex.median.at ? 'up' : 'down'}">${m.median.at > ex.median.at ? '+' : ''}${Math.round((m.median.at / ex.median.at - 1) * 100)}% к эксперту</span>` : ''}</td><td>${m.each.map((v) => Math.round(v * 100) + '%').join(' · ')}</td></tr>`).join('')}</table>
+      <div class="hint">запас уровня — во сколько раз здоровее могут быть все жуки, пока партия ещё выигрывается. План заметно выше эксперта — уровень легче, чем его настроила матрица, для игрока, который найдёт такую игру.</div>`;
+  } else if (c.error) h += `<div class="flagnote">не получилось: ${esc(c.error)}</div>`;
+  if (c.running || !c.result) h += `<pre class="camplog">${esc((c.log || []).slice(-8).join('\n'))}</pre>`;
+  out.innerHTML = h;
+}
+$('#campBtn').addEventListener('click', () => { if (S.campaign?.running) api('/api/campaign', { action: 'stop' }); else api('/api/campaign', { level: S.sel.level }).then((r) => { if (r?.error) alert(r.error); }); });
+
+function connect() {
+  if (es) try { es.close(); } catch {}
+  es = new EventSource('/events');
+  es.onopen = () => { S.conn = true; dirty.header = true; kick(); };
+  es.onerror = () => { S.conn = false; dirty.header = true; kick(); try { es.close(); } catch {} clearTimeout(retry); retry = setTimeout(connect, 2000); };
+  const on = (n, f) => es.addEventListener(n, (e) => { try { f(JSON.parse(e.data)); } catch (er) { console.error(n, er); } });
+  on('init', (d) => {
+    S.campaign = d.campaign || null; setTimeout(paintCamp, 0);
+    S.ui = d.ui; S.ov = d.overrides || {}; S.config = d.config; S.focus = d.focus; S.caps = d.caps || S.caps; S.errors = d.errors || []; S.engine = d.engine; S.buildLog = d.buildLog; S.status = d.status; S.baseline = d.baseline;
+    S.sums = {}; for (const s of d.summaries) S.sums[s.level + ':' + s.wave] = s;
+    const first = !S.inited; S.inited = true;
+    if (first && S.focus.level != null) S.sel = { level: S.focus.level, wave: S.focus.wave || 1 };
+    S.store = { level: -1, waves: {} };
+    dirty.header = dirty.ovAll = dirty.level = dirty.wave = dirty.editor = dirty.chips = dirty.status = true; kick();
+    selectWave(S.sel.level, S.sel.wave, false, S.focus.wave == null);
+  });
+  on('summary', (s) => { S.sums[s.level + ':' + s.wave] = s; dirty.ov.add(s.level + ':' + s.wave); if (s.level === S.sel.level) { dirty.level = true; if (s.wave === S.sel.wave) dirty.wave = true; } kick(); });
+  on('wave', (r) => { if (r.level !== S.store.level) return; S.store.waves[r.wave] = r; if (r.wave === S.sel.wave) { dirty.wave = true; kick(); } });
+  on('status', (s) => { S.status = s; dirty.status = true; kick(); });
+  on('engine', (d) => { S.engine = d.engine; S.buildLog = d.buildLog; dirty.header = true; kick(); });
+  on('data', (d) => { const lvls = S.ui?.levels.length; S.ui = d.ui || S.ui; S.errors = d.errors || []; if (!pending) S.ov = d.overrides || {}; S.config = d.config; dirty.header = dirty.chips = dirty.editor = dirty.level = dirty.wave = true; wvSig = ''; dirty.ovAll = true; kick(); });
+  on('campaign', (c) => { S.campaign = c; paintCamp(); });
+  on('baseline', (b) => { S.baseline = b; dirty.header = dirty.level = dirty.wave = dirty.ovAll = true; wvSig = ''; kick(); });
+}
+paintOvLegend(); document.body.classList.toggle('drawer', S.drawer); paintHeader(); connect();
+</script>
+</body>
+</html>

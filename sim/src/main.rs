@@ -21,6 +21,7 @@ mod game;
 mod jsmath;
 mod json;
 mod routes;
+mod studio;
 
 use bot::{Op, Opts, Powers, Res, Upgrades, Where};
 use data::Data;
@@ -95,7 +96,9 @@ fn opts_of(d: &Data, j: &J) -> Opts {
                 let maze = v.get("maze").filter(|m| **m != J::Null).map(|m| { let r = row(m); if r.len() != routes::NM { panic!("policy: {} maze weights, not {}", r.len(), routes::NM); } let mut a = [0.0; routes::NM]; a.copy_from_slice(&r); a });
                 Some(bot::Policy { place, up, maze })
             },
-            "plan" => o.plan = if *v == J::Null { None } else { Some(v.arr().iter().map(|s| { let a = s.arr(); (if a[0].str() == "up" { None } else { Some(d.plant(a[0].str())) }, a[1].num() as i32, a[2].num() as i32) }).collect()) },
+            // a step: [plant, column, row] puts a plant; ["up", column, row] grows one, ["up", column, row, branch] taking
+            // that branch (1: a, 2: b) when it grows to level 3 (without one, the bot's own choice)
+            "plan" => o.plan = if *v == J::Null { None } else { Some(v.arr().iter().map(|s| { let a = s.arr(); (if a[0].str() == "up" { None } else { Some(d.plant(a[0].str())) }, a[1].num() as i32, a[2].num() as i32, if a[0].str() == "up" && a.len() > 3 { a[3].num() as u8 } else { 0 }) }).collect()) },
             "maze" => o.maze = if *v == J::Null { None } else { Some(v.str().to_string()) },
             "terrain" => o.terrain = v.truthy(),
             "powers" => o.powers = match v { J::Str(s) if s == "eager" => Powers::Eager, x => if x.truthy() { Powers::On } else { Powers::Off } },
@@ -207,6 +210,11 @@ fn main() {
             let walls = bot::layout(&d, j.at("level").num() as usize, j.at("terrain").truthy());
             println!("[{}]", walls.iter().map(|(c, g)| format!("[{},{}]", c, g)).collect::<Vec<_>>().join(","));
         }
+        Some("studio") => {
+            // the balance studio's engine: commands on stdin, what it finds on stdout (studio.rs)
+            let jobs = opt("--jobs").map_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get()), |v| v.parse().unwrap());
+            studio::serve(jobs);
+        }
         Some("routes") if files.len() == 1 => {
             let text = std::fs::read_to_string(files[0]).unwrap_or_else(|e| panic!("{}: {}", files[0], e));
             let j = J::parse(&text).unwrap_or_else(|e| panic!("{}: {}", files[0], e));
@@ -239,6 +247,6 @@ fn main() {
             println!("native total {:.1} ms over {} parties{}", total, files.len(), if bad > 0 { format!(", {} MISMATCHED", bad) } else { String::new() });
             std::process::exit(if bad > 0 { 1 } else { 0 });
         }
-        _ => { eprintln!("usage: fruit-sim run <batch.json> [--jobs N] | layout <request.json> | routes <request.json> | replay <party.json ...> [--no-check] [--repeat N] [--dump-at K]"); std::process::exit(2); }
+        _ => { eprintln!("usage: fruit-sim run <batch.json> [--jobs N] | studio [--jobs N] | layout <request.json> | routes <request.json> | replay <party.json ...> [--no-check] [--repeat N] [--dump-at K]"); std::process::exit(2); }
     }
 }
