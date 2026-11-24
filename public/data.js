@@ -22,9 +22,9 @@ export const PLANTS = {
   // a, Shell: spikes — a bug biting a plant it guards (or itself) loses that share of its health a bite (a second of
   //   gnawing); ward (top) — once a wave the bite that would eat a plant it guards leaves it 1 health.
   // b, Thorny vines: thorns further and stronger; thornAir (top) — they reach the flyers over those cells too.
-  pumpkin: { cost: 25, up: [60], hp: [150, 220], range: 1.5, guard: [.15, .2], thorns: [.004, .006],
-    a: { from: 4, up: [150, 250], hp: [260, 340], range: 1.5, guard: [.35, .45], thorns: .006, spikes: [.05, .08], ward: [0, 1] },
-    b: { from: 5, up: [150, 250], hp: [200, 250], range: 2.5, guard: .2, thorns: [.007, .009], thornAir: [0, 1] } },
+  pumpkin: { cost: 25, up: [60], hp: [150, 220], range: 1.5, guard: [.15, .2], thorns: [.003, .004],
+    a: { from: 4, up: [100, 180], hp: [260, 340], range: 1.5, guard: [.45, .55], thorns: .004, spikes: [.05, .08], ward: [0, 1] },
+    b: { from: 5, up: [150, 250], hp: [200, 250], range: 2.5, guard: .2, thorns: [.008, .01], thornAir: [0, 1] } },
   // One target, walkers and flyers.
   // a, Hunter: mark — a bug it has pricked takes that much more damage from everything for MARK_T seconds (it pricks
   //   the bugs not marked yet first; marks do not add up); multi: how many bugs it shoots at once; chain (top) — a
@@ -51,9 +51,9 @@ export const PLANTS = {
   //   bugs around freeze for a second (snails too; a boss for half of it), and then cannot freeze again for a while.
   // b, Icicle: a heavy icicle from above on the thickest walker next to it, rare and hard (armor hardly matters to
   //   such a hit, bosses take it whole); stack (top) — every next hit on the same bug that much harder, up to twice.
-  mint: { cost: 35, up: [80], hp: [60, 80], range: [1.5, 1.6], rate: [.8, .95], dmg: [7, 10], frost: [.3, .4], frostT: 1.5, air: 1, shot: 'icicle', speed: 8,
-    a: { from: 3, up: [130, 220], hp: [80, 100], range: [1.7, 1.9], slow: .5, rime: [0, 5], air: 1 },
-    b: { from: 4, up: [130, 220], hp: [80, 100], range: 1.6, rate: [.4, .45], dmg: [80, 110], frost: .15, frostT: .6, heavy: 1, stack: [0, .25], shot: 'icicleBig', speed: 7 } },
+  mint: { cost: 35, up: [80], hp: [60, 80], range: [1.5, 1.6], rate: [.9, 1], dmg: [9, 12], frost: [.3, .4], frostT: 1.5, air: 1, shot: 'icicle', speed: 8,
+    a: { from: 3, up: [130, 220], hp: [80, 100], range: [2, 2.2], slow: .5, rime: [0, 5], air: 1 },
+    b: { from: 4, up: [130, 220], hp: [80, 100], range: 1.6, rate: [.4, .45], dmg: [120, 160], frost: .15, frostT: .6, heavy: 1, stack: [0, .25], shot: 'icicleBig', speed: 7 } },
   // Finishing off. Every `eat` seconds swallows whole a walker (not a boss) with no more than `gulp` of its full health
   // left; a healthier bug it does not touch at all: its job is to make sure, not to deal damage.
   // a, Glutton: weaker bugs too and quicker; heads (top) — two at once.
@@ -62,7 +62,7 @@ export const PLANTS = {
   //   (it is not swallowed).
   flytrap: { cost: 60, up: [140], hp: [70, 90], range: 1.5, eat: [3, 2.5], gulp: [.4, .5],
     a: { from: 4, up: [250, 350], hp: [100, 120], range: [1.5, 1.6], eat: [1.8, 1.6], gulp: .6, heads: [1, 2] },
-    b: { from: 5, up: [250, 350], hp: [90, 110], range: 1.5, eat: [2.5, 2.2], gulp: .5, eatAir: 1, lure: [3, 5], lureBoss: [0, 1] } },
+    b: { from: 5, up: [150, 250], hp: [90, 110], range: 1.5, eat: [2.5, 2.2], gulp: .5, eatAir: 1, lure: [3, 5], lureBoss: [0, 1] } },
 };
 export const BRANCHES = ['a', 'b'];
 // A stat of a plant of type P at level lvl on branch br (levels 3 and 4): null when it has no such stat.
@@ -73,6 +73,11 @@ export function statOf(P, name, lvl, br) {
 // What growing a plant from level lvl costs (to level 3: on branch br), null at the top.
 export function upCost(P, lvl, br) { return lvl === 1 ? P.up[0] : lvl === 2 ? P[br]?.up[0] ?? null : lvl === 3 ? P[br].up[1] : null; }
 export const MARK_T = 3, GUARD_R = 1.5, THORN_BOSS = .3, SNIFF = .3, FALL_T = .5;
+// Thorns, spikes and nettles take a share of a bug's health a second, the same in the first wave and in the last. All
+// of them together take no more than this share of the health of one bug: without it a long thorny trail with cold
+// mints (twice the time on it) took all the health of any bug, and with flytraps for the worn a garden held bugs of
+// any health at all — the balance studio found such gardens on most late waves, whatever the health of the bugs.
+export const PRICK_CAP = .25;
 export const PLANT_ORDER = ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'];
 // No plant is healed or grown back in a wave: its health is all it has for the wave. An eaten plant leaves its roots,
 // a hole the bugs walk through till the wave is over (nothing can be planted there meanwhile); after the wave every
@@ -170,6 +175,10 @@ export const BROOD_REWARD = .34;
 // boss [wave, boss, how many]. How hard a level is comes from its field, its waves and its pay, not from the
 // health of the bugs: that follows one rule everywhere.
 // pay: the dew for a wave got through [after the first wave, after the last but one], see wavePay.
+// swell: how many times bigger each wave is than its budget says, wave by wave (none: 1). The draw of a wave decides
+// how hard it is as much as its budget does (a pack of snails is not a pack of ants of the same weight), and left alone
+// one or two waves of a level were all its difficulty; balance/shape.mjs finds the swell that brings every wave to its
+// place under the boss waves: a breather, an ordinary wave, a big one (a boss wave is left as it is).
 export const LEVELS = [
   // The first five levels teach the game: the bugs keep to a stone path and the plants grow on the beds beside it
   // (1–2), then a grass cell sends them the long way round (3), then a meadow in the middle is the first maze (4–5).
@@ -188,7 +197,8 @@ export const LEVELS = [
     ],
     dew: 200, pay: [130, 240],
     plants: ['rose', 'pepper'],
-    hp: 1.4, count: 12, budget: [1.1, .7], roster: [['ant', 1], ['aphid', 4], ['grasshopper', 8]], boss: [[12, 'queen', 1]],
+    swell: [1, 1, 1.9, 2.5, 2.5, 2.5, 2.5, 2.35, 1.1, 1, 1, 2],
+    hp: .36, count: 12, budget: [3.3, 2.1], roster: [['ant', 1], ['aphid', 2], ['grasshopper', 8]], boss: [[12, 'queen', 1]],
   },
   {
     name: 'Грядки', theme: 'forest',
@@ -204,7 +214,8 @@ export const LEVELS = [
     ],
     dew: 240, pay: [170, 320],
     plants: ['pumpkin', 'rose', 'pepper'],
-    count: 12, budget: [3.6, 2.1], roster: [['ant', 1], ['aphid', 2], ['caterpillar', 5], ['grasshopper', 8]], boss: [[12, 'queen', 1]],
+    swell: [1, 1, 1.9, 2.5, 2.5, 2.5, 2.5, 2.5, 1.55, 1.55, 2.15, 2.5],
+    hp: .59, count: 12, budget: [3.6, 2.1], roster: [['ant', 1], ['aphid', 2], ['caterpillar', 5], ['grasshopper', 8]], boss: [[12, 'queen', 1]],
   },
   {
     name: 'Развилка', theme: 'orchard', feature: 'fork',
@@ -220,7 +231,8 @@ export const LEVELS = [
     ],
     dew: 280, pay: [210, 400],
     plants: ['pumpkin', 'rose', 'pepper', 'mint'],
-    count: 15, budget: [4.3, 2.3], roster: [['ant', 1], ['beetle', 3], ['grasshopper', 5], ['aphid', 7], ['caterpillar', 9]], boss: [[15, 'rhino', 1]],
+    swell: [1, 1, 1, 1.55, 1, .7, .9, 1.2, .7, .6, 1.6, 1.2, .8, .65, 1],
+    hp: .78, count: 15, budget: [4.3, 2.3], roster: [['ant', 1], ['beetle', 3], ['grasshopper', 5], ['aphid', 7], ['caterpillar', 9]], boss: [[15, 'rhino', 1]],
   },
   {
     name: 'Поляна', theme: 'meadow', feature: 'meadow',
@@ -236,7 +248,8 @@ export const LEVELS = [
     ],
     dew: 320, pay: [250, 500],
     plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
-    count: 18, budget: [5.6, 3.2], roster: [['ant', 1], ['snail', 3], ['beetle', 4], ['caterpillar', 6], ['pillbug', 9], ['cricket', 12]], boss: [[18, 'slugking', 1]],
+    swell: [1, 1, 1.25, 1.25, 1.15, 1.25, 1.1, 1.5, 1.25, 2.4, .75, 1.75, 1.55, 2.5, 1.25, 2.5, 1, 1],
+    hp: .57, count: 18, budget: [5.6, 3.2], roster: [['ant', 1], ['snail', 3], ['beetle', 4], ['caterpillar', 6], ['butterfly', 8], ['pillbug', 9], ['cricket', 12]], boss: [[18, 'slugking', 1]],
   },
   {
     name: 'Большая поляна', theme: 'sunset',
@@ -252,7 +265,8 @@ export const LEVELS = [
     ],
     dew: 340, pay: [290, 580],
     plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
-    count: 18, budget: [5.2, 2.9], roster: [['ant', 1], ['butterfly', 2], ['beetle', 3], ['snail', 5], ['wasp', 6], ['caterpillar', 8], ['cricket', 12]], boss: [[18, 'hornet', 1]],
+    swell: [1, 1, 1, 1.05, 1.05, .85, 1.25, 2.1, 2, 1.95, .65, 1.8, .65, 2.5, 1.4, 2.05, 2.2, 1],
+    hp: .78, count: 18, budget: [5.2, 2.9], roster: [['ant', 1], ['butterfly', 2], ['beetle', 3], ['snail', 5], ['wasp', 6], ['caterpillar', 8], ['cricket', 12]], boss: [[18, 'hornet', 3]],
   },
   {
     name: 'Лужайка', theme: 'meadow',
@@ -268,7 +282,8 @@ export const LEVELS = [
     ],
     dew: 370, pay: [380, 680],
     plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
-    hp: 1.4, count: 20, budget: [5.6, 3.6], roster: [['ant', 1], ['beetle', 3], ['grasshopper', 6], ['caterpillar', 9], ['cricket', 13]], boss: [[10, 'rhino', 1], [20, 'rhino', 1]],
+    swell: [1, 1, 1.1, 1.2, 1.15, 1.6, 1.35, 1.1, 1.65, 1, 2.3, 1.25, 1.45, 1.4, 1.95, 2.5, 2.5, 1.9, 1.8, 1],
+    hp: 1.21, count: 20, budget: [5.6, 3.6], roster: [['ant', 1], ['beetle', 3], ['grasshopper', 6], ['caterpillar', 9], ['cricket', 13]], boss: [[10, 'rhino', 1], [20, 'rhino', 1]],
   },
   {
     name: 'Опушка', theme: 'forest', feature: 'fertile',
@@ -284,7 +299,8 @@ export const LEVELS = [
     ],
     dew: 380, pay: [380, 660],
     plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
-    count: 22, budget: [10.5, 5.3], roster: [['ant', 1], ['aphid', 2], ['grasshopper', 3], ['beetle', 4], ['snail', 6], ['caterpillar', 8], ['cricket', 11]], boss: [[11, 'queen', 1], [22, 'queen', 2]],
+    swell: [1, 1, 1.75, 1.15, 1, 1.15, 2.5, 2, 2.5, 1.95, 1, 2.5, 2.5, .6, 1.3, 1, 1.55, 1.45, 1.35, 1.45, .65, 1],
+    hp: .86, count: 22, budget: [10.5, 5.3], roster: [['ant', 1], ['aphid', 2], ['grasshopper', 3], ['beetle', 4], ['butterfly', 5], ['snail', 6], ['caterpillar', 8], ['cricket', 11], ['wasp', 14]], boss: [[11, 'queen', 1], [22, 'queen', 2]],
   },
   {
     name: 'Старый сад', theme: 'orchard', feature: 'mud',
@@ -300,7 +316,8 @@ export const LEVELS = [
     ],
     dew: 400, pay: [390, 690],
     plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
-    hp: 1.4, count: 24, budget: [5.9, 2.8], roster: [['ant', 1], ['snail', 2], ['aphid', 3], ['pillbug', 5], ['caterpillar', 7], ['cricket', 9], ['grasshopper', 12], ['beetle', 15]], boss: [[12, 'slugking', 1], [24, 'slugking', 1]],
+    swell: [1, 1, 1.8, 1.7, 2.1, 2.2, 2.1, 2.5, 1.15, 1.8, 1.75, 1, 1.2, 2.5, 2.5, 1.75, 2.5, 2.05, 2.25, 2.5, 1.45, 2.5, 1.05, 1],
+    hp: .79, count: 24, budget: [5.9, 2.8], roster: [['ant', 1], ['snail', 2], ['aphid', 3], ['pillbug', 5], ['caterpillar', 7], ['cricket', 9], ['grasshopper', 12], ['beetle', 15]], boss: [[12, 'slugking', 1], [24, 'slugking', 1]],
   },
   {
     name: 'Пруд', theme: 'marsh', feature: 'water',
@@ -316,7 +333,8 @@ export const LEVELS = [
     ],
     dew: 410, pay: [415, 930],
     plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
-    hp: 1.4, count: 24, budget: [6.5, 3], roster: [['ant', 1], ['butterfly', 3], ['beetle', 4], ['caterpillar', 6], ['cricket', 10], ['snail', 13], ['aphid', 16]], boss: [[12, 'hornet', 1], [24, 'hornet', 2]],
+    swell: [1, 1, 1.1, .6, 1, .6, .9, 1, .9, .95, .85, 1, 1.25, 1.4, 2.2, .95, .9, 1.5, 1.85, .85, 1, .75, .5, 1],
+    hp: 1.62, count: 24, budget: [6.5, 3], roster: [['ant', 1], ['butterfly', 3], ['beetle', 4], ['caterpillar', 6], ['cricket', 10], ['snail', 13], ['aphid', 16]], boss: [[12, 'hornet', 1], [24, 'hornet', 2]],
   },
   {
     name: 'Крапивный лог', theme: 'forest', feature: 'nettle',
@@ -332,7 +350,8 @@ export const LEVELS = [
     ],
     dew: 420, pay: [300, 475],
     plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
-    count: 25, budget: [8.9, 4.3], roster: [['ant', 1], ['pillbug', 2], ['firefly', 4], ['grasshopper', 6], ['caterpillar', 8], ['butterfly', 10], ['cricket', 12], ['snail', 15]], boss: [[12, 'spider', 1], [25, 'spider', 2]],
+    swell: [1, 1, 1.5, 1.9, 2.5, 1.6, 1, 2.25, 1.25, 1, 1.65, 1, 1.15, 1, .9, 1.3, 2.5, 1.3, .5, 1.4, .7, 2.5, 1.25, 1.2, 1],
+    hp: .73, count: 25, budget: [8.9, 4.3], roster: [['ant', 1], ['pillbug', 2], ['firefly', 4], ['grasshopper', 6], ['caterpillar', 8], ['butterfly', 10], ['cricket', 12], ['snail', 15]], boss: [[12, 'spider', 1], [25, 'spider', 2]],
   },
   {
     name: 'Два муравейника', theme: 'sunset', feature: 'twin',
@@ -348,7 +367,8 @@ export const LEVELS = [
     ],
     dew: 440, pay: [470, 835],
     plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
-    count: 26, budget: [10.7, 5.1], roster: [['ant', 1], ['aphid', 2], ['beetle', 3], ['wasp', 5], ['caterpillar', 7], ['firefly', 9], ['cricket', 11], ['pillbug', 14], ['snail', 17]], boss: [[13, 'queen', 1], [26, 'rhino', 2]],
+    swell: [1, 1, 1.25, 1.25, .8, .95, .75, .9, .5, .95, .7, .45, 1, .75, 1.7, 1.35, .55, 1, 1.2, .45, 2.2, 1.4, .85, 1.65, .75, 1],
+    hp: .51, count: 26, budget: [10.7, 5.1], roster: [['ant', 1], ['aphid', 2], ['beetle', 3], ['wasp', 5], ['caterpillar', 7], ['firefly', 9], ['cricket', 11], ['pillbug', 14], ['snail', 17]], boss: [[13, 'queen', 1], [26, 'rhino', 2]],
   },
   {
     name: 'Заросли', theme: 'orchard', feature: 'weed',
@@ -364,7 +384,8 @@ export const LEVELS = [
     ],
     dew: 440, pay: [330, 610],
     plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
-    count: 28, budget: [5.1, 2.3], roster: [['ant', 1], ['grasshopper', 2], ['pillbug', 3], ['caterpillar', 5], ['butterfly', 7], ['cricket', 9], ['firefly', 11], ['snail', 13], ['wasp', 16], ['aphid', 19]], boss: [[9, 'rhino', 1], [18, 'slugking', 1], [28, 'spider', 2]],
+    swell: [1, 1, 1.15, 1.8, 2.25, 2.1, 1.35, 1.65, 1, .9, 1.15, 1.35, .8, 1.8, 1.15, 1, .45, 1, 1, .9, 1.05, .7, .55, .85, 1.5, 1.25, .35, 1],
+    hp: .76, count: 28, budget: [5.1, 2.3], roster: [['ant', 1], ['grasshopper', 2], ['pillbug', 3], ['caterpillar', 5], ['butterfly', 7], ['cricket', 9], ['firefly', 11], ['snail', 13], ['wasp', 16], ['aphid', 19]], boss: [[9, 'rhino', 1], [18, 'slugking', 1], [28, 'spider', 2]],
   },
   {
     name: 'Болото', theme: 'marsh', feature: 'mud',
@@ -380,7 +401,8 @@ export const LEVELS = [
     ],
     dew: 450, pay: [340, 730],
     plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
-    count: 28, budget: [15.5, 6.7], roster: [['ant', 1], ['snail', 2], ['wasp', 3], ['aphid', 5], ['pillbug', 6], ['caterpillar', 8], ['firefly', 10], ['cricket', 12], ['beetle', 15], ['butterfly', 18]], boss: [[9, 'hornet', 1], [18, 'spider', 1], [28, 'slugking', 2]],
+    swell: [1, 1, 1.55, 1.85, 1.95, 1.35, 1.15, 1.45, 1, 1.85, 1, 2, .5, .85, 2.3, 2.1, .55, 1, .85, 1.1, .9, .95, 1, 1, .4, .85, 2.3, 1],
+    hp: 1.09, count: 28, budget: [15.5, 6.7], roster: [['ant', 1], ['snail', 2], ['wasp', 3], ['aphid', 5], ['pillbug', 6], ['caterpillar', 8], ['firefly', 10], ['cricket', 12], ['beetle', 15], ['butterfly', 18]], boss: [[9, 'hornet', 1], [18, 'spider', 1], [28, 'slugking', 2]],
   },
   {
     name: 'Закат', theme: 'sunset', feature: 'twin',
@@ -396,7 +418,8 @@ export const LEVELS = [
     ],
     dew: 460, pay: [290, 640],
     plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
-    hp: 1.4, count: 30, budget: [5, 2.6], roster: [['ant', 1], ['beetle', 2], ['butterfly', 3], ['pillbug', 4], ['caterpillar', 6], ['cricket', 8], ['firefly', 10], ['snail', 12], ['wasp', 14], ['grasshopper', 17], ['aphid', 20]], boss: [[10, 'queen', 1], [20, 'hornet', 1], [30, 'rhino', 2]],
+    swell: [1, 1, 1.6, 1.3, 1.15, 2.2, 1, 1.55, 2.5, 1, 2.5, .95, 2.5, 1.25, 2.15, 2.5, 2.5, 2.5, 2.15, 1, 1.5, .95, 1.5, 1.55, .8, 1.9, 1, 2.1, 2.5, 1],
+    hp: .7, count: 30, budget: [5, 2.6], roster: [['ant', 1], ['beetle', 2], ['butterfly', 3], ['pillbug', 4], ['caterpillar', 6], ['cricket', 8], ['firefly', 10], ['snail', 12], ['wasp', 14], ['grasshopper', 17], ['aphid', 20]], boss: [[10, 'queen', 1], [20, 'hornet', 1], [30, 'rhino', 2]],
   },
 ];
 
@@ -419,7 +442,7 @@ export const FLY_SHARE = .18; // the most of a wave's budget that flyers take (b
 export function makeWaves(L, seed, { flyShare = FLY_SHARE } = {}) {
   const R = rng(seed), out = [];
   for (let w = 1; w <= L.count; w++) {
-    let budget = (L.budget[0] + L.budget[1] * (w - 1)) * (w % 5 === 0 ? 1.35 : w % 5 === 1 && w > 1 ? .8 : 1);
+    let budget = (L.budget[0] + L.budget[1] * (w - 1)) * (w % 5 === 0 ? 1.35 : w % 5 === 1 && w > 1 ? .8 : 1) * (L.swell?.[w - 1] ?? 1);
     const groups = [], fresh = L.roster.filter(([, from]) => from === w && w > 1).map(([k]) => k);
     const pool = L.roster.filter(([k, from]) => from <= w && !fresh.includes(k)).map(([k]) => k);
     for (const [at, kind, n] of L.boss) if (at === w) { groups.push([kind, n, 8, 0]); budget *= TUNE.bossEscort; }

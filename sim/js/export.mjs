@@ -13,7 +13,7 @@ export function tiersOf(P) {
   return { cost: P.cost, up: [P.up[0], P.a.up[0], P.a.up[1], P.b.up[0], P.b.up[1]], from: [P.a.from, P.b.from], st };
 }
 export function exportData() {
-  const C = {}; for (const k of ['COLS', 'ROWS', 'FRUIT_HP', 'BREAK', 'EARLY_DEW', 'REFUND', 'CHEW_GROWTH', 'POWER_EVERY', 'POWER_MAX', 'FERTILE', 'FERTILE_ADD', 'MUD', 'NETTLE', 'NETTLE_BOSS', 'WEED_COST', 'BROOD_REWARD', 'FLY_HP', 'MARK_T', 'GUARD_R', 'THORN_BOSS', 'SNIFF', 'FALL_T']) C[k] = D[k];
+  const C = {}; for (const k of ['COLS', 'ROWS', 'FRUIT_HP', 'BREAK', 'EARLY_DEW', 'REFUND', 'CHEW_GROWTH', 'POWER_EVERY', 'POWER_MAX', 'FERTILE', 'FERTILE_ADD', 'MUD', 'NETTLE', 'NETTLE_BOSS', 'WEED_COST', 'BROOD_REWARD', 'FLY_HP', 'MARK_T', 'GUARD_R', 'THORN_BOSS', 'PRICK_CAP', 'SNIFF', 'FALL_T']) C[k] = D[k];
   C.hpGrowth = D.TUNE.hpGrowth;
   return { C, PLANTS: D.PLANTS, TIERS: Object.fromEntries(Object.entries(D.PLANTS).map(([k, P]) => [k, tiersOf(P)])), BUGS: D.BUGS, PERKS: D.PERKS,
     LEVELS: D.LEVELS.map((L) => ({ dew: L.dew, hp: L.hp, pay: L.pay, count: L.count, plants: L.plants, obstacles: L.obstacles, tiles: L.tiles, entries: L.entries, fruit: L.fruit, waves: L.waves,

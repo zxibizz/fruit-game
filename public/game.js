@@ -1,7 +1,7 @@
 // Simulation: no DOM, plain data. The view reads the state and the events, and calls the actions below.
-import { COLS, ROWS, FRUIT_HP, PLANTS, BUGS, LEVELS, PERKS, BREAK, EARLY_DEW, REFUND, CHEW_GROWTH, POWER_EVERY, POWER_MAX, wavePay, FERTILE, FERTILE_ADD, MUD, NETTLE, NETTLE_BOSS, WEED_COST, BROOD_REWARD, FLY_HP, TUNE, MARK_T, BRANCHES, GUARD_R, THORN_BOSS, SNIFF, FALL_T, statOf, upCost } from './data.js';
+import { COLS, ROWS, FRUIT_HP, PLANTS, BUGS, LEVELS, PERKS, BREAK, EARLY_DEW, REFUND, CHEW_GROWTH, POWER_EVERY, POWER_MAX, wavePay, FERTILE, FERTILE_ADD, MUD, NETTLE, NETTLE_BOSS, WEED_COST, BROOD_REWARD, FLY_HP, TUNE, MARK_T, BRANCHES, GUARD_R, THORN_BOSS, PRICK_CAP, SNIFF, FALL_T, statOf, upCost } from './data.js';
 
-export const VERSION = '0.27.0';
+export const VERSION = '0.28.0';
 // The version of a saved level: raised when the balance changes so much that a garden grown under the old rules does
 // not belong in the new level (2: no fatigue, tight packs, one health rule; 3: the plants given their places and
 // every level retuned; 4: the waves retuned for the ordinary player, some levels with fewer and healthier bugs; 5: the
@@ -329,7 +329,7 @@ function near(g, px, py, r) {
 function spawn(g, kind, e = 0, from = null) {
   const B = BUGS[kind], hp = Math.round(bugHp(g, kind) * (from ? .4 : 1)), en = g.entries[e] || g.entries[0];
   const b = { id: g.nextId++, kind, hp, maxHp: hp, speed: B.speed, fly: !!B.fly, armor: B.armor || 0, x: COLS + .6, y: en[1] + .5, vx: -1, vy: 0, slow: 1, slowT: 0, slowV: 1, frozen: 0, burn: 0, burnDps: 0, melt: 0, spread: false, chew: 0, thaw: 0, chewCd: 2, gnaw: null, gnawT: 0, dir: [-1, 0], ti: en[0], tj: en[1], hit: 0, skill: 0, rush: 0, brood: !!from, e,
-    mark: 0, markV: 0, chain: 0, coming: 0, lured: false, lure: null, sniff: 0, fall: 0 };
+    mark: 0, markV: 0, chain: 0, coming: 0, lured: false, lure: null, sniff: 0, fall: 0, pricked: 0 };
   if (B.charge) b.skill = B.charge[0] * .6; if (B.brood) b.skill = B.brood[2]; if (B.web) b.skill = B.web[0] * .6;
   if (b.fly) { b.y = from ? from.y : .6 + g.rand() * (ROWS - 1.2); b.ti = b.tj = null; }
   if (from) {
@@ -368,6 +368,10 @@ function kill(g, b, how) {
 // A bug marked by a rose takes more of everything.
 const marked = (b) => (b.mark > 0 ? 1 + b.markV : 1);
 function lose(g, b, amount, how) { if (b.hp <= 0) return; b.hp -= amount * marked(b); if (b.hp <= 0) kill(g, b, how); }
+// Thorns, spikes and nettles take a share of a bug's health, whatever its health: all of them together take no more
+// than PRICK_CAP of it off one bug (b.pricked: the share taken so far), or a long thorny trail alone would kill any
+// bug of any wave. True when it took something.
+function prick(g, b, share, how) { const s = Math.min(share, PRICK_CAP - b.pricked); if (!(s > 0) || b.hp <= 0) return false; b.pricked += s; lose(g, b, b.maxHp * s, how); return true; }
 // A bug burning by a burn-through chili has no armor.
 const armorOf = (b) => (b.melt > 0 ? 0 : b.armor);
 function damage(g, b, amount, src) {
@@ -381,7 +385,7 @@ function damage(g, b, amount, src) {
 // one plant a wave from being eaten. k: the part of a bite or a second.
 function hurtPlant(g, p, amount, b, k = 1) {
   p.hp -= amount * (1 - p.guard); p.hit = Math.max(p.hit, .12);
-  if (p.spikes) lose(g, b, b.maxHp * p.spikes * k * (BUGS[b.kind].boss ? THORN_BOSS : 1), 'spikes');
+  if (p.spikes) prick(g, b, p.spikes * k * (BUGS[b.kind].boss ? THORN_BOSS : 1), 'spikes');
   if (p.hp > 0) return;
   const w = p.ward;
   if (w && !w.warded && g.plants.includes(w)) { p.hp = 1; w.warded = true; auras(g); g.events.push({ t: 'ward', p, by: w }); return; }
@@ -447,10 +451,10 @@ function updateBug(g, b, dt) {
   }
   if (b.melt > 0) b.melt -= dt;
   const ci = Math.floor(b.x), cj = Math.floor(b.y), tile = b.fly ? null : g.tiles[cj]?.[ci];
-  if (tile === 'nettle') { lose(g, b, b.maxHp * (B.boss ? NETTLE_BOSS : NETTLE) * dt, 'nettle'); if (b.hp <= 0) return; b.sting = .25; }
+  if (tile === 'nettle') { const stung = prick(g, b, (B.boss ? NETTLE_BOSS : NETTLE) * dt, 'nettle'); if (b.hp <= 0) return; if (stung) b.sting = .25; }
   if (inside(ci, cj)) {
     const th = (b.fly ? g.thornAir : g.thorn)[key(ci, cj)];
-    if (th) { lose(g, b, b.maxHp * th * (B.boss ? THORN_BOSS : 1) * dt, 'thorns'); if (b.hp <= 0) return; b.sting = .25; }
+    if (th) { const stung = prick(g, b, th * (B.boss ? THORN_BOSS : 1) * dt, 'thorns'); if (b.hp <= 0) return; if (stung) b.sting = .25; }
   }
   if (b.sting > 0) b.sting -= dt;
   if (b.thaw > 0) b.thaw -= dt;

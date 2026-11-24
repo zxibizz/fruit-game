@@ -40,7 +40,7 @@ const plantsOf = (spec, level) => {
   return op === 'no' ? all.filter((x) => x !== k) : ['pumpkin', k];
 };
 // Overrides: { 'L5.dew': 500, 'L5.pay': '150/270', 'TUNE.hpGrowth': 1.2, 'PLANTS.rose.b.ground': .3, 'BUGS.butterfly.hp': 12, FLY_SHARE: .2 }.
-const WAVE_KEYS = new Set(['count', 'budget', 'roster', 'boss']);
+const WAVE_KEYS = new Set(['count', 'budget', 'roster', 'boss', 'swell']);
 export function applyOverrides(set = {}, waveSeed = null) {
   const regen = new Set(); let flyShare;
   for (const [key, v] of Object.entries(set)) {
@@ -57,7 +57,7 @@ export function applyOverrides(set = {}, waveSeed = null) {
       if (!L || parts.length !== 2 || parts.some((p) => !p.trim()) || xs.some((x) => !(x >= 0))) throw new Error(`${key}=${v}: ${L ? 'first/last' : `no level ${m[1]}`}`);
       L.pay = xs; continue;
     }
-    if (m && !(m[2] in (LEVELS[Number(m[1]) - 1] || {}))) throw new Error(`unknown override ${key}`);
+    if (m && m[2] !== 'swell' && !(m[2] in (LEVELS[Number(m[1]) - 1] || {}))) throw new Error(`unknown override ${key}`);
     if (m) { const n = Number(m[1]) - 1; LEVELS[n][m[2]] = v; if (WAVE_KEYS.has(m[2])) regen.add(n); continue; }
     if (key === 'FLY_SHARE') { flyShare = v; LEVELS.forEach((_, n) => regen.add(n)); continue; }
     const [root, ...path] = key.split('.'), obj = { PLANTS, BUGS, PERKS, TUNE }[root];
