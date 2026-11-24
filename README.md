@@ -34,7 +34,9 @@ and in portrait (turned there).
   that; the size of every wave (`swell`) is set so that no one or two waves are all the difficulty: a big wave, an
   ordinary one and a breather stand at 1.15, 1.3 and 1.6 times the margin of the hardest boss wave. Thorns, spikes and
   nettles together take no more than a quarter of a bug's health (`PRICK_CAP`): with no cap a thorny trail, cold mints
-  and flytraps held bugs of any health. The numbers and how they were found: [docs/studio.md](docs/studio.md).
+  and flytraps held bugs of any health. The numbers and how they were found: [docs/studio.md](docs/studio.md); what
+  is wrong with the way they are found (the mazes come from a few templates, the clean edge jumps, nothing bounds a
+  plain win): [docs/balance-issues.md](docs/balance-issues.md).
   A level is meant to be hard and to be won by thought. Plants that hit walkers reach only the cells
   next to them, and bugs come in tight packs: a long winding trail has twice the cells beside it and keeps a pack
   under the plants several times longer than a straight road. The health of every bug, bosses too, grows by one rule on
