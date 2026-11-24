@@ -26,10 +26,12 @@ const how = { bin: build(), ...(opt('--jobs') ? { jobs: Number(opt('--jobs')) } 
 const SMART = { route: 1, place: 'best', upgrades: 'greedy', terrain: true, powers: true, early: true };
 const base = resolve({ level, opts: { ...SMART, meta: META } }), bots = [base, ...(EXPERT ? [{ ...base, policy: EXPERT }] : [])];
 const FILE = new URL(`./perfect/L${level + 1}.json`, import.meta.url), kept = existsSync(FILE) ? JSON.parse(readFileSync(FILE, 'utf8')) : null;
-const log = (s) => process.stderr.write(s + '\n'), pc = (x) => `×${x.toFixed(2)}`;
+const T0 = Date.now(), log = (s) => process.stderr.write(s + '\n'), tm = (s) => log(`  [${Math.round((Date.now() - T0) / 1000)} s] ${s}`), pc = (x) => `×${x.toFixed(2)}`;
 // a party as scan and the tests play it
 const party = (plan, kind = null) => ({ level, opts: { ...base, plan, ...(kind ? { plants: [kind] } : {}) } });
-const measure = (plan, kind) => { const t = [party(plan, kind)]; return { clean: scan(t, { data, full: true, ...how, quiet: true })[0], stars: scan(t, { data, what: 'stars', ...how, quiet: true })[0], won: scan(t, { data, what: 'won', to: 24, ...how, quiet: true })[0] }; };
+// (three stars and a plain win only with --stars: the balance is of the fruit whole, and they take as long again)
+const STARS = args.includes('--stars'), none = { margin: NaN, open: false };
+const measure = (plan, kind) => { const t = [party(plan, kind)]; return { clean: scan(t, { data, ...how, quiet: true })[0], stars: STARS ? scan(t, { data, what: 'stars', ...how, quiet: true })[0] : none, won: STARS ? scan(t, { data, what: 'won', to: 24, ...how, quiet: true })[0] : none }; };
 
 log(`L${level + 1} ${LEVELS[level].name}: the best perfect party, ${RUNS} run(s) of ${SECS} s at most (stopping ${STALL} s after the last rise), the perks ${META}`);
 const runs = [];
@@ -39,8 +41,8 @@ const runs = [];
 const FROM = opt('--from') && existsSync(opt('--from')) && !args.includes('--cold') ? JSON.parse(readFileSync(opt('--from'), 'utf8')) : null;
 const FROM_PLANS = FROM ? [FROM.plan, ...(FROM.archive || []).slice(0, 40).map((e) => e.plan)] : [];
 for (let n = 1; n <= RUNS; n++) { log(` run ${n}`); runs.push(search({ level, opts: base, plans: [...(kept?.plan ? [kept.plan] : []), ...FROM_PLANS], bots, secs: SECS, stall: STALL, rng: n + Number(opt('--rng', 0)), check: args.includes('--check'), data }, how)); }
-const best = runs.reduce((a, b) => (b.margin > a.margin ? b : a)), m = measure(best.plan);
-let one = null;
+tm('searched'); const best = runs.reduce((a, b) => (b.margin > a.margin ? b : a)), m = measure(best.plan);
+tm('measured'); let one = null;
 if (args.includes('--mono')) {
   for (const kind of LEVELS[level].plants) { log(` ${kind} alone`);
     const r = search({ level, opts: base, plans: kept?.mono?.kind === kind ? [kept.mono.plan] : [], bots, secs: Math.max(20, SECS / 5), stall: STALL / 2, only: kind, rng: 1, data }, how);
@@ -64,24 +66,28 @@ const open = LEVELS[level].plants.flatMap((k) => [...(LEVELS[level].plants.lengt
 // own on that game (a job each, side by side), from the best party and the best of the archive that have none of it,
 // till it is as good as the best of all or stops rising. (The bot plays a step of the plan it cannot take its own way:
 // a closed branch becomes the open one; where a whole plant is gone its plants are given as each of the others in turn.)
-const NOT = args.includes('--no-without'), BSECS = Number(opt('--ban-secs', Math.max(20, SECS / 4))), BSTALL = Number(opt('--ban-stall', Math.max(8, STALL / 3)));
+tm('before the branches'); const NOT = args.includes('--no-without'), BSECS = Number(opt('--ban-secs', Math.max(20, SECS / 4))), BSTALL = Number(opt('--ban-stall', Math.max(8, STALL / 3)));
 const gone = (f) => { const [k, b] = f.split('.'), L = LEVELS[level];
   if (b) { const was = PLANTS[k][b].from; PLANTS[k][b].from = 99; const d = exportData(); PLANTS[k][b].from = was; return d; }
   const was = L.plants; L.plants = was.filter((x) => x !== k); const d = exportData(); L.plants = was; return d; };
 const as = (plan, k, to) => plan.map((s) => (s[0] === k ? [to, s[1], s[2]] : s));
 const jobs = how.jobs || PAR, top = Math.max(0, Math.round(Math.log(Math.max(m.clean.margin, .75)) / Math.log(1.05)) + 2);
+// A branch (a plant) the best party has none of costs nothing to lose: the same moves are there to make without it, and
+// the same moves play the same game. No search is asked for it.
+const free = (x, f) => { const [k, b] = f.split('.'); return (b ? [f] : [k, k + '.a', k + '.b']).every((g) => !x.mix[g]); };
 const without = NOT ? [] : await pool(open.filter((f) => !ONLY || ONLY.includes(f)), jobs, async (f) => { const d = gone(f), [k, b] = f.split('.');
+  if (arch[0] && arch[0].margin === best.margin && free(arch[0], f)) { log(`  without ${f}: the best has none of it`); return { f, margin: m.clean.margin, cost: 0, tried: 0, unused: true, plan: best.plan }; }
   const none = (x) => (b ? [f] : [k, k + '.a', k + '.b']).every((g) => !x.mix[g]);
   const starts = [best.plan, ...(FROM?.without?.find((w) => w.f === f)?.plan ? [FROM.without.find((w) => w.f === f).plan] : []), ...[...arch.filter(none).slice(0, 3), ...arch.filter((x) => lacks(x, f) && !none(x)).slice(0, 1)].map((x) => x.plan), ...(b ? [] : LEVELS[level].plants.filter((x) => x !== k).map((x) => as(best.plan, k, x)))];
   const r = await searchAsync({ level, opts: base, plans: starts, bots, secs: BSECS, stall: BSTALL, goal: best.margin, data: d }, { bin: how.bin, jobs: 1 });
   const s = r.plan?.length ? scan([party(r.plan)], { data: d, to: top, bin: how.bin, jobs: 1, quiet: true })[0].margin : 0, margin = Math.min(s, m.clean.margin);
   log(`  without ${f}: ${pc(margin)} (${r.tried} tried)`);
   return { f, margin, cost: 1 - margin / m.clean.margin, tried: r.tried, plan: r.plan }; });
-console.log(`L${level + 1} ${LEVELS[level].name} (hp ${LEVELS[level].hp}, the perks ${META})`);
+tm('without every branch'); console.log(`L${level + 1} ${LEVELS[level].name} (hp ${LEVELS[level].hp}, the perks ${META})`);
 console.log(`  the runs ended on ${runs.map((r) => pc(r.margin)).join(', ')} (${runs.map((r) => r.tried).join(', ')} parties tried)${Math.max(...runs.map((r) => r.margin)) / Math.min(...runs.map((r) => r.margin)) <= 1.06 ? ': they agree' : ': THEY DO NOT AGREE — the search has not settled'}`);
-console.log(`  the best, on ${m.clean.seeds} seed(s): the fruit whole against bugs ${pc(m.clean.margin)}; three stars ${pc(m.stars.margin)}; won ${pc(m.won.margin)}${m.won.open ? '+' : ''}`);
+console.log(`  the best, on ${m.clean.seeds} seed(s): the fruit whole against bugs ${pc(m.clean.margin)}${STARS ? `; three stars ${pc(m.stars.margin)}; won ${pc(m.won.margin)}${m.won.open ? "+" : ""}` : ""}`);
 console.log(`    health:seeds clean  ${grid(m.clean)}`);
-if (kept?.plan) { const k = scan([party(kept.plan)], { data, ...how, quiet: true })[0]; console.log(`  the party kept before: ${pc(k.margin)}`); }
+if (kept?.plan && args.includes('--keep')) { const k = scan([party(kept.plan)], { data, ...how, quiet: true })[0]; console.log(`  the party kept before: ${pc(k.margin)}`); }
 if (arch.length) {
   const ms = scan(unlike.map((e) => party(e.plan)), { data, ...how, quiet: true });
   console.log(`  разные способы пройти (${arch.length} составов в архиве; запас на всех сидах / на сидах поиска):`);
@@ -96,7 +102,7 @@ if (without.length) {
   console.log(`      не нужна (меньше −8%): ${row(-9, .08, false)}`);
   console.log(`  без растения целиком: ${without.filter((w) => !w.f.includes('.')).sort((a, b) => b.cost - a.cost).map(show).join(', ') || '—'}`);
 }
-if (one) console.log(`  one plant alone: ${one.kind} ${pc(one.margin)} — ${Math.round(one.margin / m.clean.margin * 100)}% of the best`);
+tm('done'); if (one) console.log(`  one plant alone: ${one.kind} ${pc(one.margin)} — ${Math.round(one.margin / m.clean.margin * 100)}% of the best`);
 const hp = m.clean.margin > 0 ? Math.round(LEVELS[level].hp * m.clean.margin / TARGET * 100) / 100 : null;
 console.log(`  for a garden of ${Math.round(100 / TARGET)}% of its strength to be the least that keeps the fruit whole: L${level + 1}.hp ${LEVELS[level].hp} → ${hp}`);
 const res = { level: level + 1, meta: META, secs: SECS, runs: runs.map((r) => ({ margin: r.margin, tried: r.tried, parties: r.parties, wavesSaved: r.waves_saved, history: r.history })), plan: best.plan, clean: m.clean, stars: m.stars.margin, won: m.won.margin, mono: one, unlike: unlike.map((e) => ({ margin: e.margin, scanned: e.scanned ?? null, mix: e.mix })), without, makes: arch.length, archive: arch.slice(0, 60).map((e) => ({ margin: e.margin, mix: e.mix, plan: e.plan })), hp: { now: LEVELS[level].hp, suggested: hp } };

@@ -226,9 +226,11 @@ impl<'a> Game<'a> {
     // A stat of a plant as it stands: its level and branch, the player's perk for this plant and the soil under it
     // (i < 0: no cell yet). 0 when it has no such stat.
     #[inline]
-    pub fn pstat(&self, kind: usize, lvl: usize, br: u8, i: i32, j: i32, s: Stat) -> f64 {
+    pub fn pstat(&self, kind: usize, lvl: usize, br: u8, i: i32, j: i32, s: Stat) -> f64 { self.stat_tab[self.stat_base(kind, lvl, br, i, j) + s as usize] }
+    // where the stats of a plant on a cell begin in the table (a plant asks for many of them a step: the cell is looked at once)
+    #[inline] fn stat_base(&self, kind: usize, lvl: usize, br: u8, i: i32, j: i32) -> usize {
         let fert = inside(i, j) && self.tiles[key(i, j)] == Tile::Fertile;
-        self.stat_tab[((kind * 6 + slot(lvl, br)) * 2 + fert as usize) * NSTAT + s as usize]
+        ((kind * 6 + slot(lvl, br)) * 2 + fert as usize) * NSTAT
     }
     // every stat of every plant on every tier, on plain ground and on fertile, with the perks of the party: they never
     // change in a party, and the rules ask for them every step (counted once here, by the same arithmetic)
@@ -603,7 +605,7 @@ impl<'a> Game<'a> {
         let d = self.d; let (kind, lvl, br, i, j) = { let p = &self.plants[pi]; (p.kind, p.lvl, p.br, p.i, p.j) };
         let (px, py) = (i as f64 + 0.5, j as f64 + 0.5);
         if self.plants[pi].web > 0.0 { self.plants[pi].web -= dt; if self.plants[pi].web <= 0.0 { self.auras(); } return; } // caught in a spider's web: does nothing
-        let st = |g: &Self, s: Stat| g.pstat(kind, lvl, br, i, j, s);
+        let base = self.stat_base(kind, lvl, br, i, j); let st = |g: &Self, s: Stat| g.stat_tab[base + s as usize];
         let range = st(self, Stat::Range); if range == 0.0 || st(self, Stat::Guard) != 0.0 { return; } // a pumpkin works through auras
         let air = st(self, Stat::Air) != 0.0; let gr = st(self, Stat::GroundRange);
         let in_range = |b: &Bug, a: bool| b.hp > 0.0 && (a || !b.fly) && b.x < COLS as f64 + 0.2 && within(b.x - px, b.y - py, if gr != 0.0 && !b.fly { range.min(gr) } else { range });
@@ -632,7 +634,7 @@ impl<'a> Game<'a> {
     #[inline(always)]
     fn aim(&mut self, pi: usize, _dt: f64, near: &[usize], in_range: impl Fn(&Bug, bool) -> bool, kind: usize, lvl: usize, br: u8, i: i32, j: i32, air: bool) {
         let d = self.d; let (px, py) = (i as f64 + 0.5, j as f64 + 0.5);
-        let st = |g: &Self, s: Stat| g.pstat(kind, lvl, br, i, j, s);
+        let base = self.stat_base(kind, lvl, br, i, j); let st = |g: &Self, s: Stat| g.stat_tab[base + s as usize];
         let eat = st(self, Stat::Eat);
         if eat != 0.0 { // swallows the worn bugs whole, the biggest it can first; a healthier bug it leaves alone
             let eat_air = st(self, Stat::EatAir) != 0.0; let gulp = st(self, Stat::Gulp); let heads = { let h = st(self, Stat::Heads); if h != 0.0 { h as usize } else { 1 } };

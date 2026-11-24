@@ -33,6 +33,12 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 pub type Step = (Option<usize>, i32, i32, u8);
+// what the parties of a search are played for, and the time they take (printed at the end of `perfect`)
+pub const CATS: [&str; 5] = ["placing the parties given", "a change tried", "going up the rungs", "the rungs below", "other"];
+thread_local! { static CAT: std::cell::Cell<usize> = const { std::cell::Cell::new(4) }; }
+fn cat(c: usize) { CAT.with(|x| x.set(c)); }
+pub static COUNT: [AtomicU64; 5] = [const { AtomicU64::new(0) }; 5];
+pub static NANOS: [AtomicU64; 5] = [const { AtomicU64::new(0) }; 5];
 pub const STEP: f64 = 1.05;
 pub const K_MIN: i32 = -14; // 0.505
 pub const K_MAX: i32 = 28; // 3.92
@@ -80,12 +86,13 @@ impl<'a> Ctx<'a> {
     }
     pub fn party_from(&self, plan: Option<&[Step]>, o: &Opts, k: i32, seed: u32, stop: f64, record: bool, from: Option<&bot::Saved<'static>>, snaps: Option<&mut Snaps>) -> (Res, Option<Vec<Op>>) {
         let dd = self.data_at(k); let mut opt = o.clone(); opt.seed = seed; opt.stop_bitten = stop; if let Some(p) = plan { opt.plan = Some(p.to_vec()); }
-        self.parties.fetch_add(1, Ordering::Relaxed);
+        self.parties.fetch_add(1, Ordering::Relaxed); let t = Instant::now(); let c = CAT.with(|x| x.get());
         let level = self.level;
         let layouts = |l: usize, t: bool| bot::layout(dd, l, t);
         let mazes = |l: usize, name: &str| routes::routes(dd, l).list.iter().find(|r| format!("{}/{}", r.class, r.shape) == name).map(|r| r.walls.clone());
         let pool = |l: usize| Arc::new(routes::pool(dd, l));
-        bot::play_level_from(dd, level, &opt, &layouts, &mazes, &pool, record, from, snaps)
+        let out = bot::play_level_from(dd, level, &opt, &layouts, &mazes, &pool, record, from, snaps);
+        COUNT[c].fetch_add(1, Ordering::Relaxed); NANOS[c].fetch_add(t.elapsed().as_nanos() as u64, Ordering::Relaxed); out
     }
     pub fn party(&self, plan: Option<&[Step]>, o: &Opts, k: i32, seed: u32, stop: f64, record: bool) -> (Res, Option<Vec<Op>>) { self.party_from(plan, o, k, seed, stop, record, None, None) }
     fn clean(r: &Res) -> bool { r.won && r.bitten == 0.0 }
@@ -290,6 +297,17 @@ fn level_of(cx: &Ctx, plan: &[Step]) -> i32 {
 // Clean on the rungs from the floor up to `top`: the four highest on every seed (a failure is likeliest there), the ones
 // below on one seed each, another for every rung. (Every rung on every seed is what balance/scan.mjs asks in the end: a
 // party with a hole this did not see is said so there, and its margin is the rung below the hole.)
+// The same, looked for from above: down a rung at a time from `from` to the first rung it is clean on (a party bitten
+// is cut short at the bite, the higher the rung the sooner), then the rungs below that one as holds_below asks them;
+// where there is a hole, level_of. (It is bitten on the rung above the one found, unless that is `from` itself: then it
+// goes on up.)
+fn level_from(cx: &Ctx, plan: &[Step], from: i32) -> i32 {
+    let mut k = from.min(K_MAX).max(K_FLOOR);
+    while k >= K_FLOOR && !cx.all_clean(plan, k) { k -= 1; }
+    if k < K_FLOOR || !holds_below(cx, plan, k - 1) { return level_of(cx, plan); }
+    if k == from { while k < K_MAX && cx.all_clean(plan, k + 1) { k += 1; } }
+    k
+}
 fn holds_below(cx: &Ctx, plan: &[Step], top: i32) -> bool {
     (K_FLOOR..=top).rev().all(|k| if k > top - 4 { cx.all_clean(plan, k) } else { let s = cx.seeds[(k - K_MIN) as usize % cx.seeds.len()]; cx.clean_on(plan, k, &[s]) })
 }
@@ -301,7 +319,7 @@ pub fn search(cx: &Ctx, seeds_plans: Vec<Vec<Step>>, secs: f64, stall: f64, goal
     let elite = |plan: Vec<Step>, k: i32| -> Option<Elite> { if k < K_MIN { return None; }
         let mix = cx.fitness(&plan, k, None).mix?; let runs = cx.fitness(&plan, (k + 1).min(K_MAX), None); Some(Elite { niche: niche_of(&mix), stat: make_of(cx, &plan), plan, k, runs, mix }) };
     let starts: Vec<Option<Elite>> = std::thread::scope(|sc| {
-        let hs: Vec<_> = seeds_plans.into_iter().map(|mut p| sc.spawn(move || { tidy(&mut p); let k = level_of(cx, &p); elite(p, k) })).collect();
+        let hs: Vec<_> = seeds_plans.into_iter().map(|mut p| sc.spawn(move || { cat(0); tidy(&mut p); let k = level_from(cx, &p, if goal < K_MAX { goal } else { 16 }); elite(p, k) })).collect();
         hs.into_iter().map(|h| h.join().unwrap()).collect() });
     log(format!("the parties given hold: {}", starts.iter().map(|s| s.as_ref().map_or("nothing".to_string(), |e| format!("×{:.2}", rung(e.k)))).collect::<Vec<_>>().join(", ")));
     let t0 = Instant::now(); // (the time of the search is counted from here: placing the parties given is not it)
@@ -331,21 +349,23 @@ pub fn search(cx: &Ctx, seeds_plans: Vec<Vec<Step>>, secs: f64, stall: f64, goal
             // make it has not: from the rung above its parent's down in widening steps, the first it is clean on — a party of
             // another make a little below the best is worth keeping as the best of its own make.
             let rungs: Vec<i32> = match rival { Some(k) => vec![(k + 1).min(K_MAX)], None => [1, -1, -3, -6, -10, -15].iter().map(|d| pk + d).filter(|&k| k >= K_FLOOR - 4 && k <= K_MAX).collect() };
-            let mut found: Option<(i32, Runs)> = None;
+            let mut found: Option<(i32, Runs)> = None; cat(1);
             for &t in &rungs { let runs = cx.fitness(&child, t, if t == pk + 1 { Some((&parent, &pruns)) } else { None }); if runs.fit >= cx.seeds.len() as f64 { found = Some((t, runs)); break; } }
             let Some((target, runs)) = found else { continue };
-            // Every party kept is clean on the rungs below its own too, down to the floor (holds_below). One with a hole
-            // lower down stands on the rung under the hole, and is kept there if that is still the best of its make.
-            let n = cx.seeds.len() as f64; let (mut k, mut mix, mut next);
-            if holds_below(cx, &child, target - 1) {
-                // as far up as it goes before the first rung it is bitten on (it was bitten on the rung tried before this one, if any)
-                let top = rungs.iter().cloned().filter(|&t| t > target).min().map_or(K_MAX, |t| t - 1);
-                k = target; mix = runs.mix.clone().unwrap(); next = cx.fitness(&child, (k + 1).min(K_MAX), None);
-                while k < top && k + 1 < K_MAX && next.fit >= n { k += 1; mix = next.mix.clone().unwrap(); next = cx.fitness(&child, k + 1, None); }
-            } else {
-                k = level_of(cx, &child); if k < K_MIN || k > best || rival.map_or(false, |rk| k <= rk) { continue; }
+            // As far up as it goes before the first rung it is bitten on (it was bitten on the rung tried before this one, if any).
+            let n = cx.seeds.len() as f64; cat(2);
+            let top = rungs.iter().cloned().filter(|&t| t > target).min().map_or(K_MAX, |t| t - 1);
+            let mut k = target; let mut mix = runs.mix.clone().unwrap(); let mut next = cx.fitness(&child, (k + 1).min(K_MAX), None);
+            while k < top && k + 1 < K_MAX && next.fit >= n { k += 1; mix = next.mix.clone().unwrap(); next = cx.fitness(&child, k + 1, None); }
+            // A party near the best (within four rungs of it, or above it) is clean on the rungs below its own too, down to
+            // the floor (holds_below): those are the parties the search ends with and says. One with a hole lower down stands
+            // on the rung under the hole, and is kept there if that is still the best of its make. A party further down is a
+            // step on the way to others and is taken as it is: the rungs below are the most of what the search plays, and
+            // most of those parties are soon replaced by a better one of their make.
+            if k >= best - 4 { cat(3); if !holds_below(cx, &child, target - 1) {
+                k = level_of(cx, &child); if k < K_MIN || rival.map_or(false, |rk| k <= rk) { continue; }
                 let at = cx.fitness(&child, k, None); let Some(m) = at.mix.clone() else { continue }; mix = m; next = cx.fitness(&child, k + 1, None);
-            }
+            } }
             let e = Elite { niche: niche_of(&mix), stat, plan: child, k, runs: next, mix };
             let mut s = st.lock().unwrap(); let el = t0.elapsed().as_secs_f64(); let now = s.arch.iter().map(|x| x.k).max().unwrap();
             let took = match s.arch.iter().position(|x| x.niche == e.niche) { Some(q) => if e.k > s.arch[q].k { s.arch[q] = e; true } else { false }, None => { s.arch.push(e); true } };
@@ -385,6 +405,8 @@ pub fn perfect(j: &J, jobs: usize) {
     let secs = j.get("secs").map_or(60.0, |v| v.num()); let stall = j.get("stall").map_or(f64::INFINITY, |v| v.num()); let goal = j.get("goal").filter(|v| **v != J::Null).map_or(i32::MAX, |v| (v.num().max(0.01).ln() / STEP.ln()).round() as i32); let rng = j.get("rng").map_or(1.0, |v| v.num()) as u64;
     let log = |s: String| eprintln!("  {}", s);
     let (arch, history, tried) = search(&cx, plans, secs, stall, goal, jobs, rng, &log);
+    let all: u64 = NANOS.iter().map(|x| x.load(Ordering::Relaxed)).sum::<u64>().max(1);
+    for c in 0..5 { let (n, t) = (COUNT[c].load(Ordering::Relaxed), NANOS[c].load(Ordering::Relaxed)); if n > 0 { eprintln!("  parties {:<26} {:>6}  {:>5.1}% of the time, {:.0} ms each", CATS[c], n, t as f64 * 100.0 / all as f64, t as f64 / n as f64 / 1e6); } }
     let fam = |f: usize| { let k = &cx.d.plants[f / 3].name; match f % 3 { 0 => k.clone(), 1 => format!("{}.a", k), _ => format!("{}.b", k) } };
     let m = |k: i32| if k < K_MIN { 0.0 } else { rung(k) };
     let elites: Vec<String> = arch.iter().take(120).map(|e| format!("{{\"margin\":{},\"mix\":{{{}}},\"plan\":{}}}", m(e.k),
