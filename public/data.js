@@ -38,12 +38,13 @@ export const PLANTS = {
   // Fire (the pepper is the chili now). Lobs a pepper that bursts where it lands: it hits up to `hits` walkers within
   // `splash` of it and sets them burning (burn a second for burnT seconds). Fire is weak against armor: a burning bug's
   // armor comes off every second of the burn.
-  // a, Heat: throws no more; burns every walker around it, however many, a little each (dense crowds of small bugs);
+  // a, Heat: throws no more; burns every bug around it, flyers too, however many, a little each (dense crowds of small
+  //   bugs, and the flyers that all come together by the fruit: the second answer to them, after the roses);
   //   spread (top) — a bug it set burning sets the next bug it touches burning too (one link).
   // b, Burn-through: throws at the armored and the thick first; melt — a bug it set burning has no armor while it
   //   burns, against every plant; crack (top) — every hit takes a point of armor off for good.
   pepper: { cost: 35, up: [90], hp: [60, 80], range: [1.6, 1.7], rate: [.6, .65], dmg: [8, 12], splash: .8, hits: [3, 4], burn: [3, 4.5], burnT: 2, shot: 'pepper', speed: 5,
-    a: { from: 1, up: [180, 280], hp: [80, 100], range: 1.7, rate: [.5, .55], dmg: [12, 16], burn: [9, 13], burnT: [2.5, 3], blaze: 1, spread: [0, 1] },
+    a: { from: 1, up: [180, 280], hp: [80, 100], range: 1.7, rate: [.5, .55], dmg: [12, 16], burn: [9, 13], burnT: [2.5, 3], blaze: 1, air: 1, spread: [0, 1] },
     b: { from: 1, up: [180, 280], hp: [80, 100], range: 1.7, rate: [.65, .7], dmg: [24, 32], splash: [1, 1.1], hits: [5, 6], burn: [6, 9], burnT: [2.5, 3], melt: 1, crack: [0, 1], shot: 'pepper', speed: 5 } },
   // Ice: the only plant that slows. Throws an icicle at one bug, walkers and flyers: frost — the bug it hits is that
   // much slower for frostT seconds (slows do not add up; snails do not slow).
@@ -61,7 +62,7 @@ export const PLANTS = {
   //   once): into the reach of the plants around; it swallows worn flyers too (eatAir); lureBoss (top) — the hornet too
   //   (it is not swallowed).
   flytrap: { cost: 60, up: [140], hp: [70, 90], range: 1.5, eat: [3, 2.5], gulp: [.4, .5],
-    a: { from: 2, up: [250, 350], hp: [100, 120], range: [1.5, 1.6], eat: [1.8, 1.6], gulp: .6, heads: [1, 2] },
+    a: { from: 2, up: [170, 260], hp: [100, 120], range: [1.5, 1.6], eat: [1.5, 1.2], gulp: .65, heads: [1, 2] },
     b: { from: 3, up: [150, 250], hp: [90, 110], range: 1.5, eat: [2.5, 2.2], gulp: .5, eatAir: 1, lure: [3, 5], lureBoss: [0, 1] } },
 };
 export const BRANCHES = ['a', 'b'];
@@ -137,7 +138,7 @@ export const BUGS = {
   ant: { hp: 12, speed: 1.0, bite: 1, reward: 2, w: 1 },
   aphid: { hp: 6, speed: 1.25, bite: 1, reward: 1, w: .5 },
   beetle: { hp: 44, armor: 2, speed: .7, bite: 2, reward: 5, w: 5 },
-  caterpillar: { hp: 34, speed: .65, bite: 2, reward: 5, chew: 4, w: 4 }, // chew 8 while the eaten grew back in a wave
+  caterpillar: { hp: 34, speed: .65, bite: 2, reward: 5, chew: 7, w: 4 }, // (4 till 0.31: no garden needed its walls guarded, and the shell pumpkin was in no best party)
   grasshopper: { hp: 18, speed: 1.7, bite: 1, reward: 3, w: 1.6 },
   snail: { hp: 70, speed: .42, bite: 2, reward: 8, noSlow: true, w: 8 },
   pillbug: { hp: 32, armor: 5, speed: .6, bite: 2, reward: 7, w: 6 },
