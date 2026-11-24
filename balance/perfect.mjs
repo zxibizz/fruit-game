@@ -20,7 +20,7 @@ const args = process.argv.slice(2), opt = (k, d) => { const i = args.indexOf(k);
 const DIR = new URL('./perfect/', import.meta.url), keep = opt('--keep');
 const ranges = (s) => s.split(',').flatMap((p) => { const [a, b] = p.split('-').map(Number); return Array.from({ length: (b || a) - a + 1 }, (_, k) => a + k - 1); });
 const levels = ranges(opt('--levels', `1-${LEVELS.length}`)), METAS = opt('--metas', 'none,exp2,exp3,full').split(','), FOR = opt('--for', 'exp3');
-export const TARGET = 1 / 0.7;
+export const TARGET = 1 / 0.7, SEEDS = [7, 11]; // the seeds of the game a party has to be perfect on (where the flyers come from)
 const SMART = { route: 1, place: 'best', upgrades: 'greedy', terrain: true, powers: true, early: true };
 export const clean = (r) => r.won && Object.keys(r.bites).length === 0;
 export const kept = (n) => (existsSync(new URL(`L${n + 1}.json`, DIR)) ? JSON.parse(readFileSync(new URL(`L${n + 1}.json`, DIR), 'utf8')) : null);
@@ -32,16 +32,17 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     for (const n of levels) { const f = `${keep}/c${n + 1}.json`; if (!existsSync(f)) continue; const c = JSON.parse(readFileSync(f, 'utf8'));
       writeFileSync(new URL(`L${n + 1}.json`, DIR), JSON.stringify({ level: n + 1, plan: c.plan, mono: c.mono }) + '\n'); } }
   const bin = build(), data = exportData(), tasks = [];
+  const tasks1 = tasks; { const tasks = { push: (t) => SEEDS.forEach((seed) => tasks1.push({ ...t, seed, opts: { ...t.opts, seed } })) };
   for (const n of levels) { const k = kept(n); if (!k) continue; for (const m of METAS) tasks.push({ n, who: m, opts: partyOf(n, k, m) }); if (k.mono) tasks.push({ n, who: 'one', opts: partyOf(n, k, FOR, true) }); if (!METAS.includes(FOR)) tasks.push({ n, who: FOR, opts: partyOf(n, k, FOR) });
     // the bots themselves, with the same perks: where one of them does better than the kept plan, it is the best party known
-    const bot = resolve({ level: n, opts: { ...SMART, meta: FOR } }); tasks.push({ n, who: 'smart', opts: bot }); if (EXPERT) tasks.push({ n, who: 'expert', opts: { ...bot, policy: EXPERT } }); }
+    const bot = resolve({ level: n, opts: { ...SMART, meta: FOR } }); tasks.push({ n, who: 'smart', opts: bot }); if (EXPERT) tasks.push({ n, who: 'expert', opts: { ...bot, policy: EXPERT } }); } }
   const run = (ts) => play(ts.map((t) => ({ level: t.n, opts: t.opts })), { bin, data }).map((x) => { if (x.err) throw new Error(x.err); return { ...x.res, won: clean(x.res) }; });
   const at1 = run(tasks), ms = await margins(tasks.map((task, k) => ({ task, won: at1[k].won })), async (ts) => run(ts), { lo: .25, hi: 4 });
   const pc = (x) => (x == null ? '-' : Math.round(x * 100) + '%').padStart(7);
   console.log(`the perfect party (the fruit never bitten): bugs how many times healthier the kept plan holds; target ${Math.round(TARGET * 100)}% with the perks ${FOR} (the bots and the one plant play with them)`);
   console.log('level'.padEnd(22) + 'hp'.padStart(5) + METAS.map((m) => m.padStart(7)).join('') + ' expert  smart  hp for the target   one plant (of the best)');
   const hps = {};
-  for (const n of levels) { const of = (who) => { const k = tasks.findIndex((t) => t.n === n && t.who === who); return k < 0 ? null : ms[k].at; }; if (of(METAS[0]) == null) continue;
+  for (const n of levels) { const of = (who) => { const ks = tasks.map((t, k) => (t.n === n && t.who === who ? k : -1)).filter((k) => k >= 0); return ks.length ? Math.min(...ks.map((k) => ms[k].at)) : null; }; if (of(METAS[0]) == null) continue;
     const k = kept(n), one = of('one'), ref = Math.max(of(FOR), of('expert') ?? 0, of('smart') ?? 0), hp = Math.round(LEVELS[n].hp * ref / TARGET * 100) / 100; hps[n + 1] = hp;
     console.log(`${String(n + 1).padStart(2)} ${LEVELS[n].name.padEnd(19)}${String(LEVELS[n].hp).padStart(5)}${METAS.map((m) => pc(of(m))).join('')}${pc(of('expert'))}${pc(of('smart'))}${String(hp).padStart(10)}          ${one == null ? '-' : `${k.mono.kind} ${pc(one).trim()} (${Math.round(one / ref * 100)}%)${one / ref >= 1 / TARGET ? '  ONE PLANT IS ENOUGH' : ''}`}`); }
   if (opt('--hp')) writeFileSync(opt('--hp'), JSON.stringify(hps));

@@ -138,6 +138,11 @@ const plans = [], of = []; targets.forEach((t) => plansOf(t.g).forEach((p, v) =>
 const first = rate(plans, 1);
 first.forEach((x, k) => log(`  plan of wave ${of[k].wave} #${of[k].g.m.toFixed(2)} (${of[k].order}): ${x.wins}/${NT} ${CLEAN ? 'clean' : 'won'}, fruit ${x.res.map((r) => r.won ? r.hp : `lost at wave ${r.wave}`).join(' / ')}`));
 let bi = first.reduce((b, x, k) => (x.f > first[b].f ? k : b), 0);
+// several plans do it as the bugs are: the one that holds the healthiest bugs is the start (step by step, those left)
+{ let left = first.map((x, k) => k).filter((k) => first[k].wins === NT), h = 1;
+  while (left.length > 1 && h < HI) { h *= 1.1; const rs = rate(left.map((k) => plans[k]), h), still = left.filter((_, q) => rs[q].wins === NT);
+    if (!still.length) { bi = left[rs.reduce((b, x, q) => (x.f > rs[b].f ? q : b), 0)]; break; } left = still; bi = left[0]; }
+  if (left.length) log(`  the start: plan of wave ${of[bi].wave} (${of[bi].order}), clean up to ×${h.toFixed(2)}`); }
 const seedPlan = plans[bi];
 
 // ---- 3. refined ----
@@ -198,7 +203,7 @@ if (CLEAN) {
 }
 
 // ---- 4. the margins ----
-const who = [['expert', EXPERT ? { ...base, policy: EXPERT } : null], ['smart bot', base], ['studio plan', { ...base, plan: seedPlan }], ['refined plan', { ...base, plan: best }], ...(mono ? [[`${mono.kind} alone`, { ...mono.opts, plan: mono.plan }]] : [])].filter((x) => x[1]);
+const who = [['expert', EXPERT ? { ...base, policy: EXPERT } : null], ['smart bot', base], ['studio plan', { ...base, plan: seedPlan }], ['refined plan', { ...base, plan: best }], ...(kept(level)?.plan ? [['kept plan', { ...base, plan: kept(level).plan }]] : []), ...(mono ? [[`${mono.kind} alone`, { ...mono.opts, plan: mono.plan }]] : [])].filter((x) => x[1]);
 const tasks = who.flatMap(([, o]) => DRAWS.map((w) => ({ opts: o, w })));
 const at1 = run(tasks);
 const ms = await margins(tasks.map((task, k) => ({ task, won: at1[k].won })), async (ts) => run(ts), { hi: HI });

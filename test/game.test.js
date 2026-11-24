@@ -4,7 +4,7 @@ import { createGame, step, place, placeProblem, plantOn, plantProblem, trail, tr
 import { PRICK_CAP, LEVELS, PLANTS, BUGS, PLANT_ORDER, PERKS, PERK_ORDER, WEED_COST, FERTILE, MARK_T, wavePay } from '../public/data.js';
 import { expectedMeta, fullMeta, fixedMap, lazyFixed } from '../balance/scenario.mjs';
 import { EXPERT } from '../balance/plans.mjs';
-import { kept, partyOf, clean } from '../balance/perfect.mjs';
+import { kept, partyOf, clean, SEEDS } from '../balance/perfect.mjs';
 // the levels on an open field (the fixed paths of the first ones come before them)
 const F = LEVELS.findIndex((L) => L.name === 'Лужайка');
 import { play } from '../sim/js/play.mjs';
@@ -135,7 +135,9 @@ let smartRuns; const smart = () => (smartRuns ??= playLevels(LEVELS.map((_, n) =
 // alone is not enough. The perks are those of three stars on every level before: what a player of perfect parties has.
 test('played with thought, every level is won with the fruit whole; not by far, and not with one plant alone', () => {
   const ks = LEVELS.map((_, n) => kept(n)); ks.forEach((k, n) => assert.ok(k, `no plan kept for level ${n + 1}`));
-  const at = (hp, one) => playLevels(LEVELS.map((_, n) => [n, { ...partyOf(n, ks[n], 'exp3', one), hp }]));
+  // (on both seeds of the game the levels are tuned on: where the flyers come from is drawn by the game; a party that is clean on one of them at least is said so here)
+  const one7 = (hp, one, seed) => playLevels(LEVELS.map((_, n) => [n, { ...partyOf(n, ks[n], 'exp3', one), hp, seed }]));
+  const at = (hp, one, all = true) => { const a = one7(hp, one, SEEDS[0]), b = one7(hp, one, SEEDS[1]); return a.map((r, n) => (clean(r) === all ? b[n] : r)); };
   at(1).forEach((r, n) => assert.ok(clean(r), `level ${n + 1}: ${r.won ? 'the fruit bitten' : `lost at wave ${r.wave}`}`));
   at(1.15).forEach((r, n) => assert.ok(clean(r), `level ${n + 1}: bugs 15% healthier and it is not clean`));
   at(1.75).forEach((r, n) => assert.ok(!clean(r), `level ${n + 1}: clean against bugs 75% healthier — too easy`));

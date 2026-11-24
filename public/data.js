@@ -284,8 +284,7 @@ export const LEVELS = [
     ],
     dew: 400, pay: [390, 690],
     plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
-    swell: [1, 1, 1.8, 1.7, 2.1, 2.2, 2.1, 2.5, 1.15, 1.8, 1.75, 1, 1.2, 2.5, 2.5, 1.75, 2.5, 2.05, 2.25, 2.5, 1.45, 2.5, 1.05, 1],
-    hp: .8, count: 24, budget: [5.9, 2.8], roster: [['ant', 1], ['snail', 2], ['aphid', 3], ['pillbug', 5], ['caterpillar', 7], ['cricket', 9], ['grasshopper', 12], ['beetle', 15]], boss: [[12, 'slugking', 1], [24, 'slugking', 1]],
+    hp: .8, count: 24, budget: [5.9, 2.8], roster: [['ant', 1], ['snail', 2], ['aphid', 3], ['pillbug', 5], ['butterfly', 6], ['caterpillar', 7], ['cricket', 9], ['grasshopper', 12], ['beetle', 15], ['wasp', 17]], boss: [[12, 'slugking', 1], [24, 'slugking', 1]],
   },
   {
     name: 'Пруд', theme: 'marsh', feature: 'water',
