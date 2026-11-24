@@ -4,7 +4,8 @@
 // the margins of a level are all over the place — the best garden holds one wave eight times over and another barely —
 // so one or two waves are all the difficulty of the level. Here every wave but the boss waves and the first two is
 // swelled or shrunk (the level's `swell`, public/data.js: a multiplier of the wave's budget) until its margin stands
-// in its place over the hardest boss wave of the level (B, the least margin of the boss waves):
+// in its place over the hardest boss wave of the level (B, the least margin of the boss waves; where the bosses are
+// easier than the waves, the middle wave as the first pass found it):
 //   a big wave (every fifth)   1.15 B        an ordinary wave   1.3 B        a breather (after a big one)   1.6 B
 // The engine keeps what it found from pass to pass (the gardens are played again on the new waves), so each pass
 // starts where the last one stood. A wave's margin answers its size a little less than in proportion; the step is
@@ -27,11 +28,14 @@ mkdirSync(dir, { recursive: true });
 for (const L of ranges(opt('--levels', '6'))) {
   let d = await eng.load({}); const lv = d.ui.levels[L], n = lv.waves.length;
   let swell = (lv.swell || Array(n).fill(1)).slice(); const set = {};
-  let prof = null, B = null;
+  let prof = null, B = null, mid = null;
   for (let it = 0; it <= ITERS; it++) {
     eng.caps(1e9, 0); eng.focus(L, null); await sleep(SECS * 1000);
     const rs = eng.level(L); prof = rs.map((r) => Math.min(INF, r.top[0]?.m ?? 0));
     B = Math.min(...rs.filter((r) => kindOf(lv, r.wave) === 'boss').map((r) => prof[r.wave - 1]));
+    // boss waves far easier than the waves around them are no measure of the level (a lone hornet over a grown garden):
+    // then the waves themselves are, by the middle one of them
+    { const xs = rs.filter((r) => PLACE[kindOf(lv, r.wave)] && kindOf(lv, r.wave) !== 'boss').map((r) => prof[r.wave - 1] / PLACE[kindOf(lv, r.wave)]).sort((a, b) => a - b); if (xs.length && it === 0) mid = xs[xs.length >> 1]; if (mid != null && mid < B) B = mid; }
     const off = rs.map((r) => { const k = kindOf(lv, r.wave); return k === 'boss' || k === 'first' ? 0 : Math.log(prof[r.wave - 1] / (PLACE[k] * B)); });
     process.stderr.write(`L${L + 1} pass ${it}: B ${fm(B)}; off its place by more than a quarter: ${off.filter((x) => Math.abs(x) > Math.log(1.25)).length} of ${n} waves; ${prof.map(fm).join(' ')}\n`);
     if (it === ITERS) break;
