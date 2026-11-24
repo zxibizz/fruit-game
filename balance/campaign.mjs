@@ -18,9 +18,9 @@
 // The expert's margin is what the matrix tunes the levels by; the plan's is what the studio's gardens are worth in a
 // party. A plan well above the expert: a stronger way to play the level than the matrix knows (the level is easier
 // than tuned for a player who finds it); below: the studio's meta of single waves does not carry over to the party.
-import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'node:fs';
+import { writeFileSync, readFileSync, existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { LEVELS, PLANTS, makeWaves } from '../public/data.js';
 import { exportData } from '../sim/js/export.mjs';
 import { play, build } from '../sim/js/play.mjs';
@@ -122,6 +122,14 @@ const TRIALS = CLEAN ? SEEDS.map((seed) => ({ w: 0, seed })) : [{ w: 0 }, { w: 1
 const rate = (plans, h, o = base) => { const res = run(plans.flatMap((plan) => TRIALS.map((t) => ({ w: t.w, opts: { ...o, plan, hp: Math.round(h * 1000) / 1000, ...(t.seed ? { seed: t.seed } : {}) } }))));
   return plans.map((_, k) => { const xs = res.slice(k * NT, (k + 1) * NT); return { f: xs.reduce((t, r) => t + score(r), 0), wins: xs.filter(ok).length, res: xs }; }); };
 const plans = [], of = []; targets.forEach((t) => plansOf(t.g).forEach((p, v) => { plans.push(p); of.push({ ...t, order: v ? 'walls first' : 'by wave' }); }));
+// the parties of the bots themselves, as plans: where a bot does better than any garden of the studio laid out as a
+// plan, the search starts from its party
+{ const dir = mkdtempSync(join(tmpdir(), 'fruit-campaign-'));
+  for (const [name, o] of [['the expert', EXPERT ? { ...base, policy: EXPERT } : null], ['the smart bot', base]]) { if (!o) continue;
+    const file = join(dir, 'ops.json'); play([{ level, opts: o, record: file }], { ...jobs, bin: BIN, data: datas[0] });
+    plans.push(JSON.parse(readFileSync(file, 'utf8')).filter((x) => x[0] === 'place' || x[0] === 'up').map((x) => (x[0] === 'up' ? (x[3] ? ['up', x[1], x[2], x[3]] : ['up', x[1], x[2]]) : [x[1], x[2], x[3]])));
+    of.push({ wave: 0, g: { m: 0 }, order: `the party of ${name}` }); }
+  rmSync(dir, { recursive: true }); }
 const first = rate(plans, 1);
 first.forEach((x, k) => log(`  plan of wave ${of[k].wave} #${of[k].g.m.toFixed(2)} (${of[k].order}): ${x.wins}/${NT} ${CLEAN ? 'clean' : 'won'}, fruit ${x.res.map((r) => r.won ? r.hp : `lost at wave ${r.wave}`).join(' / ')}`));
 let bi = first.reduce((b, x, k) => (x.f > first[b].f ? k : b), 0);
