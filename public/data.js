@@ -197,8 +197,8 @@ export const LEVELS = [
     ],
     dew: 200, pay: [130, 240],
     plants: ['rose', 'pepper'],
-    swell: [1, 1, 4, 4, 4, 4, 4, 4, 4, 2, 1.55, 5],
-    hp: .4, count: 12, budget: [1.1, .7], roster: [['ant', 1], ['aphid', 4], ['grasshopper', 8]], boss: [[12, 'queen', 1]],
+    swell: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2],
+    hp: .37, count: 12, budget: [3.3, 2.1], roster: [['ant', 1], ['aphid', 2], ['grasshopper', 8]], boss: [[12, 'queen', 1]],
   },
   {
     name: 'Грядки', theme: 'forest',
@@ -215,7 +215,7 @@ export const LEVELS = [
     dew: 240, pay: [170, 320],
     plants: ['pumpkin', 'rose', 'pepper'],
     swell: [1, 1, 4, 4, 4, 3.2, 3.8, 3.45, 1.55, 1.55, 2.15, 3],
-    hp: .6, count: 12, budget: [3.6, 2.1], roster: [['ant', 1], ['aphid', 2], ['caterpillar', 5], ['grasshopper', 8]], boss: [[12, 'queen', 1]],
+    hp: .58, count: 12, budget: [3.6, 2.1], roster: [['ant', 1], ['aphid', 2], ['caterpillar', 5], ['grasshopper', 8]], boss: [[12, 'queen', 1]],
   },
   {
     name: 'Развилка', theme: 'orchard', feature: 'fork',
@@ -248,8 +248,7 @@ export const LEVELS = [
     ],
     dew: 320, pay: [250, 500],
     plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
-    swell: [1, 1, 2.25, 1.7, 1.15, 1.15, 1.4, 1.8, 2.55, 2.45, 2.2, 4, 1.5, 4, 4, 4, 3.9, 1],
-    hp: .6, count: 18, budget: [5.6, 3.2], roster: [['ant', 1], ['snail', 3], ['beetle', 4], ['caterpillar', 6], ['pillbug', 9], ['cricket', 12]], boss: [[18, 'slugking', 2]],
+    hp: .51, count: 18, budget: [5.6, 3.2], roster: [['ant', 1], ['snail', 3], ['beetle', 4], ['caterpillar', 6], ['butterfly', 8], ['pillbug', 9], ['cricket', 12]], boss: [[18, 'slugking', 1]],
   },
   {
     name: 'Большая поляна', theme: 'sunset',
