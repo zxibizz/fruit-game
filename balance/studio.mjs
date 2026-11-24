@@ -24,7 +24,7 @@ const PORT = Number(opt('--port', 8737)), JOBS = Number(opt('--jobs', Math.max(1
 
 // ---- state ----
 const S = {
-  overrides: {}, config: { meta: 'exp2', tol: 0, early: false }, focus: { level: 5, wave: null }, caps: { focus: 20000, other: 1500 },
+  overrides: {}, config: { meta: 'exp3', tol: 0, early: false }, focus: { level: 3, wave: null }, caps: { focus: 20000, other: 1500 },
   ui: null, errors: [], engine: 'starting', buildLog: '', status: null, gen: 0,
   waves: {}, // "level:wave" → the engine's last report of that wave
   baseline: null, // { label, at, overrides, waves: { "level:wave": summary } }

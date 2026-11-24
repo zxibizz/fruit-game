@@ -1,5 +1,5 @@
 // The game data for the balance studio (balance/studio.mjs), counted in a process of its own so that every set of
-// overrides starts from public/data.js as it is on disk: stdin { set: { key: value }, meta: 'exp2' }, stdout
+// overrides starts from public/data.js as it is on disk: stdin { set: { key: value }, meta: 'exp3' }, stdout
 // { data (for fruit-sim, sim/js/export.mjs), meta (the perks of every level, [[perk, tier]]), ui (what the page shows
 // and edits) }. The keys of `set` are those of balance/run.mjs --set (balance/scenario.mjs applyOverrides), and
 // L<n>.map: the field of a level as its 8 rows of 14 characters (public/data.js has the legend).
@@ -8,7 +8,7 @@ import { LEVELS, PLANTS, BUGS, TUNE, PLANT_ORDER, FRUIT_HP, BREAK, EARLY_DEW, FL
 import { applyOverrides, metaOf } from './scenario.mjs';
 import { exportData } from '../sim/js/export.mjs';
 
-const { set = {}, meta = 'exp2' } = JSON.parse(readFileSync(0, 'utf8') || '{}');
+const { set = {}, meta = 'exp3' } = JSON.parse(readFileSync(0, 'utf8') || '{}');
 const errors = [];
 // one key at a time, so that a bad one is said and the others still count
 for (const [k, v] of Object.entries(set)) {

@@ -127,10 +127,14 @@ const load = (k, d) => { try { return Object.assign(d, JSON.parse(localStorage.g
 const progress = load('fruit.progress', { stars: [], perks: {}, bugs: {}, cards: {} });
 // v2: five levels came before «Лужайка» (0.27.0): the stars of the levels a player had move on by five
 if (!progress.v) { if (progress.stars.length) progress.stars = [0, 0, 0, 0, 0, ...progress.stars]; progress.v = 2; localStorage.setItem('fruit.progress', JSON.stringify(progress)); localStorage.removeItem('fruit.save'); } // (a level left unfinished had the old numbers: dropped, as its save version is anyway)
+// v3: the first two levels («Тропинка», «Грядки») were taken out (0.29.0): the stars of the others move back by two
+if (progress.v === 2) { progress.stars = progress.stars.slice(2); progress.v = 3; localStorage.setItem('fruit.progress', JSON.stringify(progress)); localStorage.removeItem('fruit.save'); }
 const saveProgress = () => localStorage.setItem('fruit.progress', JSON.stringify(progress));
 const audio = load('fruit.audio', { vol: .6, music: .35 });
 const starsAll = () => progress.stars.reduce((a, b) => a + (b || 0), 0);
 const starsSpent = () => PERK_ORDER.reduce((a, k) => a + PERKS[k].cost.slice(0, progress.perks[k] || 0).reduce((x, y) => x + y, 0), 0);
+// (the stars of the two levels taken out went with them: perks bought for more stars than there are now are all given back to be dealt again)
+if (starsSpent() > starsAll()) { progress.perks = {}; saveProgress(); }
 // open: the first, one after a level won, and every level before a level won (the levels put in before the old ones)
 const levelOpen = (n) => n === 0 || (progress.stars[n - 1] || 0) > 0 || progress.stars.slice(n).some((s) => s > 0) || new URLSearchParams(location.search).has('all');
 const plantOpen = (type) => LEVELS.some((L, n) => levelOpen(n) && L.plants.includes(type));

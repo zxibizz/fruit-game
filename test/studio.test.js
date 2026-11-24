@@ -12,7 +12,7 @@ const data = (set = {}) => JSON.parse(execFileSync(process.execPath, [fileURLToP
 
 test('the studio finds gardens within the dew of a wave and plays them again on new data', { timeout: 60000 }, async () => {
   const bin = build(), p = spawn(bin, ['studio', '--jobs', '2']), say = (o) => p.stdin.write(JSON.stringify(o) + '\n');
-  const L = 3, W = 6; // «Поляна»: a meadow to build a maze on and a path around it
+  const L = 1, W = 6; // «Поляна»: a meadow to build a maze on and a path around it
   try {
     let d = data(); assert.deepEqual(d.errors, []);
     say({ cmd: 'data', data: d.data, meta: d.meta, tol: 0 }); say({ cmd: 'cap', focus: 400, other: 0 }); say({ cmd: 'focus', level: L, wave: W });

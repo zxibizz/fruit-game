@@ -22,9 +22,7 @@ export function levelDew(level, meta = {}) {
 // A level with no maze to build (a stone path; a grass cell or two at most): the players play the path as it is, and
 // a lazy garden is one kind of plant on every bed, never grown to a branch.
 export const fixedMap = (n) => LEVELS[n].map.join('').split('.').length - 1 < 6;
-// (on the first two levels — three plants, two branches — a garden of one plant is a fair way to begin, not a lazy one:
-// the rule starts on the third)
-export const lazyFixed = (n) => (n >= 2 ? LEVELS[n].plants.map((k) => [`lazy all ${k}`, { route: 0, meta: 'exp3', plants: [k], top: 2 }]) : []);
+export const lazyFixed = (n) => LEVELS[n].plants.map((k) => [`lazy all ${k}`, { route: 0, meta: 'exp3', plants: [k], top: 2 }]);
 // meta: 'none' | 'exp1' | 'exp2' (two stars a level before this one) | 'full' | 'perk:<key>' (that perk only, maxed)
 export function metaOf(name, level) {
   if (!name || name === 'none') return {};
