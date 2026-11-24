@@ -33,9 +33,12 @@ const measure = (plan, kind) => { const t = [party(plan, kind)]; return { clean:
 
 log(`L${level + 1} ${LEVELS[level].name}: the best perfect party, ${RUNS} run(s) of ${SECS} s at most (stopping ${STALL} s after the last rise), the perks ${META}`);
 const runs = [];
-// --from FILE: the best party of an earlier report (--out) is a start too (the search gets there at once)
-const FROM = opt('--from') && existsSync(opt('--from')) ? JSON.parse(readFileSync(opt('--from'), 'utf8')).plan : null;
-for (let n = 1; n <= RUNS; n++) { log(` run ${n}`); runs.push(search({ level, opts: base, plans: [...(kept?.plan ? [kept.plan] : []), ...(FROM ? [FROM] : [])], bots, secs: SECS, stall: STALL, rng: n + Number(opt('--rng', 0)), check: args.includes('--check'), data }, how)); }
+// --from FILE: an earlier report (--out) is a start: the best party of every make it found (not the best alone: after a
+// change of the game another make may be the best, and it starts where it was), and for every branch taken out the
+// best party found without it. Whether this finds what a search from nothing finds is asked by --cold (none of it).
+const FROM = opt('--from') && existsSync(opt('--from')) && !args.includes('--cold') ? JSON.parse(readFileSync(opt('--from'), 'utf8')) : null;
+const FROM_PLANS = FROM ? [FROM.plan, ...(FROM.archive || []).slice(0, 40).map((e) => e.plan)] : [];
+for (let n = 1; n <= RUNS; n++) { log(` run ${n}`); runs.push(search({ level, opts: base, plans: [...(kept?.plan ? [kept.plan] : []), ...FROM_PLANS], bots, secs: SECS, stall: STALL, rng: n + Number(opt('--rng', 0)), check: args.includes('--check'), data }, how)); }
 const best = runs.reduce((a, b) => (b.margin > a.margin ? b : a)), m = measure(best.plan);
 let one = null;
 if (args.includes('--mono')) {
@@ -69,11 +72,11 @@ const as = (plan, k, to) => plan.map((s) => (s[0] === k ? [to, s[1], s[2]] : s))
 const jobs = how.jobs || PAR, top = Math.max(0, Math.round(Math.log(Math.max(m.clean.margin, .75)) / Math.log(1.05)) + 2);
 const without = NOT ? [] : await pool(open.filter((f) => !ONLY || ONLY.includes(f)), jobs, async (f) => { const d = gone(f), [k, b] = f.split('.');
   const none = (x) => (b ? [f] : [k, k + '.a', k + '.b']).every((g) => !x.mix[g]);
-  const starts = [best.plan, ...[...arch.filter(none).slice(0, 3), ...arch.filter((x) => lacks(x, f) && !none(x)).slice(0, 1)].map((x) => x.plan), ...(b ? [] : LEVELS[level].plants.filter((x) => x !== k).map((x) => as(best.plan, k, x)))];
+  const starts = [best.plan, ...(FROM?.without?.find((w) => w.f === f)?.plan ? [FROM.without.find((w) => w.f === f).plan] : []), ...[...arch.filter(none).slice(0, 3), ...arch.filter((x) => lacks(x, f) && !none(x)).slice(0, 1)].map((x) => x.plan), ...(b ? [] : LEVELS[level].plants.filter((x) => x !== k).map((x) => as(best.plan, k, x)))];
   const r = await searchAsync({ level, opts: base, plans: starts, bots, secs: BSECS, stall: BSTALL, goal: best.margin, data: d }, { bin: how.bin, jobs: 1 });
   const s = r.plan?.length ? scan([party(r.plan)], { data: d, to: top, bin: how.bin, jobs: 1, quiet: true })[0].margin : 0, margin = Math.min(s, m.clean.margin);
   log(`  without ${f}: ${pc(margin)} (${r.tried} tried)`);
-  return { f, margin, cost: 1 - margin / m.clean.margin, tried: r.tried }; });
+  return { f, margin, cost: 1 - margin / m.clean.margin, tried: r.tried, plan: r.plan }; });
 console.log(`L${level + 1} ${LEVELS[level].name} (hp ${LEVELS[level].hp}, the perks ${META})`);
 console.log(`  the runs ended on ${runs.map((r) => pc(r.margin)).join(', ')} (${runs.map((r) => r.tried).join(', ')} parties tried)${Math.max(...runs.map((r) => r.margin)) / Math.min(...runs.map((r) => r.margin)) <= 1.06 ? ': they agree' : ': THEY DO NOT AGREE — the search has not settled'}`);
 console.log(`  the best, on ${m.clean.seeds} seed(s): the fruit whole against bugs ${pc(m.clean.margin)}; three stars ${pc(m.stars.margin)}; won ${pc(m.won.margin)}${m.won.open ? '+' : ''}`);
@@ -96,7 +99,7 @@ if (without.length) {
 if (one) console.log(`  one plant alone: ${one.kind} ${pc(one.margin)} — ${Math.round(one.margin / m.clean.margin * 100)}% of the best`);
 const hp = m.clean.margin > 0 ? Math.round(LEVELS[level].hp * m.clean.margin / TARGET * 100) / 100 : null;
 console.log(`  for a garden of ${Math.round(100 / TARGET)}% of its strength to be the least that keeps the fruit whole: L${level + 1}.hp ${LEVELS[level].hp} → ${hp}`);
-const res = { level: level + 1, meta: META, secs: SECS, runs: runs.map((r) => ({ margin: r.margin, tried: r.tried, parties: r.parties, wavesSaved: r.waves_saved, history: r.history })), plan: best.plan, clean: m.clean, stars: m.stars.margin, won: m.won.margin, mono: one, unlike: unlike.map((e) => ({ margin: e.margin, scanned: e.scanned ?? null, mix: e.mix })), without, makes: arch.length, hp: { now: LEVELS[level].hp, suggested: hp } };
+const res = { level: level + 1, meta: META, secs: SECS, runs: runs.map((r) => ({ margin: r.margin, tried: r.tried, parties: r.parties, wavesSaved: r.waves_saved, history: r.history })), plan: best.plan, clean: m.clean, stars: m.stars.margin, won: m.won.margin, mono: one, unlike: unlike.map((e) => ({ margin: e.margin, scanned: e.scanned ?? null, mix: e.mix })), without, makes: arch.length, archive: arch.slice(0, 60).map((e) => ({ margin: e.margin, mix: e.mix, plan: e.plan })), hp: { now: LEVELS[level].hp, suggested: hp } };
 if (opt('--out')) { mkdirSync(dirname(opt('--out')), { recursive: true }); writeFileSync(opt('--out'), JSON.stringify(res)); }
 if (args.includes('--keep')) {
   const was = kept?.plan ? scan([party(kept.plan)], { data, ...how, quiet: true })[0].margin : -1, mono = one && (!kept?.mono || one.margin >= scan([party(kept.mono.plan, kept.mono.kind)], { data, ...how, quiet: true })[0].margin) ? { kind: one.kind, plan: one.plan } : kept?.mono ?? null;
