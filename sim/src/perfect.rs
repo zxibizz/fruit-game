@@ -267,8 +267,9 @@ fn holds_below(cx: &Ctx, plan: &[Step], top: i32) -> bool {
     (K_FLOOR..=top).rev().all(|k| if k > top - 4 { cx.all_clean(plan, k) } else { let s = cx.seeds[(k - K_MIN) as usize % cx.seeds.len()]; cx.clean_on(plan, k, &[s]) })
 }
 
-// secs: the most it runs; stall: it stops once the champion has not risen for so long (and at least a fifth of secs is gone)
-pub fn search(cx: &Ctx, seeds_plans: Vec<Vec<Step>>, secs: f64, stall: f64, jobs: usize, rng_seed: u64, log: &(dyn Fn(String) + Sync)) -> (Vec<Step>, i32, Vec<(f64, i32)>, u64) {
+// secs: the most it runs; stall: it stops once the champion has not risen for so long; goal: and once it holds that rung
+// (the question was whether a party as good as that is there)
+pub fn search(cx: &Ctx, seeds_plans: Vec<Vec<Step>>, secs: f64, stall: f64, goal: i32, jobs: usize, rng_seed: u64, log: &(dyn Fn(String) + Sync)) -> (Vec<Step>, i32, Vec<(f64, i32)>, u64) {
     let t0 = Instant::now();
     // where every party given stands; the best of them is the first champion
     let mut starts: Vec<(Vec<Step>, i32)> = std::thread::scope(|sc| {
@@ -286,7 +287,7 @@ pub fn search(cx: &Ctx, seeds_plans: Vec<Vec<Step>>, secs: f64, stall: f64, jobs
         loop {
             let el = t0.elapsed().as_secs_f64(); if el >= secs { break; }
             let (parent, pruns, other, target) = { let s = st.lock().unwrap();
-                if el - s.last >= stall && el >= secs / 5.0 { break; }
+                if s.front >= goal || (el - s.last >= stall && el >= (secs / 5.0).min(stall)) { break; }
                 let pick = |r: &mut Rng| -> (Vec<Step>, Runs) { let e = if s.pop.is_empty() || r.f() < 0.55 { &s.champ } else { let top = 1 + r.n(s.pop.len()); let q = r.n(top); &s.pop[q] }; (e.plan.clone(), e.runs.clone()) };
                 let (p, pr) = pick(&mut r); (p, pr, pick(&mut r).0, (s.front + 1).min(K_MAX)) };
             // one change (now and then two or three on top of each other); the party goes on from the parent's as far as the plans agree
@@ -339,9 +340,9 @@ pub fn perfect(j: &J, jobs: usize) {
         let (_, ops) = cx.party(None, &o, 0, cx.seeds[0], f64::INFINITY, true); plans.push(steps_of_ops(&ops.unwrap())); } }
     if let Some(k) = only { for p in plans.iter_mut() { p.retain(|s| s.0.map_or(true, |x| x == k)); } }
     plans.retain(|p| !p.is_empty()); if plans.is_empty() { plans.push(Vec::new()); }
-    let secs = j.get("secs").map_or(60.0, |v| v.num()); let stall = j.get("stall").map_or(f64::INFINITY, |v| v.num()); let rng = j.get("rng").map_or(1.0, |v| v.num()) as u64;
+    let secs = j.get("secs").map_or(60.0, |v| v.num()); let stall = j.get("stall").map_or(f64::INFINITY, |v| v.num()); let goal = j.get("goal").filter(|v| **v != J::Null).map_or(i32::MAX, |v| (v.num().max(0.01).ln() / STEP.ln()).round() as i32); let rng = j.get("rng").map_or(1.0, |v| v.num()) as u64;
     let log = |s: String| eprintln!("  {}", s);
-    let (plan, k, history, tried) = search(&cx, plans, secs, stall, jobs, rng, &log);
+    let (plan, k, history, tried) = search(&cx, plans, secs, stall, goal, jobs, rng, &log);
     println!("{{\"plan\":{},\"k\":{},\"margin\":{},\"history\":[{}],\"tried\":{},\"parties\":{},\"waves_saved\":{},\"seeds\":{}}}", plan_json(&cx.d, &plan), k, if k < K_MIN { 0.0 } else { rung(k) },
         history.iter().map(|h| format!("[{:.0},{}]", h.0, if h.1 < K_MIN { 0.0 } else { rung(h.1) })).collect::<Vec<_>>().join(","), tried, cx.parties.load(Ordering::Relaxed), cx.saved.load(Ordering::Relaxed), cx.seeds.len());
 }

@@ -1,9 +1,10 @@
-// How interesting a level is to play well: node balance/interest.mjs [--levels 1-12] [--secs 90] [--out DIR] [--jobs N]
+// How interesting a level is to play well: node balance/interest.mjs [--levels 1-12] [--secs 40] [--stall 12] [--out DIR] [--jobs N]
 // A level tuned by the health of its bugs alone is hard or easy, not interesting. What makes it interesting is asked of
 // its best party (balance/perfect/L<n>.json, found by balance/party.mjs), each answer a number:
 //   what it is made of      the dew spent on every plant and branch of the garden it ends with;
 //   what it cannot do without   the best party found with a plant or a branch taken out of the game (the party kept
-//       played without it; where that costs more than a rung, a search from it for --secs), against the best with
+//       played without it; where that costs more than a rung, a search from it: --secs at most, till --stall seconds
+//       pass with no better party, or one as good as the best is found), against the best with
 //       everything: a branch that costs nothing to lose is not needed on the level, one that costs a third and more is
 //       the only way to play it, and the ones between are choices;
 //   whether the dew is short    the same with a fifth less dew (at the start and for every wave): where that costs
@@ -22,7 +23,7 @@ import { EXPERT } from './plans.mjs';
 import { scan, search } from './scan.mjs';
 
 const args = process.argv.slice(2), opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
-const SECS = Number(opt('--secs', 90)), dir = opt('--out', join(homedir(), 'tmp', 'balance', 'interest'));
+const SECS = Number(opt('--secs', 40)), STALL = Number(opt('--stall', 12)), dir = opt('--out', join(homedir(), 'tmp', 'balance', 'interest'));
 const ranges = (s) => s.split(',').flatMap((p) => { const [a, b] = p.split('-').map(Number); return Array.from({ length: (b || a) - a + 1 }, (_, k) => a + k - 1); });
 const how = { bin: build(), quiet: true, ...(opt('--jobs') ? { jobs: Number(opt('--jobs')) } : {}) };
 const RU = { pumpkin: 'Тыква', rose: 'Роза', pepper: 'Чили', mint: 'Мята', flytrap: 'Мухоловка' };
@@ -42,7 +43,7 @@ for (const n of ranges(opt('--levels', `1-${LEVELS.length}`))) {
   const data0 = exportData(), M = scan(party(kept.plan), { data: data0, ...how })[0].margin, top = Math.max(0, Math.round(Math.log(Math.max(M, .75)) / Math.log(1.05)) + 1);
   // the best party found on a changed game: the kept one as it plays there, and a search from it where that is not enough
   const without = (data) => { const m0 = scan(party(kept.plan), { data, to: top, ...how })[0].margin; if (m0 >= M / 1.06) return { m: Math.min(m0, M), searched: false };
-    const r = search({ level: n, opts: base, plans: [kept.plan], bots, secs: SECS, data }, how); return { m: Math.max(m0, scan(party(r.plan), { data, to: top + 2, ...how })[0].margin), searched: true }; };
+    const r = search({ level: n, opts: base, plans: [kept.plan], bots, secs: SECS, stall: STALL, goal: M, data }, how); return { m: Math.max(m0, scan(party(r.plan), { data, to: top + 2, ...how })[0].margin), searched: true }; };
   // the garden the party ends with: the dew on every family
   const tmp = mkdtempSync(join(tmpdir(), 'interest-')), rec = join(tmp, 'p.json'); play([{ level: n, opts: { ...base, plan: kept.plan, seed: 7 }, record: rec }], { bin: how.bin, data: data0 });
   const cells = new Map();

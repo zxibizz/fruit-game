@@ -54,7 +54,7 @@ export const PLANTS = {
   //   such a hit, bosses take it whole); stack (top) — every next hit on the same bug that much harder, up to twice.
   mint: { cost: 35, up: [80], hp: [60, 80], range: [1.5, 1.6], rate: [.9, 1], dmg: [9, 12], frost: [.3, .4], frostT: 1.5, air: 1, shot: 'icicle', speed: 8,
     a: { from: 1, up: [130, 220], hp: [80, 100], range: [2, 2.2], slow: .5, rime: [0, 5], air: 1 },
-    b: { from: 2, up: [130, 220], hp: [80, 100], range: 1.6, rate: [.4, .45], dmg: [120, 160], frost: .15, frostT: .6, heavy: 1, stack: [0, .25], shot: 'icicleBig', speed: 7 } },
+    b: { from: 2, up: [130, 220], hp: [80, 100], range: 1.6, rate: [.4, .45], dmg: [120, 160], frost: .15, frostT: .6, heavy: 1, air: 1, stack: [0, .25], shot: 'icicleBig', speed: 7 } },
   // Finishing off. Every `eat` seconds swallows whole a walker (not a boss) with no more than `gulp` of its full health
   // left; a healthier bug it does not touch at all: its job is to make sure, not to deal damage.
   // a, Glutton: weaker bugs too and quicker; heads (top) — two at once.
@@ -138,7 +138,7 @@ export const BUGS = {
   ant: { hp: 12, speed: 1.0, bite: 1, reward: 2, w: 1 },
   aphid: { hp: 6, speed: 1.25, bite: 1, reward: 1, w: .5 },
   beetle: { hp: 44, armor: 2, speed: .7, bite: 2, reward: 5, w: 5 },
-  caterpillar: { hp: 34, speed: .65, bite: 2, reward: 5, chew: 7, w: 4 }, // (4 till 0.31: no garden needed its walls guarded, and the shell pumpkin was in no best party)
+  caterpillar: { hp: 34, speed: .65, bite: 2, reward: 5, chew: 12, w: 4 }, // (4 till 0.31: no garden needed its walls guarded, and the shell pumpkin was in no best party)
   grasshopper: { hp: 18, speed: 1.7, bite: 1, reward: 3, w: 1.6 },
   snail: { hp: 70, speed: .42, bite: 2, reward: 8, noSlow: true, w: 8 },
   pillbug: { hp: 32, armor: 5, speed: .6, bite: 2, reward: 7, w: 6 },

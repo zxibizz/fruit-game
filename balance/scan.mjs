@@ -9,7 +9,7 @@
 //     failure are not played unless `full`
 //   what: 'clean' (won, the fruit never bitten), 'stars' (won with three stars: 80% of the fruit left), 'won'
 //   search(request) → { plan, margin, history, tried, parties }: the best perfect party found (perfect.rs has how); it
-//     runs `secs` at most and stops once its champion has not risen for `stall` seconds
+//     runs `secs` at most and stops once its champion has not risen for `stall` seconds, or holds bugs `goal` times healthier
 import { execFileSync, spawnSync } from 'node:child_process';
 import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { availableParallelism, tmpdir } from 'node:os';
@@ -36,6 +36,6 @@ function call(cmd, body, { bin = null, jobs = JOBS, quiet = false } = {}) {
 export function scan(tasks, { seeds = SEEDS, from = -6, to = 14, what = 'clean', full = false, data = exportData(), ...how } = {}) {
   return call('scan', { data, tasks: tasks.map((t) => ({ level: t.level, opts: withTrust(t.opts, data) })), seeds, from, to, what, full }, how);
 }
-export function search({ level, opts, plans = [], bots = [], seeds = SEARCH_SEEDS, secs = 120, stall = 45, only = null, rng = 1, check = false, data = exportData() }, how = {}) {
-  return call('perfect', { data, level, opts: withTrust(opts, data), plans, bots: bots.map((o) => withTrust(o, data)), seeds, secs, stall, only, rng, check }, how);
+export function search({ level, opts, plans = [], bots = [], seeds = SEARCH_SEEDS, secs = 120, stall = 45, goal = null, only = null, rng = 1, check = false, data = exportData() }, how = {}) {
+  return call('perfect', { data, level, opts: withTrust(opts, data), plans, bots: bots.map((o) => withTrust(o, data)), seeds, secs, stall, goal, only, rng, check }, how);
 }
