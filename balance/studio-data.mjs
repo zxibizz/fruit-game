@@ -37,7 +37,7 @@ function readMap(L) {
 let data;
 try { data = exportData(); } catch (e) { errors.push(String(e.message || e)); }
 const ui = {
-  levels: LEVELS.map((L, n) => ({ n, name: L.name, map: L.map, plants: L.plants, count: L.count, dew: L.dew, pay: L.pay, hp: L.hp, budget: L.budget, roster: L.roster, boss: L.boss, waves: L.waves, feature: L.feature ?? null })),
+  levels: LEVELS.map((L, n) => ({ n, name: L.name, map: L.map, plants: L.plants, count: L.count, dew: L.dew, pay: L.pay, hp: L.hp, budget: L.budget, roster: L.roster, boss: L.boss, swell: L.swell ?? null, waves: L.waves, feature: L.feature ?? null })),
   PLANTS, BUGS, TUNE, PLANT_ORDER, C: { FRUIT_HP, BREAK, EARLY_DEW, FLY_HP, CHEW_GROWTH, MARK_T, GUARD_R, THORN_BOSS, FERTILE, MUD, NETTLE },
 };
 process.stdout.write(JSON.stringify({ data, meta: LEVELS.map((_, n) => Object.entries(metaOf(meta, n))), ui, errors }));

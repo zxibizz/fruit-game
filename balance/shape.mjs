@@ -1,0 +1,45 @@
+// The shape of a level: how big each of its waves should be for every wave to ask its share of the best garden.
+//   node balance/shape.mjs --levels 6,8-9 [--secs 60] [--iters 3] [--out DIR] [--jobs N]
+// The studio (sim/src/studio.rs) says how well the best garden of every wave holds it (its margin). Left to the draw,
+// the margins of a level are all over the place — the best garden holds one wave eight times over and another barely —
+// so one or two waves are all the difficulty of the level. Here every wave but the boss waves and the first two is
+// swelled or shrunk (the level's `swell`, public/data.js: a multiplier of the wave's budget) until its margin stands
+// in its place over the hardest boss wave of the level (B, the least margin of the boss waves):
+//   a big wave (every fifth)   1.15 B        an ordinary wave   1.3 B        a breather (after a big one)   1.6 B
+// The engine keeps what it found from pass to pass (the gardens are played again on the new waves), so each pass
+// starts where the last one stood. A wave's margin answers its size a little less than in proportion; the step is
+// damped and a pass changes a wave by no more than 1.6 times. What it prints is the line for public/data.js.
+// The health of the bugs of the level (hp) is not touched here: balance/campaign.mjs --clean sets it by a whole party.
+import { writeFileSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { Engine, sleep, INF } from './studio-engine.mjs';
+
+const args = process.argv.slice(2), opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
+const SECS = Number(opt('--secs', 60)), ITERS = Number(opt('--iters', 3)), dir = opt('--out', join(homedir(), 'tmp', 'balance', 'shape'));
+const ranges = (s) => s.split(',').flatMap((p) => { const [a, b] = p.split('-').map(Number); return Array.from({ length: (b || a) - a + 1 }, (_, k) => a + k - 1); });
+export const PLACE = { boss: 1, big: 1.15, usual: 1.3, breather: 1.6 };
+const kindOf = (lv, w) => (lv.boss.some(([at]) => at === w) ? 'boss' : w <= 2 ? 'first' : w % 5 === 0 ? 'big' : w % 5 === 1 ? 'breather' : 'usual');
+const fm = (m) => (m >= INF ? '∞' : m.toFixed(2));
+
+const eng = new Engine({ jobs: opt('--jobs') ? Number(opt('--jobs')) : undefined });
+mkdirSync(dir, { recursive: true });
+for (const L of ranges(opt('--levels', '6'))) {
+  let d = await eng.load({}); const lv = d.ui.levels[L], n = lv.waves.length;
+  let swell = (lv.swell || Array(n).fill(1)).slice(); const set = {};
+  let prof = null, B = null;
+  for (let it = 0; it <= ITERS; it++) {
+    eng.caps(1e9, 0); eng.focus(L, null); await sleep(SECS * 1000);
+    const rs = eng.level(L); prof = rs.map((r) => Math.min(INF, r.top[0]?.m ?? 0));
+    B = Math.min(...rs.filter((r) => kindOf(lv, r.wave) === 'boss').map((r) => prof[r.wave - 1]));
+    const off = rs.map((r) => { const k = kindOf(lv, r.wave); return k === 'boss' || k === 'first' ? 0 : Math.log(prof[r.wave - 1] / (PLACE[k] * B)); });
+    process.stderr.write(`L${L + 1} pass ${it}: B ${fm(B)}; off its place by more than a quarter: ${off.filter((x) => Math.abs(x) > Math.log(1.25)).length} of ${n} waves; ${prof.map(fm).join(' ')}\n`);
+    if (it === ITERS) break;
+    swell = swell.map((s, k) => { const x = off[k]; if (Math.abs(x) < 0.1) return s; const f = Math.max(1 / 1.6, Math.min(1.6, Math.exp(0.8 * x))); return Math.round(Math.max(0.3, Math.min(4, s * f)) * 20) / 20; });
+    set[`L${L + 1}.swell`] = swell; d = await eng.load({ set });
+  }
+  console.log(`L${L + 1} ${lv.name}: B ${fm(B)}\n    swell: [${swell.join(', ')}],`);
+  console.log('    ' + prof.map((m, k) => `${k + 1}:${fm(m / B)}${{ boss: 'B', big: '!', breather: '~', first: '', usual: '' }[kindOf(lv, k + 1)]}`).join(' '));
+  writeFileSync(join(dir, `L${L + 1}.json`), JSON.stringify({ level: L + 1, swell, B, profile: prof }));
+}
+eng.stop();

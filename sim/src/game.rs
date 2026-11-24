@@ -35,7 +35,7 @@ pub struct Bug {
     pub x: f64, pub y: f64, pub slow: f64, pub frozen: f64, pub burn: f64, pub burn_dps: f64, pub chew: f64, pub thaw: f64, pub chew_cd: f64,
     pub chew_target: Option<u32>, pub gnaw: Option<u32>, pub gnaw_t: f64, pub dir: (i32, i32), pub has_t: bool, pub ti: i32, pub tj: i32,
     pub skill: f64, pub rush: f64, pub brood: bool, pub e: usize, pub mark: f64, pub mark_v: f64, pub coming: f64, pub gone: bool,
-    pub slow_t: f64, pub slow_v: f64, pub melt: f64, pub spread: bool, pub chain: f64, pub lured: bool, pub lure: Option<u32>, pub sniff: f64, pub fall: f64,
+    pub slow_t: f64, pub slow_v: f64, pub melt: f64, pub spread: bool, pub chain: f64, pub lured: bool, pub lure: Option<u32>, pub sniff: f64, pub fall: f64, pub pricked: f64,
 }
 #[derive(Clone, Debug)]
 pub struct Shot { pub id: u32, pub x: f64, pub y: f64, pub target: u32, pub tx: f64, pub ty: f64, pub speed: f64, pub dmg: f64, pub est: f64, pub splash: f64, pub hits: usize, pub mark: f64, pub chain: f64,
@@ -350,7 +350,7 @@ impl<'a> Game<'a> {
             id, kind, hp, max_hp: hp, speed: bd.speed, fly: bd.fly, armor: bd.armor, x: COLS as f64 + 0.6, y: en.1 as f64 + 0.5,
             slow: 1.0, frozen: 0.0, burn: 0.0, burn_dps: 0.0, chew: 0.0, thaw: 0.0, chew_cd: 2.0, chew_target: None, gnaw: None, gnaw_t: 0.0,
             dir: (-1, 0), has_t: true, ti: en.0, tj: en.1, skill: 0.0, rush: 0.0, brood: from.is_some(), e, mark: 0.0, mark_v: 0.0, coming: 0.0, gone: false,
-            slow_t: 0.0, slow_v: 1.0, melt: 0.0, spread: false, chain: 0.0, lured: false, lure: None, sniff: 0.0, fall: 0.0,
+            slow_t: 0.0, slow_v: 1.0, melt: 0.0, spread: false, chain: 0.0, lured: false, lure: None, sniff: 0.0, fall: 0.0, pricked: 0.0,
         };
         if let Some(c) = bd.charge { b.skill = c[0] * 0.6; }
         if let Some(br) = bd.brood { b.skill = br.2; }
@@ -410,6 +410,11 @@ impl<'a> Game<'a> {
         b.hp -= amount * marked(b);
         if b.hp <= 0.0 { self.kill(bi); }
     }
+    // Thorns, spikes and nettles: a share of a bug's health, all of them together no more than prick_cap of it.
+    fn prick(&mut self, bi: usize, share: f64) {
+        let b = &mut self.bugs[bi]; let s = share.min(self.d.prick_cap - b.pricked); if !(s > 0.0) || b.hp <= 0.0 { return; }
+        b.pricked += s; let a = b.max_hp * s; self.lose(bi, a);
+    }
     fn damage(&mut self, bi: usize, amount: f64) {
         let b = &mut self.bugs[bi]; if b.hp <= 0.0 { return; }
         let dmg = (amount - armor_of(b)).max(1.0) * marked(b);
@@ -422,7 +427,7 @@ impl<'a> Game<'a> {
         let Some(pi) = self.pidx(pid) else { return };
         { let p = &mut self.plants[pi]; p.hp -= amount * (1.0 - p.guard); }
         let sp = self.plants[pi].spikes;
-        if sp != 0.0 { let b = &self.bugs[bi]; let a = b.max_hp * sp * k * (if self.d.bugs[b.kind].boss { self.d.thorn_boss } else { 1.0 }); self.lose(bi, a); }
+        if sp != 0.0 { let b = &self.bugs[bi]; let a = sp * k * (if self.d.bugs[b.kind].boss { self.d.thorn_boss } else { 1.0 }); self.prick(bi, a); }
         if self.plants[pi].hp > 0.0 { return; }
         if let Some(w) = self.plants[pi].ward { if let Some(wi) = self.pidx(w) { if !self.plants[wi].warded { self.plants[pi].hp = 1.0; self.plants[wi].warded = true; self.auras(); return; } } }
         self.remove_plant(pid, false);
@@ -487,10 +492,10 @@ impl<'a> Game<'a> {
         if self.bugs[bi].melt > 0.0 { self.bugs[bi].melt -= dt; }
         let (ci, cj) = (self.bugs[bi].x.floor() as i32, self.bugs[bi].y.floor() as i32);
         let tile = if self.bugs[bi].fly || !inside(ci, cj) { Tile::None } else { self.tiles[key(ci, cj)] };
-        if tile == Tile::Nettle { let a = self.bugs[bi].max_hp * (if bd.boss { d.nettle_boss } else { d.nettle }) * dt; self.lose(bi, a); if self.bugs[bi].hp <= 0.0 { return; } }
+        if tile == Tile::Nettle { let a = (if bd.boss { d.nettle_boss } else { d.nettle }) * dt; self.prick(bi, a); if self.bugs[bi].hp <= 0.0 { return; } }
         if inside(ci, cj) {
             let th = if self.bugs[bi].fly { self.thorn_air[key(ci, cj)] } else { self.thorn[key(ci, cj)] };
-            if th != 0.0 { let a = self.bugs[bi].max_hp * th * (if bd.boss { d.thorn_boss } else { 1.0 }) * dt; self.lose(bi, a); if self.bugs[bi].hp <= 0.0 { return; } }
+            if th != 0.0 { let a = th * (if bd.boss { d.thorn_boss } else { 1.0 }) * dt; self.prick(bi, a); if self.bugs[bi].hp <= 0.0 { return; } }
         }
         {
             let b = &mut self.bugs[bi];
@@ -750,7 +755,7 @@ impl<'a> Game<'a> {
         out.extend_from_slice(&[self.dew, self.hp, self.wave as f64, ph, self.time, self.wave_time, self.next_in.unwrap_or(-1.0), self.frost, self.rain, self.next_id as f64, self.queue.len() as f64, self.stats.kills, self.stats.bites, self.stats.eaten, self.stats.earned]);
         out.push(self.bugs.len() as f64);
         for b in &self.bugs { out.extend_from_slice(&[b.id as f64, b.hp, b.x, b.y, b.slow, b.frozen, b.burn, b.chew, b.thaw, b.chew_cd, b.skill, b.rush, b.mark, b.coming, if b.has_t { b.ti as f64 } else { -1.0 }, if b.has_t { b.tj as f64 } else { -1.0 },
-            b.slow_t, b.melt, b.armor, if b.fly { 1.0 } else { 0.0 }, b.sniff, b.fall, if b.lured { 1.0 } else { 0.0 }]); }
+            b.slow_t, b.melt, b.armor, if b.fly { 1.0 } else { 0.0 }, b.sniff, b.fall, if b.lured { 1.0 } else { 0.0 }, b.pricked]); }
         out.push(self.plants.len() as f64);
         for p in &self.plants { out.extend_from_slice(&[p.id as f64, p.lvl as f64, p.i as f64, p.j as f64, p.hp, p.cd, p.web, p.br as f64, p.guard, p.spikes, if p.warded { 1.0 } else { 0.0 }, p.stk]); }
         out.push(self.stubs.len() as f64);

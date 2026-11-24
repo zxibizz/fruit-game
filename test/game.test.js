@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame, step, place, placeProblem, plantOn, plantProblem, trail, trails, startWave, removePlant, upgrade, upgradeCost, usePower, earlyBonus, stubAt, refund, pstat, clearWeed, snapshot, restore, bugHp, COLS, ROWS, BREAK } from '../public/game.js';
-import { LEVELS, PLANTS, BUGS, PLANT_ORDER, PERKS, PERK_ORDER, WEED_COST, FERTILE, MARK_T, wavePay } from '../public/data.js';
+import { PRICK_CAP, LEVELS, PLANTS, BUGS, PLANT_ORDER, PERKS, PERK_ORDER, WEED_COST, FERTILE, MARK_T, wavePay } from '../public/data.js';
 import { expectedMeta, fullMeta, fixedMap, lazyFixed } from '../balance/scenario.mjs';
 import { EXPERT } from '../balance/plans.mjs';
 // the levels on an open field (the fixed paths of the first ones come before them)
@@ -423,6 +423,18 @@ test('pumpkins: thorns on the free cells around, spikes of a shell, a ward that 
   const chew = () => { rose.hp = 1; b.chew = .01; b.chewTarget = rose; step(g, 1 / 60); };
   chew(); assert.equal(rose.hp, 1, 'the ward keeps it'); assert.ok(shell.warded); assert.ok(b.hp < 1e4, 'spikes');
   chew(); assert.ok(!g.plants.includes(rose), 'once a wave');
+});
+
+// Thorns, spikes and nettles take a share of a bug's health; all of them together no more than PRICK_CAP of it, however
+// long the bug stays among them (a thorny trail alone killed any bug of any wave).
+test('thorns and nettles take no more than a quarter of a bug\'s health between them', () => {
+  const n = LEVELS.findIndex((L) => L.feature === 'nettle'), g = createGame(n);
+  const [ni, nj] = LEVELS[n].tiles.find(([, , t]) => t === 'nettle');
+  send(g, 'snail'); step(g, 1 / 60); const b = g.bugs[0], full = b.maxHp;
+  for (let k = 0; k < 60 * 60 && g.bugs.includes(b); k++) { b.x = ni + .5; b.y = nj + .5; b.ti = ni; b.tj = nj; step(g, 1 / 60); }
+  assert.ok(g.bugs.includes(b), 'a minute on a nettle does not kill it');
+  assert.ok(Math.abs(b.hp - full * (1 - PRICK_CAP)) < full * .001, `${b.hp} of ${full} left`);
+  assert.ok(Math.abs(b.pricked - PRICK_CAP) < 1e-9);
 });
 
 test('chili: heat burns all around and the fire spreads at the top; burn-through takes the armor off while it burns', () => {

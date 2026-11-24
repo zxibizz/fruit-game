@@ -33,6 +33,8 @@ const num = (v) => (v !== '' && !Number.isNaN(Number(v)) ? Number(v) : v);
 const set = Object.fromEntries((opt('--set', '') || '').split(',').filter(Boolean).map((kv) => { const [k, v] = kv.split('='); return [k.trim(), num(v.trim())]; }));
 const level = Number(opt('--level', 6)) - 1, SECS = Number(opt('--secs', 120)), ROUNDS = Number(opt('--rounds', 40)), BATCH = Number(opt('--batch', 12));
 const jobs = opt('--jobs') ? { jobs: Number(opt('--jobs')) } : {}, HI = 4, STEP = 1.05;
+// --clean: the party that counts is the perfect one (won, the fruit never bitten), on the game's own waves
+const CLEAN = args.includes('--clean'), TARGET = Number(opt('--target', 1 / 0.7)), SEEDS = CLEAN ? [7, 11] : [7];
 const out = opt('--out', join(homedir(), 'tmp', 'balance', 'campaigns', `L${level + 1}.json`));
 const log = (s) => process.stderr.write(s + '\n');
 let rs = 12345; const rnd = () => { rs = (rs + 0x6D2B79F5) >>> 0; let t = rs; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
@@ -112,12 +114,16 @@ const hard = [...reps].sort((a, b) => a.top[0].m - b.top[0].m).slice(0, 2), last
 const targets = []; for (const r of [...last, ...hard]) for (const g of r.top.slice(0, 3)) if (!targets.some((t) => t.g === g)) targets.push({ g, wave: r.wave });
 log(`  ${targets.length} gardens of waves ${[...new Set(targets.map((t) => t.wave))].join(', ')} as plans`);
 
-const score = (r) => (r.won ? 1e5 + r.hp : r.time);
-const rate = (plans, h, draws = [0, 1]) => { const res = run(plans.flatMap((plan) => draws.map((w) => ({ w, opts: { ...base, plan, hp: Math.round(h * 1000) / 1000 } }))));
-  return plans.map((_, k) => { const xs = res.slice(k * draws.length, (k + 1) * draws.length); return { f: xs.reduce((t, r) => t + score(r), 0), wins: xs.filter((r) => r.won).length, res: xs }; }); };
+const clean = (r) => r.won && Object.keys(r.bites).length === 0, ok = CLEAN ? clean : (r) => r.won;
+const score = (r) => (CLEAN && clean(r) ? 2e5 : r.won ? 1e5 + r.hp : r.time);
+// the parties a plan is rated on: the game's waves and another draw of them; for a perfect party, the game's own
+// waves on two seeds of the game (where the flyers come from)
+const TRIALS = CLEAN ? SEEDS.map((seed) => ({ w: 0, seed })) : [{ w: 0 }, { w: 1 }], NT = TRIALS.length;
+const rate = (plans, h, o = base) => { const res = run(plans.flatMap((plan) => TRIALS.map((t) => ({ w: t.w, opts: { ...o, plan, hp: Math.round(h * 1000) / 1000, ...(t.seed ? { seed: t.seed } : {}) } }))));
+  return plans.map((_, k) => { const xs = res.slice(k * NT, (k + 1) * NT); return { f: xs.reduce((t, r) => t + score(r), 0), wins: xs.filter(ok).length, res: xs }; }); };
 const plans = [], of = []; targets.forEach((t) => plansOf(t.g).forEach((p, v) => { plans.push(p); of.push({ ...t, order: v ? 'walls first' : 'by wave' }); }));
 const first = rate(plans, 1);
-first.forEach((x, k) => log(`  plan of wave ${of[k].wave} #${of[k].g.m.toFixed(2)} (${of[k].order}): ${x.wins}/2 won, fruit ${x.res.map((r) => r.won ? r.hp : `lost at wave ${r.wave}`).join(' / ')}`));
+first.forEach((x, k) => log(`  plan of wave ${of[k].wave} #${of[k].g.m.toFixed(2)} (${of[k].order}): ${x.wins}/${NT} ${CLEAN ? 'clean' : 'won'}, fruit ${x.res.map((r) => r.won ? r.hp : `lost at wave ${r.wave}`).join(' / ')}`));
 let bi = first.reduce((b, x, k) => (x.f > first[b].f ? k : b), 0);
 const seedPlan = plans[bi];
 
@@ -151,25 +157,57 @@ function mutate(plan) {
   }
   return null;
 }
-let best = seedPlan, h = 1, cur = first[bi], kept = 0; const t0 = Date.now();
-for (let round = 1; round <= ROUNDS; round++) {
-  while (cur.wins === 2 && h < HI) { h *= STEP; cur = rate([best], h)[0]; }
-  const cands = []; for (let n = 0; cands.length < BATCH && n < BATCH * 6; n++) { let p = mutate(best); if (p && rnd() < .3) p = mutate(p) || p; if (p) cands.push(p); }
-  const fs = rate(cands, h); let top = -1; fs.forEach((x, k) => { if (x.f > (top < 0 ? cur.f : fs[top].f)) top = k; });
-  if (top >= 0) { best = cands[top]; cur = fs[top]; kept++; }
-  if (round % 10 === 0 || round === ROUNDS) log(`  round ${round}: bugs ×${h.toFixed(2)}, ${kept} changes kept, ${Math.round((Date.now() - t0) / 1000)} s`);
+function refine(plan, cur, rounds, o = base, change = mutate) {
+  let best = plan, h = 1, kept = 0; const t0 = Date.now();
+  for (let round = 1; round <= rounds; round++) {
+    while (cur.wins === NT && h < HI) { h *= STEP; cur = rate([best], h, o)[0]; }
+    const cands = []; for (let n = 0; cands.length < BATCH && n < BATCH * 6; n++) { let p = change(best); if (p && rnd() < .3) p = change(p) || p; if (p) cands.push(p); }
+    const fs = rate(cands, h, o); let top = -1; fs.forEach((x, k) => { if (x.f > (top < 0 ? cur.f : fs[top].f)) top = k; });
+    if (top >= 0) { best = cands[top]; cur = fs[top]; kept++; }
+    if (round % 10 === 0 || round === rounds) log(`  round ${round}: bugs ×${h.toFixed(2)}, ${kept} changes kept, ${Math.round((Date.now() - t0) / 1000)} s`);
+  }
+  return best;
+}
+const best = refine(seedPlan, first[bi], ROUNDS);
+
+// the best garden of one plant alone, as a plan played with that plant only (--clean): what a monoculture is worth
+let mono = null;
+if (CLEAN) {
+  const cands = [];
+  for (const r of [...last, ...hard]) for (const [kind, g] of Object.entries(r.mono || {})) plansOf(g).forEach((p) => cands.push({ kind, p, wave: r.wave }));
+  if (cands.length) {
+    const rated = cands.map((c) => rate([c.p], 1, { ...base, plants: [c.kind] })[0]);
+    const k = rated.reduce((b, x, q) => (x.f > rated[b].f ? q : b), 0), c = cands[k];
+    log(`  one plant alone: ${c.kind} (the garden of wave ${c.wave}), ${rated[k].wins}/${NT} clean`);
+    const same = (plan) => { for (let n = 0; n < 8; n++) { const p = mutate(plan); if (p && p.every((st) => st[0] === 'up' || st[0] === c.kind)) return p; } return null; };
+    mono = { kind: c.kind, opts: { ...base, plants: [c.kind] } }; mono.plan = refine(c.p, rated[k], Math.ceil(ROUNDS / 2), mono.opts, same);
+  }
 }
 
 // ---- 4. the margins ----
-const who = [['expert', EXPERT ? { ...base, policy: EXPERT } : null], ['smart bot', base], ['studio plan', { ...base, plan: seedPlan }], ['refined plan', { ...base, plan: best }]].filter((x) => x[1]);
+const who = [['expert', EXPERT ? { ...base, policy: EXPERT } : null], ['smart bot', base], ['studio plan', { ...base, plan: seedPlan }], ['refined plan', { ...base, plan: best }], ...(mono ? [[`${mono.kind} alone`, { ...mono.opts, plan: mono.plan }]] : [])].filter((x) => x[1]);
 const tasks = who.flatMap(([, o]) => DRAWS.map((w) => ({ opts: o, w })));
 const at1 = run(tasks);
 const ms = await margins(tasks.map((task, k) => ({ task, won: at1[k].won })), async (ts) => run(ts), { hi: HI });
 const res = who.map(([name], a) => { const each = ms.slice(a * DRAWS.length, (a + 1) * DRAWS.length), xs = [...each].sort((p, q) => p.at - q.at); return { name, median: xs[1], each: each.map((x) => x.at) }; });
 console.log(`L${level + 1} ${LEVELS[level].name}: the margin of the level (median of the game's waves and two other draws; each draw)`);
 for (const r of res) console.log(`  ${r.name.padEnd(13)} ${show(r.median).padStart(6)}   [${r.each.map((v) => Math.round(v * 100)).join(' ')}]`);
+// the perfect party: how many times healthier the bugs may be and the fruit is still never bitten, on the game's own
+// waves, the least over the seeds of the game
+let perfect = null, hp = null;
+if (CLEAN) {
+  const ct = who.flatMap(([, o]) => SEEDS.map((seed) => ({ opts: { ...o, seed }, w: 0 }))), c1 = run(ct);
+  const cm = await margins(ct.map((task, k) => ({ task, won: clean(c1[k]) })), async (ts) => run(ts).map((r) => ({ ...r, won: clean(r) })), { lo: .25, hi: HI });
+  perfect = who.map(([name], a) => { const each = cm.slice(a * SEEDS.length, (a + 1) * SEEDS.length); return { name, at: Math.min(...each.map((x) => x.at)), each: each.map((x) => x.at) }; });
+  const top = Math.max(...perfect.filter((p) => !p.name.endsWith(' alone')).map((p) => p.at)), one = perfect.find((p) => p.name.endsWith(' alone'));
+  console.log(`  the perfect party (the fruit never bitten, the game's own waves): bugs how many times healthier`);
+  for (const p of perfect) console.log(`  ${p.name.padEnd(13)} ${(Math.round(p.at * 100) + '%').padStart(6)}   [${p.each.map((v) => Math.round(v * 100)).join(' ')}]`);
+  // the health of the level's bugs at which a garden of TARGET⁻¹ of the best's strength is the least that does it
+  hp = { now: LEVELS[level].hp, best: top, target: TARGET, suggested: Math.round(LEVELS[level].hp * top / TARGET * 100) / 100, mono: one ? one.at / top : null };
+  console.log(`  the best holds ×${top.toFixed(2)} clean; for ×${TARGET.toFixed(2)} (a garden of ${Math.round(100 / TARGET)}% of its strength just does it): L${level + 1}.hp ${hp.now} → ${hp.suggested}${one ? `; one plant alone is ${Math.round(hp.mono * 100)}% of the best${hp.mono >= 1 / TARGET ? ' — ENOUGH for a perfect party after that' : ''}` : ''}`);
+}
 const count = {}; for (const c of cellsOf(best).values()) count[c.kind] = (count[c.kind] || 0) + 1;
 console.log(`  the refined plan: ${best.length} steps, ${Object.entries(count).map(([k, n]) => `${k} ${n}`).join(', ')}`);
 mkdirSync(dirname(out), { recursive: true });
-writeFileSync(out, JSON.stringify({ level: level + 1, set, secs: SECS, rounds: ROUNDS, margins: res, seedPlan, plan: best, target: of[bi] }));
+writeFileSync(out, JSON.stringify({ level: level + 1, set, secs: SECS, rounds: ROUNDS, margins: res, perfect, hp, seedPlan, plan: best, mono: mono && { kind: mono.kind, plan: mono.plan }, target: of[bi] }));
 console.log(`  ${out}`);
