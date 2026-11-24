@@ -41,14 +41,7 @@ const runs = [];
 const FROM = opt('--from') && existsSync(opt('--from')) && !args.includes('--cold') ? JSON.parse(readFileSync(opt('--from'), 'utf8')) : null;
 const FROM_PLANS = FROM ? [FROM.plan, ...(FROM.archive || []).slice(0, 40).map((e) => e.plan)] : [];
 for (let n = 1; n <= RUNS; n++) { log(` run ${n}`); runs.push(search({ level, opts: base, plans: [...(kept?.plan ? [kept.plan] : []), ...FROM_PLANS], bots, secs: SECS, stall: STALL, rng: n + Number(opt('--rng', 0)), check: args.includes('--check'), data }, how)); }
-tm('searched'); const best = runs.reduce((a, b) => (b.margin > a.margin ? b : a)), m = measure(best.plan);
-tm('measured'); let one = null;
-if (args.includes('--mono')) {
-  for (const kind of LEVELS[level].plants) { log(` ${kind} alone`);
-    const r = search({ level, opts: base, plans: kept?.mono?.kind === kind ? [kept.mono.plan] : [], bots, secs: Math.max(20, SECS / 5), stall: STALL / 2, only: kind, rng: 1, data }, how);
-    const mm = scan([party(r.plan, kind)], { data, ...how, quiet: true })[0];
-    if (!one || mm.margin > one.margin) one = { kind, plan: r.plan, margin: mm.margin, grid: mm.grid }; }
-}
+tm('searched'); let best = runs.reduce((a, b) => (b.margin > a.margin ? b : a));
 const grid = (g) => g.grid.map(([, h, n]) => `${h.toFixed(2)}:${n}`).join(' ');
 // The archive: the best party of every make (the families of plants its garden ends as). The different ways to play
 // the level: of the makes, the best that are unlike each other (two families of a tenth of the dew and more apart); and
@@ -58,6 +51,22 @@ const famRu = (f) => { const [k, b] = f.split('.'); return b ? BR[k][b === 'a' ?
 const arch = [...new Map(runs.flatMap((r) => r.archive || []).sort((a, b) => a.margin - b.margin).map((e) => [Object.keys(e.mix).filter((f) => e.mix[f] >= .03).sort().join('+'), e])).values()].sort((a, b) => b.margin - a.margin);
 const big = (e) => new Set(Object.keys(e.mix).filter((f) => e.mix[f] >= .1)), apart = (a, b) => [...a].filter((f) => !b.has(f)).length + [...b].filter((f) => !a.has(f)).length;
 const unlike = []; for (const e of arch) { if (unlike.length >= 8 || e.margin < best.margin * .6) break; if (unlike.every((u) => apart(big(u), big(e)) >= 2)) unlike.push(e); }
+// The best is the one that holds most on all eight seeds, not on the five of the search: the champion of the search and
+// the best of the archive (and the unlike ones) are all measured, and the champion may lose its place (fitted to the
+// seeds it was searched on: «Болото» ×0.75 on eight, while a make of its archive held ×0.95 there).
+const champ = { plan: best.plan, margin: best.margin, mix: arch.find((e) => e.margin === best.margin)?.mix ?? null };
+const cands = [champ, ...new Set([...arch.slice(0, 6), ...unlike])].filter((e, q, a) => a.findIndex((x) => JSON.stringify(x.plan) === JSON.stringify(e.plan)) === q);
+const cs = scan(cands.map((e) => party(e.plan)), { data, ...how, quiet: true }); cands.forEach((e, q) => { e.scanned = cs[q].margin; e.cleanScan = cs[q]; });
+const top1 = cands.reduce((a, b) => (b.scanned > a.scanned ? b : a)); best = { ...best, plan: top1.plan, margin: top1.margin, mix: top1.mix };
+if (top1 !== champ) log(`  the champion of the search held ${pc(champ.scanned)} on all the seeds; a make of the archive ${pc(top1.scanned)}: it is the best`);
+const m = { clean: top1.cleanScan, ...(STARS ? (({ stars, won }) => ({ stars, won }))(measure(top1.plan)) : { stars: none, won: none }) };
+tm('measured'); let one = null;
+if (args.includes('--mono')) {
+  for (const kind of LEVELS[level].plants) { log(` ${kind} alone`);
+    const r = search({ level, opts: base, plans: kept?.mono?.kind === kind ? [kept.mono.plan] : [], bots, secs: Math.max(20, SECS / 5), stall: STALL / 2, only: kind, rng: 1, data }, how);
+    const mm = scan([party(r.plan, kind)], { data, ...how, quiet: true })[0];
+    if (!one || mm.margin > one.margin) one = { kind, plan: r.plan, margin: mm.margin, grid: mm.grid }; }
+}
 const mixRu = (e) => Object.entries(e.mix).sort((a, b) => b[1] - a[1]).filter(([, x]) => x >= .04).map(([f, x]) => `${famRu(f)} ${Math.round(x * 100)}%`).join(', ');
 const lacks = (e, f) => (f.includes('.') ? (e.mix[f] || 0) : ['', '.a', '.b'].reduce((t, s) => t + (e.mix[f + s] || 0), 0)) < .03;
 const ONLY = opt('--without') ? opt('--without').split(',') : null; // --without rose.a,pumpkin: those alone
@@ -76,7 +85,7 @@ const jobs = how.jobs || PAR, top = Math.max(0, Math.round(Math.log(Math.max(m.c
 // the same moves play the same game. No search is asked for it.
 const free = (x, f) => { const [k, b] = f.split('.'); return (b ? [f] : [k, k + '.a', k + '.b']).every((g) => !x.mix[g]); };
 const without = NOT ? [] : await pool(open.filter((f) => !ONLY || ONLY.includes(f)), jobs, async (f) => { const d = gone(f), [k, b] = f.split('.');
-  if (arch[0] && arch[0].margin === best.margin && free(arch[0], f)) { log(`  without ${f}: the best has none of it`); return { f, margin: m.clean.margin, cost: 0, tried: 0, unused: true, plan: best.plan }; }
+  if (best.mix && free(best, f)) { log(`  without ${f}: the best has none of it`); return { f, margin: m.clean.margin, cost: 0, tried: 0, unused: true, plan: best.plan }; }
   const none = (x) => (b ? [f] : [k, k + '.a', k + '.b']).every((g) => !x.mix[g]);
   const starts = [best.plan, ...(FROM?.without?.find((w) => w.f === f)?.plan ? [FROM.without.find((w) => w.f === f).plan] : []), ...[...arch.filter(none).slice(0, 3), ...arch.filter((x) => lacks(x, f) && !none(x)).slice(0, 1)].map((x) => x.plan), ...(b ? [] : LEVELS[level].plants.filter((x) => x !== k).map((x) => as(best.plan, k, x)))];
   const r = await searchAsync({ level, opts: base, plans: starts, bots, secs: BSECS, stall: BSTALL, goal: best.margin, data: d }, { bin: how.bin, jobs: 1 });
@@ -89,9 +98,8 @@ console.log(`  the best, on ${m.clean.seeds} seed(s): the fruit whole against bu
 console.log(`    health:seeds clean  ${grid(m.clean)}`);
 if (kept?.plan && args.includes('--keep')) { const k = scan([party(kept.plan)], { data, ...how, quiet: true })[0]; console.log(`  the party kept before: ${pc(k.margin)}`); }
 if (arch.length) {
-  const ms = scan(unlike.map((e) => party(e.plan)), { data, ...how, quiet: true });
   console.log(`  разные способы пройти (${arch.length} составов в архиве; запас на всех сидах / на сидах поиска):`);
-  unlike.forEach((e, q) => { e.scanned = ms[q].margin; }); unlike.sort((a, b) => b.scanned - a.scanned); unlike.length = Math.min(unlike.length, 6);
+  unlike.sort((a, b) => b.scanned - a.scanned); unlike.length = Math.min(unlike.length, 6);
   unlike.forEach((e, q) => console.log(`    ${q + 1}. ${pc(e.scanned)} / ${pc(e.margin)}  ${mixRu(e)}`));
 }
 if (without.length) {
