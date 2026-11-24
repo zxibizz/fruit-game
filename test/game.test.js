@@ -4,7 +4,7 @@ import { createGame, step, place, placeProblem, plantOn, plantProblem, trail, tr
 import { PRICK_CAP, LEVELS, PLANTS, BUGS, PLANT_ORDER, PERKS, PERK_ORDER, WEED_COST, FERTILE, MARK_T, wavePay } from '../public/data.js';
 import { expectedMeta, fullMeta, fixedMap, lazyFixed } from '../balance/scenario.mjs';
 import { EXPERT } from '../balance/plans.mjs';
-import { kept, partyOf, clean } from '../balance/perfect.mjs';
+import { kept, partyOf, clean, SEEDS } from '../balance/perfect.mjs';
 // the levels on an open field (the fixed paths of the first ones come before them)
 const F = LEVELS.findIndex((L) => L.name === 'Лужайка');
 import { play } from '../sim/js/play.mjs';
@@ -96,17 +96,15 @@ test('bugs that reach the fruit bite it and the level can be lost', () => {
 });
 
 test('a plant grows to level 2, takes a branch open on the level at 3, and tops it at 4; powers are limited', () => {
-  const g = createGame(0); g.dew = 1000; place(g, 'rose', 10, 0);
-  const p = g.plants[0];
-  assert.ok(upgrade(g, p)); assert.equal(p.lvl, 2);
-  assert.equal(upgrade(g, p), false, 'no branch said'); assert.equal(upgrade(g, p, 'a'), false, 'no branch open on the first level');
-  const h = createGame(1); h.dew = 5000; place(h, 'rose', 10, 0); const q = h.plants[0]; upgrade(h, q);
+  const h = createGame(0); h.dew = 5000; assert.ok(place(h, 'rose', 3, 2)); const q = h.plants[0];
+  assert.ok(upgrade(h, q)); assert.equal(q.lvl, 2);
+  assert.equal(upgrade(h, q), false, 'no branch said');
   assert.equal(upgradeCost(q, 'a'), PLANTS.rose.a.up[0]); assert.equal(upgrade(h, q, 'b'), false, 'the far shot opens later');
   const dew = h.dew; assert.ok(upgrade(h, q, 'a')); assert.equal(q.lvl, 3); assert.equal(q.br, 'a'); assert.equal(h.dew, dew - PLANTS.rose.a.up[0]);
   assert.equal(pstat(h, q, 'multi'), 2); assert.ok(upgrade(h, q, 'b')); assert.equal(q.br, 'a', 'the branch stays'); assert.equal(q.lvl, 4);
   assert.equal(upgrade(h, q), false); assert.equal(upgradeCost(q), null);
   for (const k of PLANT_ORDER) for (const br of ['a', 'b']) assert.ok(PLANTS[k][br].from <= LEVELS.length && LEVELS[PLANTS[k][br].from - 1].plants.includes(k), `${k}.${br} opens where the plant is`);
-  assert.ok(usePower(g, 'rain')); assert.equal(usePower(g, 'rain'), false);
+  assert.ok(usePower(h, 'rain')); assert.equal(usePower(h, 'rain'), false);
 });
 
 test('bugs never walk into plants; a plant put on a cell with bugs lets them out', () => {
@@ -134,20 +132,23 @@ let smartRuns; const smart = () => (smartRuns ??= playLevels(LEVELS.map((_, n) =
 // The levels are tuned by their perfect party (balance/campaign.mjs --clean, balance/perfect.mjs): the best party
 // known of every level — kept as a plan in balance/perfect/ — gets through with the fruit never bitten against bugs
 // 1/0.7 times healthier, so that a garden of 70% of its strength is the least that does it; and a garden of one plant
-// alone is not enough (on the first level, of two plants and no branches, roses alone still are: the one exception).
+// alone is not enough. The perks are those of three stars on every level before: what a player of perfect parties has.
 test('played with thought, every level is won with the fruit whole; not by far, and not with one plant alone', () => {
   const ks = LEVELS.map((_, n) => kept(n)); ks.forEach((k, n) => assert.ok(k, `no plan kept for level ${n + 1}`));
-  const at = (hp, one) => playLevels(LEVELS.map((_, n) => [n, { ...partyOf(n, ks[n], 'exp2', one), hp }]));
+  // (on both seeds of the game the levels are tuned on: where the flyers come from is drawn by the game; a party that is clean on one of them at least is said so here)
+  const one7 = (hp, one, seed) => playLevels(LEVELS.map((_, n) => [n, { ...partyOf(n, ks[n], 'exp3', one), hp, seed }]));
+  const at = (hp, one, all = true) => { const a = one7(hp, one, SEEDS[0]), b = one7(hp, one, SEEDS[1]); return a.map((r, n) => (clean(r) === all ? b[n] : r)); };
   at(1).forEach((r, n) => assert.ok(clean(r), `level ${n + 1}: ${r.won ? 'the fruit bitten' : `lost at wave ${r.wave}`}`));
   at(1.15).forEach((r, n) => assert.ok(clean(r), `level ${n + 1}: bugs 15% healthier and it is not clean`));
   at(1.75).forEach((r, n) => assert.ok(!clean(r), `level ${n + 1}: clean against bugs 75% healthier — too easy`));
-  at(1, true).forEach((r, n) => { if (n > 0) assert.ok(!clean(r), `level ${n + 1}: ${ks[n].mono.kind} alone gets through with the fruit whole`); });
+  at(1, true).forEach((r, n) => assert.ok(!clean(r), `level ${n + 1}: ${ks[n].mono.kind} alone gets through with the fruit whole`));
 });
-// The learnt strategy (balance/strategy.json) is a fair player, not the best one: it wins most of the levels as they
-// are now, and loses where it builds much less than the level allows.
-test('a fair player wins most of the levels', () => {
+// The learnt strategy (balance/strategy.json) is a fair player, not the best one (and here it has the perks of two
+// stars a level, not three): it wins more than half of the levels as they are now, and loses where it builds much less
+// than the level allows.
+test('a fair player wins half of the levels at least', () => {
   const won = smart().filter((r) => r.won).length;
-  assert.ok(won >= 10, `${won} of ${LEVELS.length} levels won`);
+  assert.ok(won >= LEVELS.length / 2, `${won} of ${LEVELS.length} levels won`);
 });
 
 // The full picture — many seeds, other draws of the waves, exploits, every skill and perk switched off — is the balance
@@ -161,7 +162,7 @@ test('a garden beside the untouched trail loses every level, however it is plant
     const r = usual[a];
     if (n < F - 2) assert.equal(r.won, false, `level ${n + 1}`); // (the two meadows before «Лужайка» are small: a maze on them pays little, their gardens are told apart by what is planted)
     if (n >= F) assert.equal(r.won, false, `level ${n + 1}`);
-    assert.ok(!clean(r), `level ${n + 1}: a garden with no maze gets through with the fruit whole`); // (nowhere, the meadows too)
+    if (n >= F) assert.ok(!clean(r), `level ${n + 1}: a garden with no maze gets through with the fruit whole`); // (on the small meadow of «Поляна» it may: the maze there is the first one, and pays little)
     // («Опушка» is the exception: a row of chili with mint holds there until the last waves, and loses in them)
     if (n >= F && n < F + 3 && n !== F + 1) assert.ok(Math.min(...Object.keys(r.bites).map((k) => parseInt(k, 10))) <= LEVELS[n].count * LEAK, `level ${n + 1}: it leaks well before the end`);
   });
@@ -319,7 +320,7 @@ test('two anthills: bugs come from both, and neither way can be closed', () => {
 });
 
 test('bosses: the queen lets ants out, the slug king splits, the spider webs plants, the rhino runs', () => {
-  const run = (kind, lvl = 0) => { const g = createGame(lvl); g.dew = 5000; g.wave = 4; send(g, kind); return g; };
+  const run = (kind, lvl = F) => { const g = createGame(lvl); g.dew = 5000; g.wave = 4; send(g, kind); return g; };
   let g = run('queen'); for (let k = 0; k < 60 * 12; k++) step(g, 1 / 60);
   assert.ok(g.bugs.some((b) => b.kind === 'ant' && b.brood), 'ants');
   g = run('slugking'); for (let k = 0; k < 60 * 5; k++) step(g, 1 / 60);

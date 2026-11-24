@@ -1,5 +1,5 @@
 // The meta of the levels in the terminal: what the studio (balance/studio.mjs) shows, without the page.
-//   node balance/meta.mjs [--levels 6,8-9] [--secs 60] [--set K=V,...] [--meta exp2] [--tol 0] [--warm] [--verify]
+//   node balance/meta.mjs [--levels 6,8-9] [--secs 60] [--set K=V,...] [--meta exp3] [--tol 0] [--warm] [--verify]
 //     [--json FILE] [--jobs N]
 // For each level in turn the studio's engine searches every wave for --secs seconds (the level alone gets the work)
 // and the table says, wave by wave: the dew, the margin of the best garden and of the best garden of one plant (which
@@ -27,7 +27,7 @@ const fm = (m) => (m >= INF ? '∞' : m >= 10 ? m.toFixed(1) : m.toFixed(2));
 const pad = (s, n) => String(s).padEnd(n), lpad = (s, n) => String(s).padStart(n);
 
 const eng = new Engine({ jobs: opt('--jobs') ? Number(opt('--jobs')) : undefined });
-const d = await eng.load({ set, meta: opt('--meta', 'exp2'), tol: Number(opt('--tol', 0)) });
+const d = await eng.load({ set, meta: opt('--meta', 'exp3'), tol: Number(opt('--tol', 0)) });
 const levels = ranges(opt('--levels'), d.ui.levels.length);
 if (warm && existsSync(new URL('./.studio/state.json', import.meta.url))) {
   const st = JSON.parse(readFileSync(new URL('./.studio/state.json', import.meta.url), 'utf8'));

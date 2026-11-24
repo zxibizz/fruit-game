@@ -9,7 +9,7 @@ import { build } from '../sim/js/play.mjs';
 
 const DATA = fileURLToPath(new URL('./studio-data.mjs', import.meta.url));
 // the data of the game with the overrides `set`, the perks `meta` of every level: { data, meta, ui, errors }
-export function gameData(set = {}, meta = 'exp2') {
+export function gameData(set = {}, meta = 'exp3') {
   const d = JSON.parse(execFileSync(process.execPath, [DATA], { input: JSON.stringify({ set, meta }), maxBuffer: 1 << 28 }));
   if (d.errors?.length) throw new Error('overrides: ' + d.errors.join('; '));
   return d;
@@ -33,7 +33,7 @@ export class Engine {
   }
   send(o) { this.p.stdin.write(JSON.stringify(o) + '\n'); }
   // a new game: { set, meta, tol, early }; resolves once the engine has it (gen)
-  load({ set = {}, meta = 'exp2', tol = 0, early = false } = {}) {
+  load({ set = {}, meta = 'exp3', tol = 0, early = false } = {}) {
     const d = gameData(set, meta); this.ui = d.ui;
     const gen = this.gen + 1; this.send({ cmd: 'data', data: d.data, meta: d.meta, tol, early });
     return this.until((j) => j.t === 'ready' && j.gen >= gen).then(() => d);

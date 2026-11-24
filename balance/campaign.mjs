@@ -27,6 +27,7 @@ import { play, build } from '../sim/js/play.mjs';
 import { resolve, applyOverrides } from './scenario.mjs';
 import { margins, show } from './margin.mjs';
 import { Engine, sleep } from './studio-engine.mjs';
+import { kept } from './perfect.mjs';
 
 const args = process.argv.slice(2), opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const num = (v) => (v !== '' && !Number.isNaN(Number(v)) ? Number(v) : v);
@@ -51,7 +52,7 @@ if (from) {
   log(`L${level + 1} ${LEVELS[level].name}: the studio's gardens of ${reps.length} waves from ${from}`);
 } else {
   const eng = new Engine(jobs.jobs ? { jobs: jobs.jobs } : {});
-  await eng.load({ set });
+  await eng.load({ set, meta: opt('--meta', 'exp3') });
   const CACHE = new URL('./.studio/state.json', import.meta.url);
   if (args.includes('--warm') && existsSync(CACHE)) {
     const st = JSON.parse(readFileSync(CACHE, 'utf8'));
@@ -72,7 +73,9 @@ if (!reps.length) throw new Error('the studio found nothing');
 applyOverrides(set);
 const DRAWS = [0, 1, 2], datas = DRAWS.map((w) => { if (w) applyOverrides({}, w); return exportData(); });
 LEVELS.forEach((L) => { L.waves = makeWaves(L, L.seed); }); applyOverrides(set);
-const SMART = { route: 1, place: 'best', upgrades: 'greedy', meta: 'exp2', terrain: true, powers: true, early: true };
+// the perks of the players: three stars a level before this one (what a player of perfect parties has; the levels are
+// tuned for it), or --meta
+const SMART = { route: 1, place: 'best', upgrades: 'greedy', meta: opt('--meta', 'exp3'), terrain: true, powers: true, early: true };
 const base = resolve({ level, opts: SMART });
 const EXPERT = existsSync(new URL('./strategy.json', import.meta.url)) ? JSON.parse(readFileSync(new URL('./strategy.json', import.meta.url), 'utf8')).policy : null;
 const BIN = build(); // once: every batch after plays on it
@@ -130,9 +133,16 @@ const plans = [], of = []; targets.forEach((t) => plansOf(t.g).forEach((p, v) =>
     plans.push(JSON.parse(readFileSync(file, 'utf8')).filter((x) => x[0] === 'place' || x[0] === 'up').map((x) => (x[0] === 'up' ? (x[3] ? ['up', x[1], x[2], x[3]] : ['up', x[1], x[2]]) : [x[1], x[2], x[3]])));
     of.push({ wave: 0, g: { m: 0 }, order: `the party of ${name}` }); }
   rmSync(dir, { recursive: true }); }
+// and the best party kept so far (balance/perfect/), so that a new search never ends below the last one
+{ const k = kept(level); if (k?.plan) { plans.push(k.plan); of.push({ wave: 0, g: { m: 0 }, order: 'the party kept' }); } }
 const first = rate(plans, 1);
 first.forEach((x, k) => log(`  plan of wave ${of[k].wave} #${of[k].g.m.toFixed(2)} (${of[k].order}): ${x.wins}/${NT} ${CLEAN ? 'clean' : 'won'}, fruit ${x.res.map((r) => r.won ? r.hp : `lost at wave ${r.wave}`).join(' / ')}`));
 let bi = first.reduce((b, x, k) => (x.f > first[b].f ? k : b), 0);
+// several plans do it as the bugs are: the one that holds the healthiest bugs is the start (step by step, those left)
+{ let left = first.map((x, k) => k).filter((k) => first[k].wins === NT), h = 1;
+  while (left.length > 1 && h < HI) { h *= 1.1; const rs = rate(left.map((k) => plans[k]), h), still = left.filter((_, q) => rs[q].wins === NT);
+    if (!still.length) { bi = left[rs.reduce((b, x, q) => (x.f > rs[b].f ? q : b), 0)]; break; } left = still; bi = left[0]; }
+  if (left.length) log(`  the start: plan of wave ${of[bi].wave} (${of[bi].order}), clean up to ×${h.toFixed(2)}`); }
 const seedPlan = plans[bi];
 
 // ---- 3. refined ----
@@ -193,7 +203,7 @@ if (CLEAN) {
 }
 
 // ---- 4. the margins ----
-const who = [['expert', EXPERT ? { ...base, policy: EXPERT } : null], ['smart bot', base], ['studio plan', { ...base, plan: seedPlan }], ['refined plan', { ...base, plan: best }], ...(mono ? [[`${mono.kind} alone`, { ...mono.opts, plan: mono.plan }]] : [])].filter((x) => x[1]);
+const who = [['expert', EXPERT ? { ...base, policy: EXPERT } : null], ['smart bot', base], ['studio plan', { ...base, plan: seedPlan }], ['refined plan', { ...base, plan: best }], ...(kept(level)?.plan ? [['kept plan', { ...base, plan: kept(level).plan }]] : []), ...(mono ? [[`${mono.kind} alone`, { ...mono.opts, plan: mono.plan }]] : [])].filter((x) => x[1]);
 const tasks = who.flatMap(([, o]) => DRAWS.map((w) => ({ opts: o, w })));
 const at1 = run(tasks);
 const ms = await margins(tasks.map((task, k) => ({ task, won: at1[k].won })), async (ts) => run(ts), { hi: HI });
