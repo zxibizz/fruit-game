@@ -34,9 +34,10 @@ pub struct Opts {
     pub seed: u32, pub max_plants: f64, pub route: f64, pub maze: Option<String>, pub hp: f64, pub plan: Option<Vec<(Option<usize>, i32, i32, u8)>>, pub policy: Option<Policy>, pub terrain: bool, pub powers: Powers, pub bank: Option<f64>, pub meta: Vec<(String, usize)>,
     pub place: Where, pub plants: Option<Vec<usize>>, pub upgrades: Upgrades, pub early: bool, pub top: usize, pub trust: Vec<f64>,
     pub steps: usize, // the party stops after so many steps of the game (for the parity check: a part of a level is enough there)
+    pub stop_bitten: f64, // the party is not played on once more fruit health than this is bitten (perfect.rs: whether it is clean is known)
 }
 impl Default for Opts {
-    fn default() -> Opts { Opts { seed: 7, max_plants: f64::INFINITY, route: 1.0, maze: None, hp: 1.0, plan: None, policy: None, terrain: true, powers: Powers::On, bank: None, meta: Vec::new(), place: Where::Best, plants: None, upgrades: Upgrades::Greedy, early: true, top: 4, trust: Vec::new(), steps: usize::MAX } }
+    fn default() -> Opts { Opts { seed: 7, max_plants: f64::INFINITY, route: 1.0, maze: None, hp: 1.0, plan: None, policy: None, terrain: true, powers: Powers::On, bank: None, meta: Vec::new(), place: Where::Best, plants: None, upgrades: Upgrades::Greedy, early: true, top: 4, trust: Vec::new(), steps: usize::MAX, stop_bitten: f64::INFINITY } }
 }
 // the garden as it stood when a wave began (Bot::gauge)
 #[derive(Clone, Copy, Debug)]
@@ -45,7 +46,7 @@ pub struct Gauge { pub wave: usize, pub ground: f64, pub air: f64, pub towers: u
 pub struct Res {
     pub worth: f64, pub trail: usize, pub won: bool, pub hp: f64, pub max_hp: f64, pub wave: usize, pub waves: usize, pub plants: usize, pub grown: usize, pub maxed: usize,
     pub dew: f64, pub eaten: usize, pub income: f64, pub kinds: Vec<(usize, usize)>, pub bites: Vec<((usize, usize, bool), usize)>, pub powers_used: usize, pub time: f64,
-    pub gauge: Vec<Gauge>,
+    pub gauge: Vec<Gauge>, pub bitten: f64, // the fruit health bitten off, all in all
 }
 // what the bot did, for a replay by the JS simulation (sim/js/replay.mjs)
 #[derive(Clone, Debug)]
@@ -573,8 +574,8 @@ pub fn play_level<'a>(d: &'a Data, level: usize, opt: &Opts, layouts: &dyn Fn(us
     let (mut t, mut income, mut eaten, mut powers_used) = (0.0, 0.0, 0usize, 0usize);
     let mut bites: Vec<((usize, usize, bool), usize)> = Vec::new();
     let bank = opt.bank.is_some();
-    let mut steps = 0; let mut gauge: Vec<Gauge> = Vec::new();
-    while b.g.phase != Phase::Won && b.g.phase != Phase::Lost && t < 3600.0 && steps < opt.steps {
+    let mut steps = 0; let mut gauge: Vec<Gauge> = Vec::new(); let mut bitten = 0.0;
+    while b.g.phase != Phase::Won && b.g.phase != Phase::Lost && t < 3600.0 && steps < opt.steps && bitten <= opt.stop_bitten {
         // it builds, then calls the wave at once (for the dew of an early start)
         if b.g.phase == Phase::Build && (opt.early || b.g.wave == 0) { b.try_build(); let dew = b.g.dew; b.start_wave(); if bank { b.g.dew = dew; } }
         for _ in 0..15 { b.step(1.0 / 30.0); }
@@ -586,7 +587,7 @@ pub fn play_level<'a>(d: &'a Data, level: usize, opt: &Opts, layouts: &dyn Fn(us
                 Event::Kill { reward } => { income += reward; if bank { b.g.dew -= reward; } }
                 Event::WaveDone { bonus } => { income += bonus; if bank { b.g.dew -= bonus; } }
                 Event::PlantDead { i, j } => { eaten += 1; b.eaten_at.push((i, j)); }
-                Event::Bite { kind, brood } => { let k = (b.g.wave, kind, brood); if let Some(x) = bites.iter_mut().find(|x| x.0 == k) { x.1 += 1; } else { bites.push((k, 1)); } }
+                Event::Bite { kind, brood } => { bitten += d.bugs[kind].bite; let k = (b.g.wave, kind, brood); if let Some(x) = bites.iter_mut().find(|x| x.0 == k) { x.1 += 1; } else { bites.push((k, 1)); } }
                 Event::Power => powers_used += 1,
             }
         }
@@ -598,7 +599,7 @@ pub fn play_level<'a>(d: &'a Data, level: usize, opt: &Opts, layouts: &dyn Fn(us
     for k in g.plants.iter().map(|p| p.kind).chain(g.stubs.iter().map(|s| s.kind)) { if let Some(x) = kinds.iter_mut().find(|x| x.0 == k) { x.1 += 1; } else { kinds.push((k, 1)); } }
     let res = Res {
         worth: if b.o.set { round(worth(g, &tr, &b.o, opt.terrain, None) * 100.0) / 100.0 } else { 0.0 }, trail: tr.len(), won: g.phase == Phase::Won, hp: g.hp, max_hp: g.max_hp, wave: g.wave, waves: g.waves,
-        plants: g.plants.len(), grown: g.plants.iter().filter(|p| p.lvl > 1).count(), maxed: g.plants.iter().filter(|p| p.lvl == 4).count(), dew: g.dew, eaten, income, kinds, bites, powers_used, time: round(t), gauge,
+        plants: g.plants.len(), grown: g.plants.iter().filter(|p| p.lvl > 1).count(), maxed: g.plants.iter().filter(|p| p.lvl == 4).count(), dew: g.dew, eaten, income, kinds, bites, powers_used, time: round(t), gauge, bitten,
     };
     (res, b.ops)
 }
