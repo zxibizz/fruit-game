@@ -588,6 +588,9 @@ impl<'a> Game<'a> {
     // asks each one as it did of every bug)
     fn near(&self, px: f64, py: f64, r: f64, out: &mut Vec<usize>) {
         out.clear();
+        // (a little wider than the reach: a bug at 0.9999999999999999 is in the row above the one its distance, rounded,
+        // puts it within reach of — verify.mjs caught a flytrap not seeing such a bug)
+        let r = r + 1e-6;
         let (cx0, cy0) = (((px - r).floor().max(0.0) as usize).min(BK_W - 1), ((py - r).floor().max(0.0) as usize).min(BK_H - 1));
         let (cx1, cy1) = (((px + r).floor().max(0.0) as usize).min(BK_W - 1), ((py + r).floor().max(0.0) as usize).min(BK_H - 1));
         for cy in cy0..=cy1 { let a = self.bk_start[cy * BK_W + cx0] as usize; let b = self.bk_start[cy * BK_W + cx1 + 1] as usize; out.extend(self.bk_list[a..b].iter().map(|&k| k as usize)); }
