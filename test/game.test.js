@@ -143,11 +143,12 @@ test('played with thought, every level is won with the fruit whole; not by far, 
   at(1.75).forEach((r, n) => assert.ok(!clean(r), `level ${n + 1}: clean against bugs 75% healthier — too easy`));
   at(1, true).forEach((r, n) => assert.ok(!clean(r), `level ${n + 1}: ${ks[n].mono.kind} alone gets through with the fruit whole`));
 });
-// The learnt strategy (balance/strategy.json) is a fair player, not the best one: it wins most of the levels as they
-// are now, and loses where it builds much less than the level allows.
-test('a fair player wins most of the levels', () => {
+// The learnt strategy (balance/strategy.json) is a fair player, not the best one (and here it has the perks of two
+// stars a level, not three): it wins more than half of the levels as they are now, and loses where it builds much less
+// than the level allows.
+test('a fair player wins half of the levels at least', () => {
   const won = smart().filter((r) => r.won).length;
-  assert.ok(won >= LEVELS.length * 2 / 3, `${won} of ${LEVELS.length} levels won`);
+  assert.ok(won >= LEVELS.length / 2, `${won} of ${LEVELS.length} levels won`);
 });
 
 // The full picture — many seeds, other draws of the waves, exploits, every skill and perk switched off — is the balance

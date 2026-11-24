@@ -27,7 +27,8 @@ and in portrait (turned there).
 - **Balance** (0.29): a level is tuned by its perfect party, played with the perks of three stars on every level
   before it (what a player of perfect parties has). The best party known of every level gets through with
   the fruit never bitten against bugs 1/0.7 = 1.43 times healthier than they are, so a garden of 70% of its strength
-  is the least that keeps the fruit whole, and a garden of one plant alone is no more than 62% of the best. The health of a level's bugs (`hp`) sets
+  is the least that keeps the fruit whole (within the step of the measure: 63–75%), and a garden of one plant alone is
+  no more than 55% of the best. The health of a level's bugs (`hp`) sets
   that; the size of every wave (`swell`) is set so that no one or two waves are all the difficulty: a big wave, an
   ordinary one and a breather stand at 1.15, 1.3 and 1.6 times the margin of the hardest boss wave. Thorns, spikes and
   nettles together take no more than a quarter of a bug's health (`PRICK_CAP`): with no cap a thorny trail, cold mints
@@ -195,7 +196,8 @@ and in portrait (turned there).
   and from the parties of the bots), measures a garden of one plant alone against it and says the `hp` of the level at
   which the best holds the target; `node balance/perfect.mjs` plays the parties kept in `balance/perfect/` on the game
   as it is — with no perks, two stars a level, three (what the levels are tuned for), every perk — beside the two
-  bots, and says the `hp` again (after a change of a plant: the same parties, a minute for all the levels).
+  bots, and says the `hp` again (after a change of a plant: the same parties, a minute for all the levels);
+  `node balance/keep.mjs DIR` keeps the better of the party kept and a new campaign's.
 - `sim/` — the simulation once more, in Rust, and the bot that plays it (dev only, not in the image; `cargo` builds
   it, no dependencies). The balance matrix and the balance tests run on it: a party takes a tenth of a second where
   the JS simulation with a JS bot took three.
