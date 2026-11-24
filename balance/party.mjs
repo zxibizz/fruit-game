@@ -55,10 +55,11 @@ const unlike = []; for (const e of arch) { if (unlike.length >= 8 || e.margin < 
 // the best of the archive (and the unlike ones) are all measured, and the champion may lose its place (fitted to the
 // seeds it was searched on: «Болото» ×0.75 on eight, while a make of its archive held ×0.95 there).
 const champ = { plan: best.plan, margin: best.margin, mix: arch.find((e) => e.margin === best.margin)?.mix ?? null };
-const cands = [champ, ...new Set([...arch.slice(0, 6), ...unlike])].filter((e, q, a) => a.findIndex((x) => JSON.stringify(x.plan) === JSON.stringify(e.plan)) === q);
+const fromE = FROM ? [FROM.plan, ...(FROM.archive || []).slice(0, 4).map((e) => e.plan)].map((plan) => ({ plan, margin: -1, mix: FROM.archive?.find((e) => JSON.stringify(e.plan) === JSON.stringify(plan))?.mix ?? null })) : [];
+const cands = [champ, ...new Set([...arch.slice(0, 6), ...unlike]), ...fromE].filter((e, q, a) => a.findIndex((x) => JSON.stringify(x.plan) === JSON.stringify(e.plan)) === q);
 const cs = scan(cands.map((e) => party(e.plan)), { data, ...how, quiet: true }); cands.forEach((e, q) => { e.scanned = cs[q].margin; e.cleanScan = cs[q]; });
 for (const e of unlike) if (e.scanned == null) { const c = cands.find((x) => JSON.stringify(x.plan) === JSON.stringify(e.plan)); e.scanned = c.scanned; e.cleanScan = c.cleanScan; }
-const top1 = cands.reduce((a, b) => (b.scanned > a.scanned ? b : a)); best = { ...best, plan: top1.plan, margin: top1.margin, mix: top1.mix };
+const top1 = cands.reduce((a, b) => (b.scanned > a.scanned ? b : a)); best = { ...best, plan: top1.plan, margin: top1.scanned, mix: top1.mix };
 if (top1 !== champ) log(`  the champion of the search held ${pc(champ.scanned)} on all the seeds; a make of the archive ${pc(top1.scanned)}: it is the best`);
 const m = { clean: top1.cleanScan, ...(STARS ? (({ stars, won }) => ({ stars, won }))(measure(top1.plan)) : { stars: none, won: none }) };
 tm('measured'); let one = null;

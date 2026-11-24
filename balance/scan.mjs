@@ -17,11 +17,11 @@ import { join } from 'node:path';
 import { exportData } from '../sim/js/export.mjs';
 import { build, trustOf } from '../sim/js/play.mjs';
 
-// The seeds of the game a party is measured on, and the ones it is searched on (the other three: seeds the search never
-// saw). On three seeds the search fitted its parties to them where there are flyers: «Большая поляна» ×1.80 on its
-// three and ×1.55 on five.
+// The seeds of the game a party is measured on, and searched on. The search had five of them once (three seeds it never
+// saw to tell its fit): it fitted its parties to the five wherever flyers are drawn — «Большая поляна» ×1.55 on the five
+// and ×1.05 on all eight, and that champion pushed the party of its make that held ×1.41 on eight out of the archive.
 export const SEEDS = [7, 11, 13, 17, 19, 23, 29, 31];
-export const SEARCH_SEEDS = [7, 11, 13, 17, 19];
+export const SEARCH_SEEDS = SEEDS;
 export const TARGET = 1 / 0.7;
 const JOBS = Math.max(1, availableParallelism() - 1);
 // the bot's trust in its own count (balance/trust.json), as sim/js/play.mjs hands it over
