@@ -307,7 +307,17 @@ function buildTerrain() {
     game.entries.forEach((en, e) => { const pts = trail(e).map(([i, j]) => cellCenter(i, j)); pts.unshift(hillPos(e)); A.hdPath(px, A.chaikin(pts, 3), 24, 1 + levelIdx + e); });
     x.save(); x.setTransform(1, 0, 0, 1, 0, 0); x.globalAlpha = .55; x.drawImage(pc, 0, 0); x.restore(); free(pc);
   }
-  for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) { const tl = game.tiles[j][i]; if (tl && !(tl === 'mud' && game.grid[j][i])) A.hdTile(x, tl, ...cellCenter(i, j)); }
+  { // the stone path as one band and the beds as plots: each drawn over all its cells at once (screen directions)
+    const tileAt = (i, j, dx, dy) => { const [a, b] = screenStep(i, j, dx, dy); return game.tiles[b]?.[a]; };
+    const holes = new Set([...(inBox(-1, -1), holeOf.set)]);
+    const net = (kind) => { const out = [];
+      for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) if (game.tiles[j][i] === kind && !holes.has(i + ',' + j)) {
+        const s = (dx, dy, bit) => { const [a, b] = screenStep(i, j, dx, dy); return tileAt(i, j, dx, dy) === kind && !holes.has(a + ',' + b) ? bit : 0; }, [cx, cy] = cellCenter(i, j);
+        out.push({ x: cx, y: cy, nb: s(0, -1, 1) | s(1, 0, 2) | s(0, 1, 4) | s(-1, 0, 8), dg: s(1, -1, 1) | s(1, 1, 2) | s(-1, 1, 4) | s(-1, -1, 8) }); }
+      return out; };
+    A.hdBedNet(x, net('bed')); for (const [cx, cy] of [...holes].map((k) => cellCenter(...k.split(',').map(Number))).sort((a, b) => a[1] - b[1])) A.hdHole(x, cx, cy); // top to bottom on screen: a box's shadow falls under the box below A.hdStoneNet(x, net('stone'));
+  }
+  for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) { const tl = game.tiles[j][i]; if (tl && tl !== 'stone' && tl !== 'bed' && !(tl === 'mud' && game.grid[j][i])) A.hdTile(x, tl, ...cellCenter(i, j)); }
   for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) {
     const o = game.grid[j][i]; if (!o) continue; const [cx, cy] = cellCenter(i, j);
     if (o.obstacle === 'rock') A.hdRock(x, cx, cy + 4, 1);
@@ -317,7 +327,7 @@ function buildTerrain() {
     else if (o.obstacle === 'log' && game.grid[j][i + 1]?.obstacle === 'log') {
       const [nx, ny] = cellCenter(i + 1, j); x.save(); x.translate((cx + nx) / 2, (cy + ny) / 2 + 4); if (PORT) x.rotate(-Math.PI / 2); A.hdLog(x, 0, 0, CELL * 2 - 8); x.restore();
     }
-    else if (o.type) A.hdSoil(x, cx, cy + 15);
+    else if (o.type && game.tiles[j][i] !== 'bed') A.hdSoil(x, cx, cy + 15);
   }
   const [fx0, fy0] = cellCenter(...game.fruit); A.hdStump(x, fx0, fy0 + 12, 23);
   game.entries.forEach((en, e) => { const [hx, hy] = hillPos(e); A.hdAnthill(x, hx, hy + 8, 1.05); }); // the mound covers the trail's end
@@ -680,8 +690,11 @@ function drawGrid() {
   }
   c.restore();
 }
+// the beds of the level drawn as boxes on a lawn (data.js 'o'): a plant there stands in the box, not on a mound of its own
+let holeOf = { level: -1, set: new Set() };
+const inBox = (i, j) => { if (holeOf.level !== levelIdx) holeOf = { level: levelIdx, set: new Set((LEVELS[levelIdx]?.holes || []).map(([a, b]) => a + ',' + b)) }; return holeOf.set.has(i + ',' + j); };
 function drawPlant(p, t) {
-  const s = plantSprite(p.type, p.lvl, p.busy > 0 ? 1 : 0, p.br), [x, y] = cellCenter(p.i, p.j), base = y + 14;
+  const s = plantSprite(p.type, p.lvl, p.busy > 0 ? 1 : 0, p.br), [x, y] = cellCenter(p.i, p.j), base = y + (inBox(p.i, p.j) ? 5 : game.tiles[p.j][p.i] === 'bed' ? 7 : 14);
   let sx = 1, sy = 1; const a = anim.get(p.id);
   if (a) { a.t += 1 / 60; const e = Math.exp(-a.t * 9) * Math.cos(a.t * 26); sx = 1 + a.k * e * (a.grow ? .6 : -.4); sy = 1 - a.k * e * (a.grow ? -.8 : .5); if (a.t > .8) anim.delete(p.id); }
   if (p.hit > 0) { sx *= 1.08; sy *= .9; }
@@ -689,6 +702,8 @@ function drawPlant(p, t) {
   if (digShake.has(`${p.i},${p.j}`)) { const q = Math.sin(t * 34) * .035; sx += q; sy -= q * .5; } // the diggers will eat it
   const sway = p.web > 0 ? 0 : Math.sin(t * 1.7 + p.id * 1.3) * .035;
   const pk = plantK(p.type, p.lvl, p.br);
+  // in a box: a small dark hollow of soil under the plant, so that it stands out of the box and not against its rim
+  if (inBox(p.i, p.j) || game.tiles[p.j][p.i] === 'bed') { c.save(); c.beginPath(); c.ellipse(x, base + 1.5, 15, 6.5, 0, 0, Math.PI * 2); c.fillStyle = 'rgba(28,14,4,.6)'; c.fill(); c.beginPath(); c.ellipse(x, base + 1, 11, 4.2, 0, 0, Math.PI * 2); c.fillStyle = 'rgba(15,8,2,.45)'; c.fill(); c.restore(); }
   c.save(); c.translate(x, base); c.transform(sx * pk, 0, sway * pk, sy * pk, 0, 0); if (p.web > 0) c.globalAlpha = .8; blit(s, -PBX, -PBY); c.restore();
   if (p.web > 0) A.hdWeb(c, x, y, 19);
   if (p.lvl === 4) { const q = (t * .8 + p.id * .37) % 1; c.save(); c.globalAlpha = Math.sin(q * Math.PI) * .9; A.fxStar(c, x - 12 + ((p.id * 7) % 24), y - 30 + q * 14, 3.2, '#fff6b0'); c.restore(); }

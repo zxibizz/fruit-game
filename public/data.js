@@ -391,10 +391,11 @@ export const LEVELS = [
   },
 ];
 
-const OBSTACLE = { R: 'rock', S: 'stump', L: 'log', W: 'water', X: 'weed', B: 'bush' }, TILE = { f: 'fertile', m: 'mud', n: 'nettle', _: 'stone', '+': 'bed' };
+const OBSTACLE = { R: 'rock', S: 'stump', L: 'log', W: 'water', X: 'weed', B: 'bush' }, TILE = { f: 'fertile', m: 'mud', n: 'nettle', _: 'stone', '+': 'bed', o: 'bed' };
 function readMap(L) {
-  L.obstacles = []; L.tiles = []; L.entries = []; L.fruit = null;
+  L.obstacles = []; L.tiles = []; L.entries = []; L.fruit = null; L.holes = []; // holes: beds drawn as boxes standing on a lawn ('o'), the same bed in play
   L.map.forEach((row, j) => [...row].forEach((ch, i) => {
+    if (ch === 'o') L.holes.push([i, j]);
     if (OBSTACLE[ch]) L.obstacles.push([i, j, OBSTACLE[ch]]);
     else if (TILE[ch]) L.tiles.push([i, j, TILE[ch]]);
     else if (ch === 'A') L.fruit = [i, j];
