@@ -18,9 +18,11 @@ and in portrait (turned there).
   worn bugs (Glutton / Lure turns flyers to its nectar). A branch opens on the level where the bugs it answers first
   come. A branch and a top are seen at a glance (a look of their own, gold at the top); the panel shows every number
   now and after the upgrade. Hold a plant or a bug to read about it; the guide on the home screen has all of them.
-- **Levels**: twelve. The first three teach (15–18 waves, one boss at the end): the bugs keep to a stone path, the
-  plants grow on beds beside it and a grass cell sends the bugs the long way round, then meadows in the middle are the
-  first mazes; plants and branches open there, each with the bugs it answers. Then nine open fields, 20–30 waves each, with their own ground: fertile beds (a stronger plant), mud (slow bugs), ponds,
+- **Levels**: twelve. The first three teach (15–18 waves, one boss at the end). The first two are lawns set with
+  wooden boxes, the plants grow in them and the bugs crawl the grass between: on «Развилка» a strip of grass is the
+  short way to the fruit and one plant on it sends the bugs round the whole hook; on «Поляна» three rows of boxes with
+  a way round each end, shut one end of a row and the other end of the next and the bugs zigzag along all of them;
+  then a meadow in the middle is the first open maze. Plants and branches open there, each with the bugs it answers. Then nine open fields, 20–30 waves each, with their own ground: fertile beds (a stronger plant), mud (slow bugs), ponds,
   nettles (sting the bugs, nothing grows), weeds (cleared for dew), two anthills. A boss comes in the middle and at
   the end of every level: the rhino beetle runs, the queen lets ants out, the slug king splits into snails, the
   hornet flies over the maze, the spider webs the plants.

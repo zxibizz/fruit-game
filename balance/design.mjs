@@ -137,7 +137,7 @@ const medOf = (a) => { const each = ms.slice(a * DRAWS.length, (a + 1) * DRAWS.l
 const [bot, seed, design] = [0, 1, 2].map(medOf);
 const s = study(best), count = {}; for (const c of s.cells.values()) count[c.kind] = (count[c.kind] || 0) + 1;
 const peppers = [...s.cells.values()].filter((c) => c.kind === 'pepper'), wrap = peppers.length ? peppers.reduce((t, c) => t + worth(s, 'pepper', c.i, c.j), 0) / peppers.length : null;
-const map = LEVELS[level].map.map((line, j) => [...line].map((ch, i) => { const c = s.cells.get(K(i, j)); return c ? (c.kind === 'pumpkin' ? '#' : c.kind[0].toUpperCase()) : s.on.has(K(i, j)) && ch === '.' ? 'o' : ch === '.' ? ' ' : ch.toLowerCase(); }).join(''));
+const map = LEVELS[level].map.map((line, j) => [...line].map((ch, i) => { const c = s.cells.get(K(i, j)); return c ? (c.kind === 'pumpkin' ? '#' : c.kind[0].toUpperCase()) : s.on.has(K(i, j)) && ch === '.' ? '*' : ch === '.' ? ' ' : ch.toLowerCase(); }).join(''));
 writeFileSync(out, JSON.stringify({ level: level + 1, from: from || 'best', start: START, rounds: ROUNDS, h, margin: { bot, seed, design }, trail: s.trail.length, plants: count, plan: best }));
 console.log(`L${level + 1} (from the ${START}): the ${START} holds bugs of ${show(bot)}, its garden as a plan ${show(seed)}, the design ${show(design)} [${design.each.map((v) => Math.round(v * 100)).join(' ')}]  (trail ${s.trail.length} cells; ${Object.entries(count).map(([k, n]) => `${k} ${n}`).join(', ')}${wrap != null ? `; a pepper burns ${wrap.toFixed(1)} cells of the trail` : ''})`);
 console.log(map.join('\n'));

@@ -8,9 +8,9 @@ export const VERSION = '0.29.0';
 // anthill of «Старый сад» moved to the edge, where an old garden could shut the trail; 6: diggers last in a wave;
 // 7: the anthills and the fruit of «Закат» moved; 8: no healing, the roots grow back after the wave (an old garden
 // with its roots grown back could shut the trail); 9: five plants with branches; 10: five levels before «Лужайка», every
-// level after them moved on by five; 11: the first two of those five taken out, every level moved back by two; an
-// older save is dropped).
-const SAVE_V = 11;
+// level after them moved on by five; 11: the first two of those five taken out, every level moved back by two; 12: the
+// first two levels laid out again as lawns with boxes; an older save is dropped).
+const SAVE_V = 12;
 export { COLS, ROWS, BREAK };
 
 const DIRS = [[-1, 0], [0, -1], [0, 1], [1, 0]]; // tie order: towards the fruit side first
