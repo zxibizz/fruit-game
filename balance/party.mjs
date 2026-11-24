@@ -1,5 +1,5 @@
 // The best perfect party of a level: node balance/party.mjs --level 7 [--secs 300] [--runs 2] [--meta exp3] [--mono]
-//   [--keep] [--jobs N] [--out FILE] [--rng N] [--stall 60] [--check] [--no-without] [--ban-secs S] [--ban-stall S]
+//   [--keep] [--jobs N] [--out FILE] [--rng N] [--stall 60] [--check] [--no-without] [--ban-secs S] [--ban-stall S] [--without f1,f2] [--from FILE]
 // Looks for the party that gets through the level with the fruit never bitten against the healthiest bugs
 // (sim/src/perfect.rs: a whole party at a time, a plant on any cell, the maze built and broken a cell at a time; a party
 // counts on a rung of health when it is clean on five seeds of the game there and on every rung below, from ×0.75 up). It starts from
@@ -33,7 +33,9 @@ const measure = (plan, kind) => { const t = [party(plan, kind)]; return { clean:
 
 log(`L${level + 1} ${LEVELS[level].name}: the best perfect party, ${RUNS} run(s) of ${SECS} s at most (stopping ${STALL} s after the last rise), the perks ${META}`);
 const runs = [];
-for (let n = 1; n <= RUNS; n++) { log(` run ${n}`); runs.push(search({ level, opts: base, plans: kept?.plan ? [kept.plan] : [], bots, secs: SECS, stall: STALL, rng: n + Number(opt('--rng', 0)), check: args.includes('--check'), data }, how)); }
+// --from FILE: the best party of an earlier report (--out) is a start too (the search gets there at once)
+const FROM = opt('--from') && existsSync(opt('--from')) ? JSON.parse(readFileSync(opt('--from'), 'utf8')).plan : null;
+for (let n = 1; n <= RUNS; n++) { log(` run ${n}`); runs.push(search({ level, opts: base, plans: [...(kept?.plan ? [kept.plan] : []), ...(FROM ? [FROM] : [])], bots, secs: SECS, stall: STALL, rng: n + Number(opt('--rng', 0)), check: args.includes('--check'), data }, how)); }
 const best = runs.reduce((a, b) => (b.margin > a.margin ? b : a)), m = measure(best.plan);
 let one = null;
 if (args.includes('--mono')) {
