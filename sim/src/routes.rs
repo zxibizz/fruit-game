@@ -8,6 +8,7 @@
 //   fruit   — upright walls, the bends bunched by the fruit
 //   wide    — upright walls over the whole field with wide corridors between them
 //   rows    — a door by the anthill and walls along the field: the trail runs left and right, not up and down
+//   greedy  — a plant at a time where it lengthens the trail most (only where no straight wall lengthens it: corridors laid by the map)
 // A shape is in a class when it gets within a tenth of the way of the class's length; the others are left out. The
 // bot's own maze is always there, in the class it is nearest to. A length fewer than three shapes reach is filled up
 // with other mazes of the same shapes ("rows2"), as unlike those taken as there are.
@@ -19,7 +20,7 @@ pub type Wall = Vec<(i32, i32)>; // the cells of a wall, in the order they are p
 pub struct Route { pub class: &'static str, pub shape: String, pub len: usize, pub walls: Vec<Wall>, pub trail: Vec<(i32, i32)> }
 pub struct Routes { pub base: usize, pub max: usize, pub list: Vec<Route> }
 pub const CLASSES: [(&str, f64); 4] = [("min", 0.2), ("mid", 0.5), ("above", 0.75), ("max", 1.0)];
-const SHAPES: [&str; 6] = ["best", "alt", "anthill", "fruit", "wide", "rows"];
+const SHAPES: [&str; 7] = ["best", "alt", "anthill", "fruit", "wide", "rows", "greedy"];
 // the columns of a full serpentine, from the anthill to the fruit (the bot's maze is picked from these)
 pub const SERPENTINES: [&[i32]; 6] = [&[11, 9, 7, 5, 3], &[10, 8, 6, 4, 2], &[11, 9, 7, 5, 2], &[12, 10, 8, 6, 4, 2], &[11, 8, 6, 4, 2], &[12, 10, 8, 6, 4]];
 const WIDE: [&[i32]; 14] = [&[11, 8, 5, 2], &[12, 9, 6, 3], &[10, 7, 4], &[11, 7, 3], &[12, 8, 4], &[10, 6, 2], &[9, 5], &[10, 5], &[11, 6], &[9, 4], &[12, 7, 2], &[7], &[6], &[8]];
@@ -96,6 +97,20 @@ fn candidates<'a>(d: &'a Data, level: usize) -> (Game<'a>, usize, Vec<Cand>) {
             let order: Vec<i32> = if down { rows.clone() } else { rows.iter().rev().cloned().collect() };
             for (k, &r) in order.iter().enumerate() { ls.push(Line { up: false, at: r, lo: 0, hi: door - 1, gap: if k % 2 == 0 { 0 } else { door - 1 } }); }
             tune(&g, &mut ls, 1); with_gaps(&g, "rows", &ls, 1, &mut cs);
+        }
+    }
+    // a level whose corridors are laid by its map (no straight wall lengthens its trail): a plant at a time on the cell
+    // that lengthens the trail most, as long as one does ("greedy": the fork of the first level shut by one plant)
+    if !cs.iter().any(|c| c.len > base) {
+        let mut lines: Vec<Line> = Vec::new(); let mut now = base as i32;
+        for _ in 0..8 {
+            let mut top: Option<(i32, Line)> = None;
+            for i in 0..COLS { for j in 0..ROWS {
+                if !free(&g, i, j) || lines.iter().any(|l| l.at == i && l.lo == j) { continue; }
+                let one = Line { up: true, at: i, lo: j, hi: j, gap: -1 }; let mut ls = lines.clone(); ls.push(one);
+                let v = len_of(&g, &ls); if v > now && top.map_or(true, |(t, _)| v > t) { top = Some((v, one)); }
+            } }
+            let Some((v, one)) = top else { break }; lines.push(one); now = v; cand(&g, "greedy", lines.clone(), &mut cs);
         }
     }
     (g, base, cs)
