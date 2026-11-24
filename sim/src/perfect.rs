@@ -14,9 +14,9 @@
 //
 // The search. The maze is not taken from a library: a plant may go on any cell, a wall is built and broken a cell at a
 // time, and a cell of the trail is offered the more often the longer the trail gets with it shut. From the parties
-// given (the bots' own, the one kept before, any other) it keeps a champion — the party of the highest margin: clean
-// on every seed on every rung from ×0.75 up to it — and a few runners-up, and tries changes on them against the
-// rung above the champion's: a step earlier or later, all the steps of a plant moved, another branch, a plant grown
+// given (the bots' own, the one kept before, any other) it keeps an archive: the best party of every make (the families
+// of plants its garden ends as), each with the rung it holds, and tries changes on them, each against the rung above its
+// parent's: a step earlier or later, all the steps of a plant moved, another branch, a plant grown
 // once more or less, another kind on a cell, two cells trading plants, a plant put on a free cell (by the trail, or on
 // it: a wall), taken out, moved, and two parties crossed along a column or a row. A change that is not clean is still
 // told from a worse one: by the seeds it is clean on, then by the fruit health bitten (a party is not played on past
@@ -53,7 +53,9 @@ impl Rng {
 pub type Snaps = Vec<Arc<bot::Saved<'static>>>;
 // What a plan did on a rung: how well (see fitness), and its build phases on every seed it was played on there.
 #[derive(Clone)]
-pub struct Runs { pub at: i32, pub fit: f64, per_seed: Vec<Option<Arc<Snaps>>>, fail: Option<usize> } // fail: the seed (its place in the list) it was bitten on
+// fail: the seed (its place in the list) it was bitten on; mix: when it was clean on all of them, the share of the dew of
+// its garden on every family (plant * 3 + branch)
+pub struct Runs { pub at: i32, pub fit: f64, per_seed: Vec<Option<Arc<Snaps>>>, fail: Option<usize>, pub mix: Option<Vec<f64>> }
 
 pub struct Ctx<'a> {
     j_data: &'a J, pub d: &'static Data, pub level: usize, pub base: Opts, pub seeds: Vec<u32>,
@@ -94,7 +96,7 @@ impl<'a> Ctx<'a> {
     // parent's party had not looked at by some build phase, the party goes on from that build phase.
     pub fn fitness(&self, plan: &[Step], k: i32, parent: Option<(&[Step], &Runs)>) -> Runs {
         let same = parent.map_or(0, |(pp, _)| pp.iter().zip(plan.iter()).take_while(|(a, b)| a == b).count());
-        let mut runs = Runs { at: k, fit: 0.0, per_seed: vec![None; self.seeds.len()], fail: None };
+        let mut runs = Runs { at: k, fit: 0.0, per_seed: vec![None; self.seeds.len()], fail: None, mix: None }; let mut spent: Option<Vec<f64>> = None;
         // The seed the parent was bitten on comes first: a change that does no better is bitten there too, and is told so
         // by one party cut short, not after whole parties on the seeds the parent was clean on. Those seeds, not played
         // then, are taken as clean still (the count is of the seeds believed clean); once it gets past the parent's
@@ -112,13 +114,14 @@ impl<'a> Ctx<'a> {
             if self.check && from.is_some() { let (q, _) = self.party(Some(plan), &self.base, k, seed, 0.0, false);
                 if (q.won, q.bitten, q.wave, q.time) != (r.won, r.bitten, r.wave, r.time) { eprintln!("  CHECK: a party gone on from a build phase differs from the same played whole: won {} {}, bitten {} {}, wave {} {}, time {} {}", r.won, q.won, r.bitten, q.bitten, r.wave, q.wave, r.time, q.time); } }
             runs.per_seed[n] = Some(Arc::new(mine));
-            if Self::clean(&r) { continue; }
+            if Self::clean(&r) { spent = Some(r.spent); continue; }
             // bitten in wave r.wave of r.waves, r.time seconds in: the later, the nearer to clean
             let clean_so_far = if done == 0 && first.is_some() { believed } else { done };
             runs.fit = clean_so_far as f64 + 0.98 * (r.time / (r.time + 60.0 * (r.waves as f64 - r.wave as f64 + 1.0))).min(1.0); runs.fail = Some(n);
             return runs;
         }
-        runs.fit = self.seeds.len() as f64; runs
+        runs.fit = self.seeds.len() as f64;
+        runs.mix = spent.map(|v| { let t: f64 = v.iter().sum(); v.iter().map(|x| if t > 0.0 { x / t } else { 0.0 }).collect() }); runs
     }
     pub fn clean_on(&self, plan: &[Step], k: i32, seeds: &[u32]) -> bool { seeds.iter().all(|&seed| Self::clean(&self.party(Some(plan), &self.base, k, seed, 0.0, false).0)) }
     pub fn all_clean(&self, plan: &[Step], k: i32) -> bool { self.clean_on(plan, k, &self.seeds) }
@@ -185,7 +188,14 @@ fn mutate(cx: &Ctx, plan: &[Step], other: Option<&[Step]>, r: &mut Rng) -> Optio
     let branch = |r: &mut Rng| 1 + r.n(2) as u8;
     let t = r.n(100);
     match t {
-        0..=13 => { // a step earlier or later
+        0..=11 => { // a whole family goes: every plant of a kind becomes another kind, or every plant on a branch takes the other one
+            // (a party of another make: the archive keeps the best of every make, and this is how the search gets from one to another)
+            if gd.cells.is_empty() { return None; } let was = kind_of(&p, r.pick(&gd.cells))?;
+            if cx.kinds.len() > 1 && r.f() < 0.5 { let ks: Vec<usize> = cx.kinds.iter().cloned().filter(|&k| k != was).collect(); let k = r.pick(&ks); for s in p.iter_mut() { if s.0 == Some(was) { s.0 = Some(k); } } }
+            else { let cells: Vec<(i32, i32)> = p.iter().filter(|s| s.0 == Some(was)).map(|s| (s.1, s.2)).collect(); let b = branch(r);
+                for s in p.iter_mut() { if s.0.is_none() && s.3 == b && cells.contains(&(s.1, s.2)) { s.3 = 3 - b; } } }
+        }
+        12..=17 => { // a step earlier or later
             if p.is_empty() { return None; } let n = r.n(p.len()); let s = p.remove(n);
             let d = ((r.f() - 0.55) * 30.0).round() as i64; let at = (n as i64 + d).max(0).min(p.len() as i64) as usize; p.insert(at, s);
         }
@@ -248,9 +258,26 @@ fn mutate(cx: &Ctx, plan: &[Step], other: Option<&[Step]>, r: &mut Rng) -> Optio
 }
 
 // ---- the search ----
-struct Entry { plan: Vec<Step>, runs: Runs }
-struct State { champ: Entry, front: i32, pop: Vec<Entry>, seen: HashSet<u64>, tried: u64, history: Vec<(f64, i32)>, last: f64 }
-const POP: usize = 14;
+// The archive: the best party found of every make. The make of a party is what its garden ends as: the families (a plant
+// at levels 1-2, a plant on a branch) that hold 3% of its dew or more. Kept side by side they are the different ways to
+// play the level, each with how well it does, and "the best party with no hunter rose in it" is read off the archive
+// with no search of its own.
+pub struct Elite { pub plan: Vec<Step>, pub k: i32, runs: Runs, pub mix: Vec<f64>, pub niche: u64, stat: u64 }
+// The make of a plan as far as it can be read off the plan itself, before any party (what the bot adds on its own is
+// not in it): the families its steps put 3% of their dew on. A changed plan of a make the archive has is tried against
+// that make's best; one of a make it has not is looked for where it stands.
+fn make_of(cx: &Ctx, plan: &[Step]) -> u64 {
+    let mut at: HashMap<(i32, i32), (usize, usize, u8)> = HashMap::new(); // kind, times grown, branch
+    for s in plan { let c = (s.1, s.2); match s.0 { Some(k) => { at.insert(c, (k, 0, 0)); } None => if let Some(e) = at.get_mut(&c) { e.1 += 1; if e.1 == 2 { e.2 = if s.3 != 0 { s.3 } else { 1 }; } } } }
+    let mut dew = vec![0.0; cx.d.plants.len() * 3]; let mut all = 0.0;
+    for &(k, ups, br) in at.values() { let p = &cx.d.plants[k]; let b = if br == 2 { 3 } else { 1 };
+        let c = p.cost + if ups >= 1 { p.up[0] } else { 0.0 } + if ups >= 2 { p.up[b] } else { 0.0 } + if ups >= 3 { p.up[b + 1] } else { 0.0 };
+        dew[k * 3 + if ups >= 2 { br as usize } else { 0 }] += c; all += c; }
+    dew.iter().enumerate().fold(0, |m, (f, &x)| if all > 0.0 && x / all >= PRESENT { m | (1 << f) } else { m })
+}
+struct State { arch: Vec<Elite>, seen: HashSet<u64>, tried: u64, history: Vec<(f64, i32)>, last: f64 }
+const PRESENT: f64 = 0.03; const ARCH: usize = 400;
+pub fn niche_of(mix: &[f64]) -> u64 { mix.iter().enumerate().fold(0, |m, (f, &x)| if x >= PRESENT { m | (1 << f) } else { m }) }
 
 // The rung a plan holds: the last before the first it is bitten on (on any seed), counted from the floor up — every rung
 // from the floor to it is clean. A plan bitten on the floor itself holds the first rung below it that it is clean on.
@@ -262,60 +289,71 @@ fn level_of(cx: &Ctx, plan: &[Step]) -> i32 {
 }
 // Clean on the rungs from the floor up to `top`: the four highest on every seed (a failure is likeliest there), the ones
 // below on one seed each, another for every rung. (Every rung on every seed is what balance/scan.mjs asks in the end: a
-// champion with a hole this did not see is said so there, and its margin is the rung below the hole.)
+// party with a hole this did not see is said so there, and its margin is the rung below the hole.)
 fn holds_below(cx: &Ctx, plan: &[Step], top: i32) -> bool {
     (K_FLOOR..=top).rev().all(|k| if k > top - 4 { cx.all_clean(plan, k) } else { let s = cx.seeds[(k - K_MIN) as usize % cx.seeds.len()]; cx.clean_on(plan, k, &[s]) })
 }
 
-// secs: the most it runs; stall: it stops once the champion has not risen for so long; goal: and once it holds that rung
-// (the question was whether a party as good as that is there)
-pub fn search(cx: &Ctx, seeds_plans: Vec<Vec<Step>>, secs: f64, stall: f64, goal: i32, jobs: usize, rng_seed: u64, log: &(dyn Fn(String) + Sync)) -> (Vec<Step>, i32, Vec<(f64, i32)>, u64) {
+// secs: the most it runs; stall: it stops once neither the best party nor the best of any make within six rungs of it has
+// risen for so long; goal: and once the best holds that rung (the question was whether a party as good as that is there)
+pub fn search(cx: &Ctx, seeds_plans: Vec<Vec<Step>>, secs: f64, stall: f64, goal: i32, jobs: usize, rng_seed: u64, log: &(dyn Fn(String) + Sync)) -> (Vec<Elite>, Vec<(f64, i32)>, u64) {
     let t0 = Instant::now();
-    // where every party given stands; the best of them is the first champion
-    let mut starts: Vec<(Vec<Step>, i32)> = std::thread::scope(|sc| {
-        let hs: Vec<_> = seeds_plans.into_iter().map(|mut p| sc.spawn(move || { tidy(&mut p); let k = level_of(cx, &p); (p, k) })).collect();
+    // where every party given stands, and what its garden is made of
+    let elite = |plan: Vec<Step>, k: i32| -> Option<Elite> { if k < K_MIN { return None; }
+        let mix = cx.fitness(&plan, k, None).mix?; let runs = cx.fitness(&plan, (k + 1).min(K_MAX), None); Some(Elite { niche: niche_of(&mix), stat: make_of(cx, &plan), plan, k, runs, mix }) };
+    let starts: Vec<Option<Elite>> = std::thread::scope(|sc| {
+        let hs: Vec<_> = seeds_plans.into_iter().map(|mut p| sc.spawn(move || { tidy(&mut p); let k = level_of(cx, &p); elite(p, k) })).collect();
         hs.into_iter().map(|h| h.join().unwrap()).collect() });
-    starts.sort_by(|a, b| b.1.cmp(&a.1));
-    log(format!("the parties given hold: {}", starts.iter().map(|s| if s.1 < K_MIN { "nothing".to_string() } else { format!("×{:.2}", rung(s.1)) }).collect::<Vec<_>>().join(", ")));
-    let (champ, front) = starts[0].clone();
-    // what each does on the rung above the champion's: the build phases their children go on from
-    let entry = |plan: Vec<Step>, target: i32| { let runs = cx.fitness(&plan, target, None); Entry { plan, runs } };
-    let target0 = (front + 1).min(K_MAX);
-    let st = Mutex::new(State { champ: entry(champ, target0), front, pop: starts.into_iter().skip(1).take(POP).map(|(plan, _)| entry(plan, target0)).collect(), seen: HashSet::new(), tried: 0, history: vec![(0.0, front)], last: 0.0 });
+    log(format!("the parties given hold: {}", starts.iter().map(|s| s.as_ref().map_or("nothing".to_string(), |e| format!("×{:.2}", rung(e.k)))).collect::<Vec<_>>().join(", ")));
+    let mut arch: Vec<Elite> = Vec::new();
+    for e in starts.into_iter().flatten() { match arch.iter().position(|x| x.niche == e.niche) { Some(q) => if e.k > arch[q].k { arch[q] = e; }, None => arch.push(e) } }
+    if arch.is_empty() { return (arch, Vec::new(), 0); }
+    let best0 = arch.iter().map(|e| e.k).max().unwrap();
+    let st = Mutex::new(State { arch, seen: HashSet::new(), tried: 0, history: vec![(0.0, best0)], last: 0.0 });
     std::thread::scope(|sc| { for t in 0..jobs.max(1) { let st = &st; sc.spawn(move || {
         let mut r = Rng::new(rng_seed.wrapping_mul(1000).wrapping_add(t as u64 + 1));
         loop {
             let el = t0.elapsed().as_secs_f64(); if el >= secs { break; }
-            let (parent, pruns, other, target) = { let s = st.lock().unwrap();
-                if s.front >= goal || (el - s.last >= stall && el >= (secs / 5.0).min(stall)) { break; }
-                let pick = |r: &mut Rng| -> (Vec<Step>, Runs) { let e = if s.pop.is_empty() || r.f() < 0.55 { &s.champ } else { let top = 1 + r.n(s.pop.len()); let q = r.n(top); &s.pop[q] }; (e.plan.clone(), e.runs.clone()) };
-                let (p, pr) = pick(&mut r); (p, pr, pick(&mut r).0, (s.front + 1).min(K_MAX)) };
-            // one change (now and then two or three on top of each other); the party goes on from the parent's as far as the plans agree
+            let (parent, pruns, pk, other, best) = { let s = st.lock().unwrap();
+                let best = s.arch.iter().map(|e| e.k).max().unwrap();
+                if best >= goal || (el - s.last >= stall && el >= (secs / 5.0).min(stall)) { break; }
+                // a parent: the best party most of the time, else the better of two taken at random (every make gets its turn)
+                let n = s.arch.len(); let top: Vec<usize> = (0..n).filter(|&q| s.arch[q].k == best).collect();
+                let q = if r.f() < 0.45 { r.pick(&top) } else { let (a, b) = (r.n(n), r.n(n)); if s.arch[a].k >= s.arch[b].k { a } else { b } };
+                let e = &s.arch[q]; (e.plan.clone(), e.runs.clone(), e.k, s.arch[r.n(n)].plan.clone(), best) };
+            // one change (now and then two or three on top of each other)
             let mut child = parent.clone(); let mut changed = false;
             for _ in 0..1 + (r.f() < 0.4) as usize + (r.f() < 0.15) as usize { if let Some(c) = mutate(cx, &child, Some(&other), &mut r) { child = c; changed = true; } }
             if !changed { continue; }
-            { let mut s = st.lock().unwrap(); if !s.seen.insert(hash_of(&child)) { continue; } s.tried += 1; }
-            let runs = cx.fitness(&child, target, Some((&parent, &pruns)));
-            if runs.fit >= cx.seeds.len() as f64 && holds_below(cx, &child, target - 1) {
-                // clean on the rung above the champion's and on the rungs below it down to the floor: it is the champion, as
-                // far up as it goes before the first rung it is bitten on
-                let mut k = target; let mut next = cx.fitness(&child, (k + 1).min(K_MAX), None);
-                while k + 1 < K_MAX && next.fit >= cx.seeds.len() as f64 { k += 1; next = cx.fitness(&child, k + 1, None); }
-                let mut s = st.lock().unwrap();
-                if k > s.front { let old = std::mem::replace(&mut s.champ, Entry { plan: child, runs: next }); s.front = k; let el = t0.elapsed().as_secs_f64(); s.history.push((el, k)); s.last = el;
-                    s.pop.insert(0, old); s.pop.truncate(POP);
-                    log(format!("{:>5.0} s: clean against bugs ×{:.2} ({} tried)", el, rung(k), s.tried)); }
-                continue;
-            }
-            let mut s = st.lock().unwrap();
-            // a runner-up: the better the higher the rung it was tried on, then by how it did there
-            let e = Entry { plan: child, runs };
-            let at = s.pop.iter().position(|x| (e.runs.at, e.runs.fit) > (x.runs.at, x.runs.fit)).unwrap_or(s.pop.len());
-            if at < POP { s.pop.insert(at, e); s.pop.truncate(POP); }
+            let stat = make_of(cx, &child);
+            let rival = { let mut s = st.lock().unwrap(); if !s.seen.insert(hash_of(&child)) { continue; } s.tried += 1; s.arch.iter().filter(|e| e.stat == stat).map(|e| e.k).max() };
+            // The rungs it is tried on. Of a make the archive has: the rung above that make's best (it has to do better). Of a
+            // make it has not: from the rung above its parent's down in widening steps, the first it is clean on — a party of
+            // another make a little below the best is worth keeping as the best of its own make.
+            let rungs: Vec<i32> = match rival { Some(k) => vec![(k + 1).min(K_MAX)], None => [1, -1, -3, -6, -10, -15].iter().map(|d| pk + d).filter(|&k| k >= K_FLOOR - 4 && k <= K_MAX).collect() };
+            let mut found: Option<(i32, Runs)> = None;
+            for &t in &rungs { let runs = cx.fitness(&child, t, if t == pk + 1 { Some((&parent, &pruns)) } else { None }); if runs.fit >= cx.seeds.len() as f64 { found = Some((t, runs)); break; } }
+            let Some((target, runs)) = found else { continue };
+            // A new best has to be clean on the rungs below too, down to the floor; a rival of a make's best on the two rungs
+            // below (a hole lower down is for the scan to find); a party of a new make is taken as it is.
+            if target > best { if !holds_below(cx, &child, target - 1) { continue; } }
+            else if rival.is_some() && !(target - 2..target).rev().filter(|&k| k >= K_FLOOR).all(|k| cx.all_clean(&child, k)) { continue; }
+            // as far up as it goes before the first rung it is bitten on (it was bitten on the rung tried before this one, if any)
+            let top = rungs.iter().cloned().filter(|&t| t > target).min().map_or(K_MAX, |t| t - 1);
+            let mut k = target; let mut mix = runs.mix.clone().unwrap(); let mut next = cx.fitness(&child, (k + 1).min(K_MAX), None);
+            while k < top && k + 1 < K_MAX && next.fit >= cx.seeds.len() as f64 { k += 1; mix = next.mix.clone().unwrap(); next = cx.fitness(&child, k + 1, None); }
+            if k > best && target <= best && !holds_below(cx, &child, k) { continue; }
+            let e = Elite { niche: niche_of(&mix), stat, plan: child, k, runs: next, mix };
+            let mut s = st.lock().unwrap(); let el = t0.elapsed().as_secs_f64(); let now = s.arch.iter().map(|x| x.k).max().unwrap();
+            let took = match s.arch.iter().position(|x| x.niche == e.niche) { Some(q) => if e.k > s.arch[q].k { s.arch[q] = e; true } else { false }, None => { s.arch.push(e); true } };
+            if !took { continue; }
+            if k > now { s.history.push((el, k)); s.last = el; log(format!("{:>5.0} s: clean against bugs ×{:.2} ({} tried, {} makes)", el, rung(k), s.tried, s.arch.len())); }
+            else if k >= now - 6 { s.last = el; }
+            if s.arch.len() > ARCH { s.arch.sort_by(|a, b| b.k.cmp(&a.k)); s.arch.truncate(ARCH * 3 / 4); }
         }
     }); } });
-    let s = st.into_inner().unwrap();
-    (s.champ.plan, s.front, s.history, s.tried)
+    let mut s = st.into_inner().unwrap(); s.arch.sort_by(|a, b| b.k.cmp(&a.k));
+    (s.arch, s.history, s.tried)
 }
 
 // ---- the commands ----
@@ -328,7 +366,8 @@ fn plan_json(d: &Data, plan: &[Step]) -> String {
 // fruit-sim perfect: { data, level, opts (the bot's, as in a scenario of `run`: the perks, the powers, ...), seeds, secs,
 //   plans: [plan], bots: [opts] (players whose own parties are starts too: the smart bot, the expert), only: plant | null,
 //   stall (seconds with no rise of the champion after which it stops), rng, check (every party gone on from a build phase is
-//   played whole too and the two compared) } → { plan, k, margin, history: [[secs, margin]], tried, parties, waves_saved, seeds }
+//   played whole too and the two compared) } → { plan, k, margin, history: [[secs, margin]], tried, parties, waves_saved, seeds,
+//   makes, archive: [{ margin, mix: { family: share of the dew }, plan }] — the best party of every make, the best first }
 pub fn perfect(j: &J, jobs: usize) {
     let d0 = Data::read(j.at("data")); let level = j.at("level").num() as usize;
     let only = j.get("only").filter(|v| **v != J::Null).map(|v| d0.plant(v.str()));
@@ -342,9 +381,14 @@ pub fn perfect(j: &J, jobs: usize) {
     plans.retain(|p| !p.is_empty()); if plans.is_empty() { plans.push(Vec::new()); }
     let secs = j.get("secs").map_or(60.0, |v| v.num()); let stall = j.get("stall").map_or(f64::INFINITY, |v| v.num()); let goal = j.get("goal").filter(|v| **v != J::Null).map_or(i32::MAX, |v| (v.num().max(0.01).ln() / STEP.ln()).round() as i32); let rng = j.get("rng").map_or(1.0, |v| v.num()) as u64;
     let log = |s: String| eprintln!("  {}", s);
-    let (plan, k, history, tried) = search(&cx, plans, secs, stall, goal, jobs, rng, &log);
-    println!("{{\"plan\":{},\"k\":{},\"margin\":{},\"history\":[{}],\"tried\":{},\"parties\":{},\"waves_saved\":{},\"seeds\":{}}}", plan_json(&cx.d, &plan), k, if k < K_MIN { 0.0 } else { rung(k) },
-        history.iter().map(|h| format!("[{:.0},{}]", h.0, if h.1 < K_MIN { 0.0 } else { rung(h.1) })).collect::<Vec<_>>().join(","), tried, cx.parties.load(Ordering::Relaxed), cx.saved.load(Ordering::Relaxed), cx.seeds.len());
+    let (arch, history, tried) = search(&cx, plans, secs, stall, goal, jobs, rng, &log);
+    let fam = |f: usize| { let k = &cx.d.plants[f / 3].name; match f % 3 { 0 => k.clone(), 1 => format!("{}.a", k), _ => format!("{}.b", k) } };
+    let m = |k: i32| if k < K_MIN { 0.0 } else { rung(k) };
+    let elites: Vec<String> = arch.iter().take(120).map(|e| format!("{{\"margin\":{},\"mix\":{{{}}},\"plan\":{}}}", m(e.k),
+        e.mix.iter().enumerate().filter(|x| *x.1 > 0.0).map(|(f, x)| format!("\"{}\":{:.3}", fam(f), x)).collect::<Vec<_>>().join(","), plan_json(&cx.d, &e.plan))).collect();
+    let (plan, k) = arch.first().map_or((Vec::new(), K_MIN - 1), |e| (e.plan.clone(), e.k));
+    println!("{{\"plan\":{},\"k\":{},\"margin\":{},\"history\":[{}],\"tried\":{},\"parties\":{},\"waves_saved\":{},\"seeds\":{},\"makes\":{},\"archive\":[{}]}}", plan_json(&cx.d, &plan), k, m(k),
+        history.iter().map(|h| format!("[{:.0},{}]", h.0, m(h.1))).collect::<Vec<_>>().join(","), tried, cx.parties.load(Ordering::Relaxed), cx.saved.load(Ordering::Relaxed), cx.seeds.len(), arch.len(), elites.join(","));
 }
 // fruit-sim scan: { data, tasks: [{ level, opts }], seeds, from, to, what, full } → for every task the seeds it holds on
 // (what: clean — the fruit never bitten; stars — won with 80% of the fruit left; won) on every rung from..=to:

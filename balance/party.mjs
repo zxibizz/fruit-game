@@ -7,7 +7,9 @@
 // with another draw of the search each time: runs that end on the same rung say the search found what there is to find,
 // runs apart say it did not, and how far. The best of them is then measured as every party is (balance/scan.mjs: a grid
 // of health, eight seeds — three of them the search never saw — the margin the last rung before the first failure), with
-// the margins of a plain win and of three stars beside it. --mono: the best party of one plant alone, every plant of the
+// the margins of a plain win and of three stars beside it. The search keeps the best party of every make (the families of
+// plants a garden ends as), so the same run says the different ways to play the level and what it cannot do without:
+// the best party with a branch or a plant absent, against the best of all. --mono: the best party of one plant alone, every plant of the
 // level in turn (a fifth of the time each). --keep: it is kept in balance/perfect/ if it holds more than the one there.
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -41,15 +43,39 @@ if (args.includes('--mono')) {
     if (!one || mm.margin > one.margin) one = { kind, plan: r.plan, margin: mm.margin, grid: mm.grid }; }
 }
 const grid = (g) => g.grid.map(([, h, n]) => `${h.toFixed(2)}:${n}`).join(' ');
+// The archive: the best party of every make (the families of plants its garden ends as). The different ways to play
+// the level: of the makes, the best that are unlike each other (two families of a tenth of the dew and more apart); and
+// what the level cannot do without: the best party with a family (a plant) absent, against the best of all.
+const RU = { pumpkin: 'Тыква', rose: 'Роза', pepper: 'Чили', mint: 'Мята', flytrap: 'Мухоловка' }, BR = { pumpkin: ['Панцирь', 'Плети'], rose: ['Охотница', 'Дальнобойная'], pepper: ['Жар', 'Прожиг'], mint: ['Холод', 'Сосулька'], flytrap: ['Обжора', 'Ловчая'] };
+const famRu = (f) => { const [k, b] = f.split('.'); return b ? BR[k][b === 'a' ? 0 : 1] : RU[k]; };
+const arch = [...new Map(runs.flatMap((r) => r.archive || []).sort((a, b) => a.margin - b.margin).map((e) => [Object.keys(e.mix).filter((f) => e.mix[f] >= .03).sort().join('+'), e])).values()].sort((a, b) => b.margin - a.margin);
+const big = (e) => new Set(Object.keys(e.mix).filter((f) => e.mix[f] >= .1)), apart = (a, b) => [...a].filter((f) => !b.has(f)).length + [...b].filter((f) => !a.has(f)).length;
+const unlike = []; for (const e of arch) { if (unlike.length >= 8 || e.margin < best.margin * .6) break; if (unlike.every((u) => apart(big(u), big(e)) >= 2)) unlike.push(e); }
+const mixRu = (e) => Object.entries(e.mix).sort((a, b) => b[1] - a[1]).filter(([, x]) => x >= .04).map(([f, x]) => `${famRu(f)} ${Math.round(x * 100)}%`).join(', ');
+const lacks = (e, f) => (f.includes('.') ? (e.mix[f] || 0) : ['', '.a', '.b'].reduce((t, s) => t + (e.mix[f + s] || 0), 0)) < .03;
+const open = LEVELS[level].plants.flatMap((k) => [k, ...['a', 'b'].filter((b) => data.PLANTS[k][b].from <= level + 1).map((b) => `${k}.${b}`)]);
+const without = open.map((f) => { const e = arch.find((x) => lacks(x, f)); return { f, found: !!e, margin: e ? e.margin : 0, cost: 1 - (e ? e.margin : 0) / best.margin }; });
 console.log(`L${level + 1} ${LEVELS[level].name} (hp ${LEVELS[level].hp}, the perks ${META})`);
 console.log(`  the runs ended on ${runs.map((r) => pc(r.margin)).join(', ')} (${runs.map((r) => r.tried).join(', ')} parties tried)${Math.max(...runs.map((r) => r.margin)) / Math.min(...runs.map((r) => r.margin)) <= 1.06 ? ': they agree' : ': THEY DO NOT AGREE — the search has not settled'}`);
 console.log(`  the best, on ${m.clean.seeds} seed(s): the fruit whole against bugs ${pc(m.clean.margin)}; three stars ${pc(m.stars.margin)}; won ${pc(m.won.margin)}${m.won.open ? '+' : ''}`);
 console.log(`    health:seeds clean  ${grid(m.clean)}`);
 if (kept?.plan) { const k = scan([party(kept.plan)], { data, ...how, quiet: true })[0]; console.log(`  the party kept before: ${pc(k.margin)}`); }
+if (arch.length) {
+  const ms = scan(unlike.map((e) => party(e.plan)), { data, ...how, quiet: true });
+  console.log(`  разные способы пройти (${arch.length} составов в архиве; запас на всех сидах / на сидах поиска):`);
+  unlike.forEach((e, q) => { e.scanned = ms[q].margin; }); unlike.sort((a, b) => b.scanned - a.scanned); unlike.length = Math.min(unlike.length, 6);
+  unlike.forEach((e, q) => console.log(`    ${q + 1}. ${pc(e.scanned)} / ${pc(e.margin)}  ${mixRu(e)}`));
+  const row = (lo, hi, whole) => without.filter((w) => w.found && w.f.includes('.') !== whole && w.cost >= lo && w.cost < hi).sort((a, b) => b.cost - a.cost).map((w) => `${famRu(w.f)} −${Math.round(Math.max(0, w.cost) * 100)}%`).join(', ') || '—';
+  console.log(`  без ветки (лучшая партия архива, где её нет, на сидах поиска) — единственный путь (−30% и больше): ${row(.3, 9, false)}`);
+  console.log(`      выбор (−8…−30%): ${row(.08, .3, false)}`);
+  console.log(`      не нужна (меньше −8%): ${row(-9, .08, false)}`);
+  const none = without.filter((w) => !w.found).map((w) => famRu(w.f)); if (none.length) console.log(`      партии без них в архиве нет (не нашлась за этот прогон или её не бывает): ${none.join(', ')}`);
+  console.log(`  без растения целиком: ${without.filter((w) => w.found && !w.f.includes('.')).sort((a, b) => b.cost - a.cost).map((w) => `${RU[w.f]} −${Math.round(Math.max(0, w.cost) * 100)}%`).join(', ') || '—'}`);
+}
 if (one) console.log(`  one plant alone: ${one.kind} ${pc(one.margin)} — ${Math.round(one.margin / m.clean.margin * 100)}% of the best`);
 const hp = m.clean.margin > 0 ? Math.round(LEVELS[level].hp * m.clean.margin / TARGET * 100) / 100 : null;
 console.log(`  for a garden of ${Math.round(100 / TARGET)}% of its strength to be the least that keeps the fruit whole: L${level + 1}.hp ${LEVELS[level].hp} → ${hp}`);
-const res = { level: level + 1, meta: META, secs: SECS, runs: runs.map((r) => ({ margin: r.margin, tried: r.tried, parties: r.parties, wavesSaved: r.waves_saved, history: r.history })), plan: best.plan, clean: m.clean, stars: m.stars.margin, won: m.won.margin, mono: one, hp: { now: LEVELS[level].hp, suggested: hp } };
+const res = { level: level + 1, meta: META, secs: SECS, runs: runs.map((r) => ({ margin: r.margin, tried: r.tried, parties: r.parties, wavesSaved: r.waves_saved, history: r.history })), plan: best.plan, clean: m.clean, stars: m.stars.margin, won: m.won.margin, mono: one, unlike: unlike.map((e) => ({ margin: e.margin, scanned: e.scanned ?? null, mix: e.mix })), without, makes: arch.length, hp: { now: LEVELS[level].hp, suggested: hp } };
 if (opt('--out')) { mkdirSync(dirname(opt('--out')), { recursive: true }); writeFileSync(opt('--out'), JSON.stringify(res)); }
 if (args.includes('--keep')) {
   const was = kept?.plan ? scan([party(kept.plan)], { data, ...how, quiet: true })[0].margin : -1, mono = one && (!kept?.mono || one.margin >= scan([party(kept.mono.plan, kept.mono.kind)], { data, ...how, quiet: true })[0].margin) ? { kind: one.kind, plan: one.plan } : kept?.mono ?? null;

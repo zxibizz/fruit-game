@@ -47,6 +47,7 @@ pub struct Res {
     pub worth: f64, pub trail: usize, pub won: bool, pub hp: f64, pub max_hp: f64, pub wave: usize, pub waves: usize, pub plants: usize, pub grown: usize, pub maxed: usize,
     pub dew: f64, pub eaten: usize, pub income: f64, pub kinds: Vec<(usize, usize)>, pub bites: Vec<((usize, usize, bool), usize)>, pub powers_used: usize, pub time: f64,
     pub gauge: Vec<Gauge>, pub bitten: f64, // the fruit health bitten off, all in all
+    pub spent: Vec<f64>, // the dew standing in the garden at the end, by family: plant * 3 + branch (0: levels 1-2, 1: a, 2: b)
 }
 // what the bot did, for a replay by the JS simulation (sim/js/replay.mjs)
 #[derive(Clone, Debug)]
@@ -622,9 +623,11 @@ pub fn play_level_from<'a>(d: &'a Data, level: usize, opt: &Opts, layouts: &dyn 
     let g = &b.g; let tr = trail_of(g, &g.dist);
     let mut kinds: Vec<(usize, usize)> = Vec::new();
     for k in g.plants.iter().map(|p| p.kind).chain(g.stubs.iter().map(|s| s.kind)) { if let Some(x) = kinds.iter_mut().find(|x| x.0 == k) { x.1 += 1; } else { kinds.push((k, 1)); } }
+    let mut spent = vec![0.0; d.plants.len() * 3];
+    for (kind, lvl, br, dew) in g.plants.iter().map(|p| (p.kind, p.lvl, p.br, p.spent)).chain(g.stubs.iter().map(|s| (s.kind, s.lvl, s.br, s.spent))) { spent[kind * 3 + if lvl <= 2 { 0 } else { br as usize }] += dew; }
     let res = Res {
         worth: if b.o.set { round(worth(g, &tr, &b.o, opt.terrain, None) * 100.0) / 100.0 } else { 0.0 }, trail: tr.len(), won: g.phase == Phase::Won, hp: g.hp, max_hp: g.max_hp, wave: g.wave, waves: g.waves,
-        plants: g.plants.len(), grown: g.plants.iter().filter(|p| p.lvl > 1).count(), maxed: g.plants.iter().filter(|p| p.lvl == 4).count(), dew: g.dew, eaten, income, kinds, bites, powers_used, time: round(t), gauge, bitten,
+        plants: g.plants.len(), grown: g.plants.iter().filter(|p| p.lvl > 1).count(), maxed: g.plants.iter().filter(|p| p.lvl == 4).count(), dew: g.dew, eaten, income, kinds, bites, powers_used, time: round(t), gauge, bitten, spent,
     };
     (res, b.ops)
 }
