@@ -193,7 +193,7 @@ test('levels are long and their waves grow', () => {
     assert.ok(L.waves.length >= (n < F ? 12 : 20), `level ${n + 1}`); // (the first levels teach: shorter)
     const weight = (w) => w.reduce((s, [k, c]) => s + c * BUGS[k].w, 0);
     assert.ok(weight(L.waves[L.waves.length - 1]) > 5 * weight(L.waves[0]), `level ${n + 1}`);
-    if (!L.map.some((r) => r.includes("_"))) assert.ok(L.waves.some((w) => w.some(([k]) => BUGS[k].dig)), `level ${n + 1} has diggers`); // (no diggers on a stone path: nothing to dig through)
+    if (n > 0 && !L.map.some((r) => r.includes("_"))) assert.ok(L.waves.some((w) => w.some(([k]) => BUGS[k].dig)), `level ${n + 1} has diggers`); // (no diggers on a stone path: nothing to dig through; nor on the first level: it teaches building, not mending)
   });
 });
 

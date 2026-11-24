@@ -60,8 +60,8 @@ const T = {
   feature: {
     fertile: ['Чернозём', 'На чёрной земле растения на треть сильнее и крепче.'],
     path: ['Каменная дорожка', 'Жуки ползут только по камню. Сажать можно на грядки — растения достают жуков на соседних клетках. Подумай, где поставить кого.'],
-    fork: ['Развилка', 'Дорожка раздваивается, а у входа в короткую ветку — клетка травы. На траве можно сажать, и жуки по ней ходят: посадишь растение — короткий путь закрыт, жуки пойдут длинным.'],
-    meadow: ['Поляна', 'Посреди поля трава: жуки идут по ней напрямик. Сажай на неё растения стенками — тропинка станет длинной и петляющей, и жуки дольше будут ползти мимо твоих растений.'],
+    fork: ['Развилка', 'К яблоку два пути: короткий — по полоске травы, длинный — вокруг. На траве можно сажать: посади растение на короткий путь, и жуки пойдут в обход, мимо всех твоих ящиков.'],
+    meadow: ['Поляна', 'На поляне ряды ящиков. Закрой растением проход у одного ряда с одного конца, у следующего — с другого, и жуки поползут змейкой мимо всех ящиков.'],
     mud: ['Грязь', 'В грязи жуки вязнут и ползут почти вдвое медленнее. Веди тропинку через лужи — а посадишь в грязь растение, лужа пропадёт зря.'],
     water: ['Пруды', 'В воду ничего не посадишь, и жуки её обходят. Летающим пруд не помеха.'],
     nettle: ['Крапива', 'На крапиве ничего не растёт, зато жуков она жалит. Пусть тропинка идёт через неё.'],
@@ -82,7 +82,7 @@ const T = {
   problem: { same: 'Здесь уже такое растение', busy: 'Здесь занято', blocks: 'Нельзя закрыть жукам путь', poor: 'Не хватает росы', nettle: 'На крапиве ничего не растёт', stone: 'Это дорожка жуков: сажай на грядки рядом', roots: 'Здесь корни: растение отрастёт после волны', outside: '' },
   swap: (n, lvl) => (lvl > 1 ? `замена ур. ${lvl}, вернётся ${n}` : `замена, вернётся ${n}`), swapAgain: 'Тапни ещё раз — заменить',
   gain: (n) => (n > 0 ? `путь +${n}` : n < 0 ? `путь ${n}` : 'путь тот же'),
-  hint1: 'Жуки ползут по каменной дорожке. Перетащи растение с полки на грядку рядом с дорожкой. Готов — жми ▶',
+  hint1: 'Жуки ползут по траве к яблоку — светлая тропинка показывает их путь. Перетащи растение с полки в ящик у тропинки. Готов — жми ▶',
   holdHint: 'Зажми растение или жука — узнаешь, кто это',
   dragHint: 'Сначала выбери растение на полке — или просто перетащи его на поле',
   hint2: 'Роса приходит за каждую пройденную волну. Дальше волны придут сами. Нажмёшь ▶ раньше — получишь ещё',
@@ -232,12 +232,12 @@ function resize() {
   const innerW = UW - LX - RX, count = trayList().length;
   TWO = PORT || innerW < 600; TOPH = TOPY + (TWO ? 84 : 46);
   // the shelf as a row under the field…
-  const rowH = 60, rcw = Math.min(52, (innerW - 8 - CORN * 2) / count);
-  const row = { mode: 'row', cols: count, cw: rcw, ch: rowH - 8, w: rcw * count, h: rowH, fa: [LX + 4, TOPH, innerW - 8, UH - TOPH - rowH - BOTY - 2] };
+  const rcw = Math.min(52, (innerW - 8 - CORN * 2) / count), rowH = rcw + 8; // square cards
+  const row = { mode: 'row', cols: count, cw: rcw, ch: rcw, w: rcw * count, h: rowH, fa: [LX + 4, TOPH, innerW - 8, UH - TOPH - rowH - BOTY - 2] };
   row.x = LX + (innerW - row.w) / 2; row.y = UH - BOTY - rowH + 1;
   // …or as a column (two, when one would make the cards too low) left of it
   const availH = UH - TOPH - Math.max(BOTY, 4) - 2; let cols = 1; while (cols < 3 && availH / Math.ceil(count / cols) < 46) cols++;
-  const rows = Math.ceil(count / cols), cch = Math.min(62, availH / rows), ccw = 50;
+  const rows = Math.ceil(count / cols), ccw = 50, cch = Math.min(ccw, availH / rows);
   const col = { mode: 'col', cols, cw: ccw, ch: cch, w: cols * ccw, h: rows * cch, fa: [LX + cols * ccw + 8, TOPH, innerW - cols * ccw - 12, availH] };
   col.x = LX + 4; col.y = TOPH + (availH - col.h) / 2;
   const fitOf = (t) => Math.min(t.fa[2] * uk / gw, t.fa[3] * uk / gh);
@@ -307,7 +307,17 @@ function buildTerrain() {
     game.entries.forEach((en, e) => { const pts = trail(e).map(([i, j]) => cellCenter(i, j)); pts.unshift(hillPos(e)); A.hdPath(px, A.chaikin(pts, 3), 24, 1 + levelIdx + e); });
     x.save(); x.setTransform(1, 0, 0, 1, 0, 0); x.globalAlpha = .55; x.drawImage(pc, 0, 0); x.restore(); free(pc);
   }
-  for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) { const tl = game.tiles[j][i]; if (tl && !(tl === 'mud' && game.grid[j][i])) A.hdTile(x, tl, ...cellCenter(i, j)); }
+  { // the stone path as one band and the beds as plots: each drawn over all its cells at once (screen directions)
+    const tileAt = (i, j, dx, dy) => { const [a, b] = screenStep(i, j, dx, dy); return game.tiles[b]?.[a]; };
+    const holes = new Set([...(inBox(-1, -1), holeOf.set)]);
+    const net = (kind) => { const out = [];
+      for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) if (game.tiles[j][i] === kind && !holes.has(i + ',' + j)) {
+        const s = (dx, dy, bit) => { const [a, b] = screenStep(i, j, dx, dy); return tileAt(i, j, dx, dy) === kind && !holes.has(a + ',' + b) ? bit : 0; }, [cx, cy] = cellCenter(i, j);
+        out.push({ x: cx, y: cy, nb: s(0, -1, 1) | s(1, 0, 2) | s(0, 1, 4) | s(-1, 0, 8), dg: s(1, -1, 1) | s(1, 1, 2) | s(-1, 1, 4) | s(-1, -1, 8) }); }
+      return out; };
+    A.hdBedNet(x, net('bed')); for (const [cx, cy] of [...holes].map((k) => cellCenter(...k.split(',').map(Number))).sort((a, b) => a[1] - b[1])) A.hdHole(x, cx, cy); // top to bottom on screen: a box's shadow falls under the box below A.hdStoneNet(x, net('stone'));
+  }
+  for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) { const tl = game.tiles[j][i]; if (tl && tl !== 'stone' && tl !== 'bed' && !(tl === 'mud' && game.grid[j][i])) A.hdTile(x, tl, ...cellCenter(i, j)); }
   for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) {
     const o = game.grid[j][i]; if (!o) continue; const [cx, cy] = cellCenter(i, j);
     if (o.obstacle === 'rock') A.hdRock(x, cx, cy + 4, 1);
@@ -317,7 +327,7 @@ function buildTerrain() {
     else if (o.obstacle === 'log' && game.grid[j][i + 1]?.obstacle === 'log') {
       const [nx, ny] = cellCenter(i + 1, j); x.save(); x.translate((cx + nx) / 2, (cy + ny) / 2 + 4); if (PORT) x.rotate(-Math.PI / 2); A.hdLog(x, 0, 0, CELL * 2 - 8); x.restore();
     }
-    else if (o.type) A.hdSoil(x, cx, cy + 15);
+    else if (o.type && game.tiles[j][i] !== 'bed') A.hdSoil(x, cx, cy + 15);
   }
   const [fx0, fy0] = cellCenter(...game.fruit); A.hdStump(x, fx0, fy0 + 12, 23);
   game.entries.forEach((en, e) => { const [hx, hy] = hillPos(e); A.hdAnthill(x, hx, hy + 8, 1.05); }); // the mound covers the trail's end
@@ -394,8 +404,8 @@ function featurePic(f) {
     else if (f === 'weed') A.hdWeed(x, 42, 50);
     else if (f === 'twin') { A.hdAnthill(x, 42, 30, .8); A.hdAnthill(x, 42, 68, .8); }
     else if (f === 'path') { A.hdTile(x, 'stone', 21, 30); A.hdTile(x, 'stone', 63, 30); A.hdTile(x, 'bed', 21, 66); A.hdTile(x, 'bed', 63, 66); A.hdPlant(x, 'rose', 63, 74, .8, { lvl: 1 }); }
-    else if (f === 'fork') { A.hdTile(x, 'stone', 21, 42); A.hdTile(x, 'stone', 63, 21); A.hdTile(x, 'stone', 63, 63); A.hdPlant(x, 'pumpkin', 63, 52, .8, { lvl: 1 }); }
-    else if (f === 'meadow') { A.hdTile(x, 'bed', 21, 21); A.hdTile(x, 'bed', 63, 21); A.hdPlant(x, 'pumpkin', 30, 72, .75, { lvl: 1 }); A.hdPlant(x, 'pumpkin', 58, 72, .75, { lvl: 1 }); }
+    else if (f === 'fork') { A.hdHole(x, 21, 24); A.hdHole(x, 21, 66); A.hdHole(x, 63, 66); A.hdPlant(x, 'pumpkin', 63, 34, .8, { lvl: 1 }); }
+    else if (f === 'meadow') { for (const y of [21, 63]) { A.hdHole(x, 21, y); A.hdHole(x, 63, y); } A.hdPlant(x, 'pumpkin', 42, 30, .7, { lvl: 1 }); A.hdPlant(x, 'pumpkin', 42, 76, .7, { lvl: 1 }); }
     else { x.translate(42, 42); x.scale(1.7, 1.7); A.hdTile(x, f, 0, 0); }
   }, 3);
 }
@@ -680,8 +690,11 @@ function drawGrid() {
   }
   c.restore();
 }
+// the beds of the level drawn as boxes on a lawn (data.js 'o'): a plant there stands in the box, not on a mound of its own
+let holeOf = { level: -1, set: new Set() };
+const inBox = (i, j) => { if (holeOf.level !== levelIdx) holeOf = { level: levelIdx, set: new Set((LEVELS[levelIdx]?.holes || []).map(([a, b]) => a + ',' + b)) }; return holeOf.set.has(i + ',' + j); };
 function drawPlant(p, t) {
-  const s = plantSprite(p.type, p.lvl, p.busy > 0 ? 1 : 0, p.br), [x, y] = cellCenter(p.i, p.j), base = y + 14;
+  const s = plantSprite(p.type, p.lvl, p.busy > 0 ? 1 : 0, p.br), [x, y] = cellCenter(p.i, p.j), base = y + (inBox(p.i, p.j) ? 5 : game.tiles[p.j][p.i] === 'bed' ? 7 : 14);
   let sx = 1, sy = 1; const a = anim.get(p.id);
   if (a) { a.t += 1 / 60; const e = Math.exp(-a.t * 9) * Math.cos(a.t * 26); sx = 1 + a.k * e * (a.grow ? .6 : -.4); sy = 1 - a.k * e * (a.grow ? -.8 : .5); if (a.t > .8) anim.delete(p.id); }
   if (p.hit > 0) { sx *= 1.08; sy *= .9; }
@@ -689,6 +702,8 @@ function drawPlant(p, t) {
   if (digShake.has(`${p.i},${p.j}`)) { const q = Math.sin(t * 34) * .035; sx += q; sy -= q * .5; } // the diggers will eat it
   const sway = p.web > 0 ? 0 : Math.sin(t * 1.7 + p.id * 1.3) * .035;
   const pk = plantK(p.type, p.lvl, p.br);
+  // in a box: a small dark hollow of soil under the plant, so that it stands out of the box and not against its rim
+  if (inBox(p.i, p.j) || game.tiles[p.j][p.i] === 'bed') { c.save(); c.beginPath(); c.ellipse(x, base + 1.5, 15, 6.5, 0, 0, Math.PI * 2); c.fillStyle = 'rgba(28,14,4,.6)'; c.fill(); c.beginPath(); c.ellipse(x, base + 1, 11, 4.2, 0, 0, Math.PI * 2); c.fillStyle = 'rgba(15,8,2,.45)'; c.fill(); c.restore(); }
   c.save(); c.translate(x, base); c.transform(sx * pk, 0, sway * pk, sy * pk, 0, 0); if (p.web > 0) c.globalAlpha = .8; blit(s, -PBX, -PBY); c.restore();
   if (p.web > 0) A.hdWeb(c, x, y, 19);
   if (p.lvl === 4) { const q = (t * .8 + p.id * .37) % 1; c.save(); c.globalAlpha = Math.sin(q * Math.PI) * .9; A.fxStar(c, x - 12 + ((p.id * 7) % 24), y - 30 + q * 14, 3.2, '#fff6b0'); c.restore(); }
@@ -900,15 +915,10 @@ function plantK(type, lvl, br = null) {
 function plantCard(type, x, y, w, h, on, poor) {
   c.save(); if (on) { c.shadowColor = 'rgba(255,220,60,.95)'; c.shadowBlur = 12; }
   A.uiPanel(c, x, y, w, h, 11, on ? '#fff0a8' : '#fbe7c2', { ol: on ? '#c88a10' : '#7a4a22', olw: on ? 3 : 2 }); c.restore();
-  // the plant above, the price on a strip of its own below
-  const PS = 14, s = plantSprite(type, 1), [bx0, by0, bx1, by1] = plantBox(type), aw = w - 6, ah = h - PS - 4, k = Math.min(aw / (bx1 - bx0), ah / (by1 - by0), 1.05);
-  c.save(); c.beginPath(); A.rrect(c, x + 2, y + 2, w - 4, h - PS - 1, 9); c.clip();
-  c.translate(x + w / 2 - (bx0 + bx1) / 2 * k, y + 3 + ah - by1 * k + Math.min(2, (ah - (by1 - by0) * k) / 2)); c.scale(k, k); blit(s, 0, 0); c.restore();
-  c.save(); c.beginPath(); A.rrect(c, x + 2, y + 2, w - 4, h - 4, 9); c.clip(); c.fillStyle = poor ? 'rgba(160,60,40,.16)' : 'rgba(120,70,30,.12)'; c.fillRect(x, y + h - PS - 1, w, PS + 1); c.restore();
-  const label = String(PLANTS[type].cost); c.save(); c.font = '900 10.5px Nunito'; const lw = c.measureText(label).width + 9; c.restore();
-  const lx = x + w / 2 - lw / 2, ly = y + h - PS / 2 - 1.5;
-  A.hdDrop(c, lx + 2, ly + .5, 3.2);
-  A.hdText(c, label, lx + 7, ly + .5, 10.5, poor ? '#c0392b' : '#6a3e1c', { stroke: null, align: 'left' });
+  // the plant alone, fitted to the card by its own outline (its price is in the panel a tap on the card opens)
+  const s = plantSprite(type, 1), [bx0, by0, bx1, by1] = plantBox(type), aw = w - 8, ah = h - 8, k = Math.min(aw / (bx1 - bx0), ah / (by1 - by0), 1.1);
+  c.save(); c.beginPath(); A.rrect(c, x + 2, y + 2, w - 4, h - 4, 9); c.clip();
+  c.translate(x + w / 2 - (bx0 + bx1) / 2 * k, y + h / 2 - (by0 + by1) / 2 * k); c.scale(k, k); blit(s, 0, 0); c.restore();
   if (poor) { c.save(); c.beginPath(); A.rrect(c, x, y, w, h, 11); c.fillStyle = 'rgba(60,40,30,.38)'; c.fill(); c.restore(); }
 }
 const cardRect = (k) => { const col = k % TRAY.cols, row = Math.floor(k / TRAY.cols); return [TRAY.x + col * TRAY.cw + 2, TRAY.y + row * TRAY.ch + 2, TRAY.cw - 4, TRAY.ch - 4]; };
@@ -944,9 +954,12 @@ function drawInfo() {
   if (drag) { const fy = drag.y / uk, fx0 = drag.x / uk; if (fx0 > x - 20 && fx0 < x + w + 20 && fy > y - 70 && fy < y + h + 30) { if (TRAY.mode === 'row') y = Math.max(TOPH + 4, fy - 90 - h); else x = Math.min(UW - RX - w - 6, fx0 + 50); if (fx0 > x - 20 && fx0 < x + w + 20 && fy > y - 70 && fy < y + h + 30) return; } }
   c.save(); c.globalAlpha = drag ? .93 : Math.min(1, infoT * 3); c.shadowColor = 'rgba(0,0,0,.35)'; c.shadowBlur = 12; A.uiPanel(c, x, y, w, h, 16, '#fff3d6', { ol: '#6a3e1c', olw: 2.5 }); c.shadowBlur = 0;
   A.hdText(c, T.plant[type], x + 11, y + 17, 15, '#6a3e1c', { stroke: null, align: 'left' });
-  // the tag on the right: the plant's part, or what planting on the cell under the finger would do
+  // its price in dew, after the name (red when there is not enough)
+  c.save(); c.font = '900 15px Nunito'; const nx = x + 11 + c.measureText(T.plant[type]).width + 10, price = String(PLANTS[type].cost), poor = game.dew < PLANTS[type].cost; c.font = '900 14px Nunito'; const pend = nx + 12 + c.measureText(price).width; c.restore();
+  A.hdDrop(c, nx + 4, y + 17.5, 5); A.hdText(c, price, nx + 12, y + 17.5, 14, poor ? '#c0392b' : '#2f7fc0', { stroke: null, align: 'left' });
+  // the tag on the right: the plant's part (left out on a panel too narrow for it after the price)
   const tag = T.role[type], col = '#b0895a';
-  if (tag) { c.font = '900 11px Nunito'; const gw = c.measureText(tag).width + 14; c.beginPath(); A.rrect(c, x + w - 9 - gw, y + 8, gw, 18, 9); c.fillStyle = col; c.fill(); A.hdText(c, tag, x + w - 9 - gw / 2, y + 17.5, 11, '#fff', { stroke: null }); }
+  c.font = '900 11px Nunito'; if (tag && x + w - 9 - (c.measureText(tag).width + 14) > pend + 6) { c.font = '900 11px Nunito'; const gw = c.measureText(tag).width + 14; c.beginPath(); A.rrect(c, x + w - 9 - gw, y + 8, gw, 18, 9); c.fillStyle = col; c.fill(); A.hdText(c, tag, x + w - 9 - gw / 2, y + 17.5, 11, '#fff', { stroke: null }); }
   let yy = y + 36;
   for (const l of lines) { A.hdText(c, l, x + 11, yy, 12, '#8a5a32', { stroke: null, align: 'left', weight: 800 }); yy += 15; }
   yy += 2; for (const l of st) { A.hdText(c, l, x + 11, yy, 11, '#3f8a2a', { stroke: null, align: 'left' }); yy += 14; }

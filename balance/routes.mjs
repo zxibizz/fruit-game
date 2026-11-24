@@ -8,7 +8,7 @@ import { routes } from '../sim/js/play.mjs';
 // the map of a level with a maze on it, as lines of text
 export function draw(level, r) {
   const rows = LEVELS[level].map.map((line) => [...line]);
-  for (const [i, j] of r.trail) if (rows[j][i] === '.') rows[j][i] = 'o';
+  for (const [i, j] of r.trail) if (rows[j][i] === '.') rows[j][i] = '*';
   for (const w of r.walls) for (const [i, j] of w) if (rows[j][i] === '.' || rows[j][i] === 'f' || rows[j][i] === 'm') rows[j][i] = '#';
   return rows.map((x) => x.join(''));
 }

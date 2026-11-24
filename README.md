@@ -18,9 +18,11 @@ and in portrait (turned there).
   worn bugs (Glutton / Lure turns flyers to its nectar). A branch opens on the level where the bugs it answers first
   come. A branch and a top are seen at a glance (a look of their own, gold at the top); the panel shows every number
   now and after the upgrade. Hold a plant or a bug to read about it; the guide on the home screen has all of them.
-- **Levels**: twelve. The first three teach (15–18 waves, one boss at the end): the bugs keep to a stone path, the
-  plants grow on beds beside it and a grass cell sends the bugs the long way round, then meadows in the middle are the
-  first mazes; plants and branches open there, each with the bugs it answers. Then nine open fields, 20–30 waves each, with their own ground: fertile beds (a stronger plant), mud (slow bugs), ponds,
+- **Levels**: twelve. The first three teach (15–18 waves, one boss at the end). The first two are lawns set with
+  wooden boxes, the plants grow in them and the bugs crawl the grass between: on «Развилка» a strip of grass is the
+  short way to the fruit and one plant on it sends the bugs round the whole hook; on «Поляна» three rows of boxes with
+  a way round each end, shut one end of a row and the other end of the next and the bugs zigzag along all of them;
+  then a meadow in the middle is the first open maze. Plants and branches open there, each with the bugs it answers. Then nine open fields, 20–30 waves each, with their own ground: fertile beds (a stronger plant), mud (slow bugs), ponds,
   nettles (sting the bugs, nothing grows), weeds (cleared for dew), two anthills. A boss comes in the middle and at
   the end of every level: the rhino beetle runs, the queen lets ants out, the slug king splits into snails, the
   hornet flies over the maze, the spider webs the plants.
@@ -32,7 +34,9 @@ and in portrait (turned there).
   that; the size of every wave (`swell`) is set so that no one or two waves are all the difficulty: a big wave, an
   ordinary one and a breather stand at 1.15, 1.3 and 1.6 times the margin of the hardest boss wave. Thorns, spikes and
   nettles together take no more than a quarter of a bug's health (`PRICK_CAP`): with no cap a thorny trail, cold mints
-  and flytraps held bugs of any health. The numbers and how they were found: [docs/studio.md](docs/studio.md).
+  and flytraps held bugs of any health. The numbers and how they were found: [docs/studio.md](docs/studio.md); what
+  is wrong with the way they are found (the mazes come from a few templates, the clean edge jumps, nothing bounds a
+  plain win): [docs/balance-issues.md](docs/balance-issues.md).
   A level is meant to be hard and to be won by thought. Plants that hit walkers reach only the cells
   next to them, and bugs come in tight packs: a long winding trail has twice the cells beside it and keeps a pack
   under the plants several times longer than a straight road. The health of every bug, bosses too, grows by one rule on

@@ -188,36 +188,36 @@ export const LEVELS = [
   {
     name: 'Развилка', theme: 'orchard', feature: 'fork',
     map: [
-      'BBBBBSBBBBBRBB',
-      'BBBBBBBBBBBBBB',
-      'B+++++++++++BB',
-      'BA_______.___E',
-      'B+_++++++B_+BB',
-      'BB_+++++++_+WB',
-      'BB_________+WB',
-      'BB+++++++++BBB',
+      'S++++++++BSBBB',
+      'B+......oBBBBR',
+      'B+.oooo.oBWWBB',
+      'B+.oWA..oRWWSB',
+      'B+.oWWB.oBBBBB',
+      'B+.oooo.oooooo',
+      'B+...........E',
+      'B+++++++++++++',
     ],
     dew: 280, pay: [210, 400],
     plants: ['pumpkin', 'rose', 'pepper', 'mint'],
-    swell: [1, 1, 1, 1.55, 1, .7, .9, 1.2, .7, .6, 1.6, 1.2, .8, .65, 1],
-    hp: .84, count: 15, budget: [4.3, 2.3], roster: [['ant', 1], ['beetle', 3], ['grasshopper', 5], ['aphid', 7], ['caterpillar', 9]], boss: [[15, 'rhino', 1]],
+    swell: [1, 1, .75, 1.85, .95, .7, 1, 1.4, .75, .6, 1.95, 1.2, .8, .6, 1],
+    hp: .9, count: 15, budget: [4.3, 2.3], roster: [['ant', 1], ['beetle', 3], ['grasshopper', 5], ['aphid', 7], ['caterpillar', 9]], boss: [[15, 'rhino', 1]],
   },
   {
     name: 'Поляна', theme: 'meadow', feature: 'meadow',
     map: [
-      'BBB++++++++BBB',
-      'SBB+......++BB',
-      'BBB+......___E',
-      'BBB+......++BB',
-      'B+++......+BBB',
-      'BA__......+BWB',
-      'B+++......+RWB',
-      'BBB++++++++BBB',
+      'WW+++++++++BRB',
+      'WW+.......+BBB',
+      'BS+.o.o.o....E',
+      'BB+.o.o.o.+BSB',
+      'BBA.o.o.o.+BBB',
+      'BB+.o.o.o.+WWB',
+      'SB+.......+WWB',
+      'BB+++++++++BRB',
     ],
     dew: 320, pay: [250, 500],
     plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
-    swell: [1, 1, 1.25, 1.25, 1.15, 1.25, 1.1, 1.5, 1.25, 2.4, .75, 1.75, 1.55, 2.5, 1.25, 2.5, 1, 1],
-    hp: .57, count: 18, budget: [5.6, 3.2], roster: [['ant', 1], ['snail', 3], ['beetle', 4], ['caterpillar', 6], ['butterfly', 8], ['pillbug', 9], ['cricket', 12]], boss: [[18, 'slugking', 1]],
+    swell: [1, 1, 1.95, 1.6, 1.3, 1.7, 1.4, 1.75, 1.4, 2.5, .75, 1.8, 2.5, 2.5, 1.1, 2.5, 1.05, 1],
+    hp: .75, count: 18, budget: [5.6, 3.2], roster: [['ant', 1], ['snail', 3], ['beetle', 4], ['caterpillar', 6], ['butterfly', 8], ['pillbug', 9], ['cricket', 12]], boss: [[18, 'slugking', 1]],
   },
   {
     name: 'Большая поляна', theme: 'sunset',
@@ -391,10 +391,11 @@ export const LEVELS = [
   },
 ];
 
-const OBSTACLE = { R: 'rock', S: 'stump', L: 'log', W: 'water', X: 'weed', B: 'bush' }, TILE = { f: 'fertile', m: 'mud', n: 'nettle', _: 'stone', '+': 'bed' };
+const OBSTACLE = { R: 'rock', S: 'stump', L: 'log', W: 'water', X: 'weed', B: 'bush' }, TILE = { f: 'fertile', m: 'mud', n: 'nettle', _: 'stone', '+': 'bed', o: 'bed' };
 function readMap(L) {
-  L.obstacles = []; L.tiles = []; L.entries = []; L.fruit = null;
+  L.obstacles = []; L.tiles = []; L.entries = []; L.fruit = null; L.holes = []; // holes: beds drawn as boxes standing on a lawn ('o'), the same bed in play
   L.map.forEach((row, j) => [...row].forEach((ch, i) => {
+    if (ch === 'o') L.holes.push([i, j]);
     if (OBSTACLE[ch]) L.obstacles.push([i, j, OBSTACLE[ch]]);
     else if (TILE[ch]) L.tiles.push([i, j, TILE[ch]]);
     else if (ch === 'A') L.fruit = [i, j];

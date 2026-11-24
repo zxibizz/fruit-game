@@ -1042,6 +1042,127 @@ function jagLeaf(c, x, y, len, ang, col, o = {}) {
   c.beginPath(); c.moveTo(len * .1, 0); c.lineTo(len * .85, 0); c.strokeStyle = alpha(lighten(col, .4), .7); c.lineWidth = .8; c.stroke();
   c.restore();
 }
+// A stone path drawn as one band over all its cells (cells: [{ x, y, nb }], nb: the neighbours on the path, screen
+// directions, bits N 1, E 2, S 4, W 8): a round cap on every cell and a straight piece to every neighbour, so the bends
+// are soft and the stones of the path never stop at a cell's edge. Three passes over all the cells: the rim, the
+// ground of the path, the cobbles.
+const PATH_W = 17, STEP = [[0, -1, 1], [1, 0, 2], [0, 1, 4], [-1, 0, 8]];
+function bandPass(c, cells, w, col) {
+  c.save(); c.fillStyle = col; c.strokeStyle = col; c.lineCap = 'butt'; c.lineWidth = w * 2;
+  c.beginPath(); for (const { x, y } of cells) { c.moveTo(x + w, y); c.arc(x, y, w, 0, TAU); } c.fill();
+  c.beginPath(); for (const { x, y, nb } of cells) for (const [dx, dy, b] of STEP) if (nb & b && (b === 2 || b === 4)) { c.moveTo(x, y); c.lineTo(x + dx * 42, y + dy * 42); } c.stroke();
+  c.restore();
+}
+function hdStoneNet(c, cells) {
+  c.save();
+  bandPass(c, cells, PATH_W + 3.2, 'rgba(70,58,40,.28)');
+  bandPass(c, cells, PATH_W + 1.6, '#8f826b');
+  bandPass(c, cells, PATH_W, '#b3a78f');
+  // the cobbles: on a jittered grid over the cell and halfway to every neighbour, kept inside the band
+  for (const { x, y, nb } of cells) {
+    const seed = hash2(x, y), R = rng(seed + 3); R(); R();
+    const inside = (px, py) => { const ax = Math.abs(px - x), ay = Math.abs(py - y), r = PATH_W - 6;
+      if (Math.hypot(px - x, py - y) <= r) return true;
+      return STEP.some(([dx, dy, b]) => nb & b && (dx ? (Math.sign(px - x) === dx && ay <= r && ax <= 21) : (Math.sign(py - y) === dy && ax <= r && ay <= 21))); };
+    for (let gy = -1; gy <= 1; gy++) for (let gx = -2; gx <= 2; gx++) {
+      const px = x + gx * 11.5 + (gy & 1 ? 5.7 : 0) + (R() - .5) * 3.4, py = y + gy * 10.5 + (R() - .5) * 3; if (!inside(px, py)) continue;
+      const rx = 5.4 + R() * 1.4, ry = 4.6 + R() * 1.2, tone = R();
+      hdBlob(c, (cc) => wobbly(cc, px, py, rx, ry, seed + gx * 7 + gy * 13, .14, 7, .4), tone > .66 ? '#d6ccb6' : tone > .33 ? '#c8bca4' : '#bcae94', px, py - 1.5, 5, { olk: .5, k: .5 });
+    }
+  }
+  c.restore();
+}
+// Garden beds drawn as plots: next to each other they make one box with one wooden rim, the furrows running on through
+// (cells: [{ x, y, nb, dg }], nb as for the path, dg the diagonals: NE 1, SE 2, SW 4, NW 8 — a corner is filled only when
+// both its sides and its diagonal are beds).
+function plotPass(c, cells, inset, r, col, stroke) {
+  c.beginPath();
+  for (const { x, y, nb, dg } of cells) {
+    const e = (b) => (nb & b ? 21.6 : 21 - inset);
+    const top = y - e(1), right = x + e(2), bottom = y + e(4), left = x - e(8);
+    // a corner is round when neither side has a bed, square otherwise (where both sides have one and the diagonal not,
+    // the notch below cuts it back)
+    const cr = (a, b) => (!(nb & a) && !(nb & b) ? r : 0);
+    const k = [cr(1, 8), cr(1, 2), cr(4, 2), cr(4, 8)];
+    c.moveTo(left + k[0], top); c.lineTo(right - k[1], top); if (k[1]) c.arcTo(right, top, right, top + k[1], k[1]);
+    c.lineTo(right, bottom - k[2]); if (k[2]) c.arcTo(right, bottom, right - k[2], bottom, k[2]);
+    c.lineTo(left + k[3], bottom); if (k[3]) c.arcTo(left, bottom, left, bottom - k[3], k[3]);
+    c.lineTo(left, top + k[0]); if (k[0]) c.arcTo(left, top, left + k[0], top, k[0]); c.closePath();
+    // the notch of an inner corner (both sides beds, the diagonal not): cut back to the inset
+    for (const [a, b, d, sx, sy] of [[1, 2, 1, 1, -1], [4, 2, 2, 1, 1], [4, 8, 4, -1, 1], [1, 8, 8, -1, -1]]) if (nb & a && nb & b && !(dg & d)) {
+      // counter-clockwise against the cell's clockwise outline, whichever the corner, so that the nonzero fill cuts it
+      const ix = x + sx * (21 - inset), iy = y + sy * (21 - inset), ox = x + sx * 21.6, oy = y + sy * 21.6;
+      if (sx * sy > 0) { c.moveTo(ix, iy); c.lineTo(ix, oy); c.lineTo(ox, oy); c.lineTo(ox, iy); } else { c.moveTo(ix, iy); c.lineTo(ox, iy); c.lineTo(ox, oy); c.lineTo(ix, oy); }
+      c.closePath();
+    }
+  }
+  c.fillStyle = col; c.fill('nonzero');
+  if (stroke) { c.lineWidth = stroke[0]; c.strokeStyle = stroke[1]; c.stroke(); }
+}
+function hdBedNet(c, cells) {
+  // raised like the boxes on a lawn: the top lifted by BED_LIFT, a front wall of planks under every edge that faces down
+  const L = BED_LIFT, H = 6;
+  c.save();
+  c.save(); c.translate(2.5, H + 3); plotPass(c, cells, 0, 8, 'rgba(25,45,12,.34)'); c.restore();
+  c.save(); c.translate(0, H - L); plotPass(c, cells, 1.5, 7, '#5c3c1b', [1.3, 'rgba(50,28,10,.85)']); c.restore();
+  // the planks of the wall, where a plot ends below
+  for (const { x, y, nb } of cells) if (!(nb & 4)) {
+    const top = y + 21 - 1.5 - L, l = x - (nb & 8 ? 21.6 : 19.5), r = x + (nb & 2 ? 21.6 : 19.5);
+    c.save(); c.beginPath(); c.rect(l, top - 1, r - l, H + 2); c.clip();
+    const g = c.createLinearGradient(0, top, 0, top + H); g.addColorStop(0, '#8a5e30'); g.addColorStop(1, '#553617'); c.fillStyle = g; c.fillRect(l, top - 1, r - l, H + 2);
+    c.beginPath(); c.moveTo(l, top + H * .5); c.lineTo(r, top + H * .5); c.lineWidth = 1; c.strokeStyle = 'rgba(40,22,8,.5)'; c.stroke();
+    for (const dx of [-11, 3, 15]) { c.beginPath(); c.moveTo(x + dx, top); c.lineTo(x + dx, top + H); c.lineWidth = .9; c.strokeStyle = 'rgba(40,22,8,.4)'; c.stroke(); }
+    c.restore();
+  }
+  c.save(); c.translate(0, -L);
+  plotPass(c, cells, 1.5, 7, '#a8763f', [1.4, 'rgba(90,55,25,.85)']);
+  // a light edge along the top of the rim, where a plot ends above
+  c.lineWidth = 1.2; c.strokeStyle = 'rgba(255,225,170,.5)'; c.beginPath();
+  for (const { x, y, nb } of cells) if (!(nb & 1)) { c.moveTo(x - (nb & 8 ? 21.6 : 14), y - 21 + 2.8); c.lineTo(x + (nb & 2 ? 21.6 : 14), y - 21 + 2.8); }
+  c.stroke();
+  // every cell its own square of soil, as in the boxes
+  for (const { x, y } of cells) {
+    const h = 16.5, R = rng(hash2(x, y) + 5);
+    c.beginPath(); rrect(c, x - h, y - h, h * 2, h * 2, 4.5); c.fillStyle = '#6a4222'; c.fill();
+    c.save(); c.beginPath(); rrect(c, x - h, y - h, h * 2, h * 2, 4.5); c.clip();
+    c.beginPath(); rrect(c, x - h, y - h, h * 2, h * 2, 4.5); c.lineWidth = 3.4; c.strokeStyle = 'rgba(30,15,5,.35)'; c.stroke();
+    for (let i = -1; i <= 1; i++) { const fy = y + i * 9 + 1;
+      c.beginPath(); c.moveTo(x - h, fy); c.lineTo(x + h, fy); c.lineWidth = 2.8; c.strokeStyle = 'rgba(40,22,8,.35)'; c.stroke();
+      c.beginPath(); c.moveTo(x - h, fy - 2.8); c.lineTo(x + h, fy - 2.8); c.lineWidth = 1.2; c.strokeStyle = 'rgba(160,110,60,.35)'; c.stroke(); }
+    for (let i = 0; i < 8; i++) { c.beginPath(); c.arc(x + (R() - .5) * 26, y + (R() - .5) * 26, .7 + R(), 0, TAU); c.fillStyle = 'rgba(190,130,70,.7)'; c.fill(); }
+    c.restore();
+  }
+  c.restore(); c.restore();
+}
+const BED_LIFT = 3;
+// A bed standing alone in the middle of a lawn: a small wooden box of soil, a little smaller than the cell, with grass
+// showing round it and a shadow under it, so a garden inside the trail reads as boxes set out on a lawn and not as one
+// heavy field; it stands up out of the grass, plainly something the bugs go round.
+function hdHole(c, x, y) {
+  const R = rng(hash2(x, y) + 9); R(); R();
+  const h = 16, cy = y - 4, H = 7; // H: the height of the box's front wall
+  c.save();
+  // the shadow it casts on the grass
+  c.beginPath(); rrect(c, x - h + 3, cy - h + H + 4, h * 2 + 1, h * 2, 7); c.fillStyle = 'rgba(25,45,12,.38)'; c.fill();
+  // the front wall: planks, dark at the foot
+  c.beginPath(); rrect(c, x - h, cy - h + H, h * 2, h * 2, 6); c.fillStyle = '#6e4a24'; c.fill(); c.lineWidth = 1.3; c.strokeStyle = 'rgba(60,35,12,.85)'; c.stroke();
+  c.save(); c.beginPath(); rrect(c, x - h, cy - h + H, h * 2, h * 2, 6); c.clip();
+  const wall = c.createLinearGradient(0, cy + h - 1, 0, cy + h + H); wall.addColorStop(0, '#8a5e30'); wall.addColorStop(1, '#553617'); c.fillStyle = wall; c.fillRect(x - h, cy + h - 2, h * 2, H + 3);
+  c.beginPath(); c.moveTo(x - h, cy + h + H * .5); c.lineTo(x + h, cy + h + H * .5); c.lineWidth = 1; c.strokeStyle = 'rgba(40,22,8,.55)'; c.stroke();
+  for (const dx of [-h * .5, h * .25, h * .8]) { c.beginPath(); c.moveTo(x + dx, cy + h); c.lineTo(x + dx, cy + h + H); c.lineWidth = .9; c.strokeStyle = 'rgba(40,22,8,.4)'; c.stroke(); }
+  c.restore();
+  // the top: the rim and the soil inside
+  c.beginPath(); rrect(c, x - h, cy - h, h * 2, h * 2, 6); c.fillStyle = '#a8763f'; c.fill(); c.lineWidth = 1.4; c.strokeStyle = 'rgba(90,55,25,.85)'; c.stroke();
+  c.beginPath(); c.moveTo(x - h + 5, cy - h + 1.2); c.lineTo(x + h - 5, cy - h + 1.2); c.lineWidth = 1.2; c.strokeStyle = 'rgba(255,225,170,.55)'; c.stroke();
+  c.beginPath(); rrect(c, x - h + 3.5, cy - h + 3.5, h * 2 - 7, h * 2 - 7, 4); c.fillStyle = '#6a4222'; c.fill();
+  c.save(); c.beginPath(); rrect(c, x - h + 3.5, cy - h + 3.5, h * 2 - 7, h * 2 - 7, 4); c.clip();
+  c.beginPath(); rrect(c, x - h + 3.5, cy - h + 3.5, h * 2 - 7, h * 2 - 7, 4); c.lineWidth = 3.4; c.strokeStyle = 'rgba(30,15,5,.35)'; c.stroke();
+  for (let i = -1; i <= 1; i++) { const fy = cy + i * 8 + 1;
+    c.beginPath(); c.moveTo(x - h, fy); c.lineTo(x + h, fy); c.lineWidth = 2.6; c.strokeStyle = 'rgba(40,22,8,.35)'; c.stroke();
+    c.beginPath(); c.moveTo(x - h, fy - 2.6); c.lineTo(x + h, fy - 2.6); c.lineWidth = 1.2; c.strokeStyle = 'rgba(160,110,60,.35)'; c.stroke(); }
+  for (let i = 0; i < 7; i++) { c.beginPath(); c.arc(x + (R() - .5) * 22, cy + (R() - .5) * 22, .7 + R(), 0, TAU); c.fillStyle = 'rgba(190,130,70,.7)'; c.fill(); }
+  c.restore(); c.restore();
+}
 function hdTile(c, kind, x, y) {
   const seed = hash2(x, y), R = rng(seed + 3); R(); R();
   c.save();
@@ -1191,4 +1312,4 @@ function hdWeb(c, x, y, r = 18) {
   c.restore();
 }
 
-export { hdBush, hdBall, hdBlob, hdLeaf, hdShadow, hdLine, hdCurve, hdEye, hdText, hdBug, hdPlant, hdApple, hdStump, hdAnthill, hdRock, hdLog, hdGrass, hdPath, hdBorderBushes, hdForeground, hdVignette, hdMotes, fxThorn, fxKernel, fxStar, fxHit, fxDmg, fxFrost, fxIced, fxFire, hdDrop, hdHp, uiPanel, uiRound, iconFrost, iconRain, iconBirds, hdSoil, hdTile, hdWater, hdWeed, hdWeb, hdDapple, hdGrade, hdSun2, bladeTri, rrect, along, chaikin, rng, lighten, darken, alpha, mix, TAU, star5, strokePts };
+export { hdStoneNet, hdBedNet, hdHole, hdBush, hdBall, hdBlob, hdLeaf, hdShadow, hdLine, hdCurve, hdEye, hdText, hdBug, hdPlant, hdApple, hdStump, hdAnthill, hdRock, hdLog, hdGrass, hdPath, hdBorderBushes, hdForeground, hdVignette, hdMotes, fxThorn, fxKernel, fxStar, fxHit, fxDmg, fxFrost, fxIced, fxFire, hdDrop, hdHp, uiPanel, uiRound, iconFrost, iconRain, iconBirds, hdSoil, hdTile, hdWater, hdWeed, hdWeb, hdDapple, hdGrade, hdSun2, bladeTri, rrect, along, chaikin, rng, lighten, darken, alpha, mix, TAU, star5, strokePts };
