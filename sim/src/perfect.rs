@@ -286,7 +286,7 @@ pub fn perfect(j: &J, jobs: usize) {
     let d0 = Data::read(j.at("data")); let level = j.at("level").num() as usize;
     let only = j.get("only").filter(|v| **v != J::Null).map(|v| d0.plant(v.str()));
     let mut base = crate::opts_of(&d0, j.at("opts")); if let Some(k) = only { base.plants = Some(vec![k]); }
-    let seeds: Vec<u32> = j.get("seeds").map_or(vec![7, 11, 13], |s| s.arr().iter().map(|x| x.num() as u32).collect());
+    let seeds: Vec<u32> = j.get("seeds").map_or(vec![7, 11, 13, 17, 19], |s| s.arr().iter().map(|x| x.num() as u32).collect());
     let cx = Ctx::new(j.at("data"), level, base, seeds, only);
     let mut plans: Vec<Vec<Step>> = j.get("plans").map_or(Vec::new(), |p| p.arr().iter().map(|x| plan_of(&cx.d, x)).collect());
     if let Some(bots) = j.get("bots") { for b in bots.arr() { let mut o = crate::opts_of(&cx.d, b); if let Some(k) = only { o.plants = Some(vec![k]); }
@@ -304,7 +304,7 @@ pub fn perfect(j: &J, jobs: usize) {
 // first it is bitten on (0: bitten on the lowest rung asked)
 pub fn scan(j: &J, jobs: usize) {
     let d0 = Data::read(j.at("data"));
-    let seeds: Vec<u32> = j.get("seeds").map_or(vec![7, 11, 13], |s| s.arr().iter().map(|x| x.num() as u32).collect());
+    let seeds: Vec<u32> = j.get("seeds").map_or(vec![7, 11, 13, 17, 19], |s| s.arr().iter().map(|x| x.num() as u32).collect());
     let (from, to) = (j.get("from").map_or(-6, |v| v.num() as i32).max(K_MIN), j.get("to").map_or(14, |v| v.num() as i32).min(K_MAX));
     let what = j.get("what").map_or("clean", |v| v.str()).to_string(); // clean | won | stars (three stars: 80% of the fruit left)
     let tasks: Vec<(usize, Opts)> = j.at("tasks").arr().iter().map(|t| (t.at("level").num() as usize, crate::opts_of(&d0, t.at("opts")))).collect();

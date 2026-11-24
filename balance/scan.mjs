@@ -2,7 +2,8 @@
 // Whether the fruit is bitten does not turn on one health of the bugs — a party may be clean against bugs 10% healthier,
 // bitten against 20% and clean again against 40% — so a margin is not found by halving. Every party is played on every
 // rung of a grid (the bugs 1.05^k times healthier, k from..to) on every seed asked (where the flyers come from is drawn
-// by the game); its margin is the last rung before the first it fails on, on any seed.
+// by the game: eight seeds, three of them never seen by the search); its margin is the last rung before the first it fails
+// on, on any seed.
 //   scan(tasks, { what }) → [{ margin, open (never failed up to the top rung), grid: [[k, health, seeds held]] }]
 //   what: 'clean' (won, the fruit never bitten), 'stars' (won with three stars: 80% of the fruit left), 'won'
 //   search(request) → { plan, margin, history, tried, parties }: the best perfect party found (perfect.rs has how)
@@ -13,8 +14,11 @@ import { join } from 'node:path';
 import { exportData } from '../sim/js/export.mjs';
 import { build, trustOf } from '../sim/js/play.mjs';
 
-export const SEEDS = [7, 11, 13, 17, 19]; // the seeds of the game a party is measured on
-export const SEARCH_SEEDS = [7, 11, 13]; // and the ones it is searched on (the other two: seeds the search never saw)
+// The seeds of the game a party is measured on, and the ones it is searched on (the other three: seeds the search never
+// saw). On three seeds the search fitted its parties to them where there are flyers: «Большая поляна» ×1.80 on its
+// three and ×1.55 on five.
+export const SEEDS = [7, 11, 13, 17, 19, 23, 29, 31];
+export const SEARCH_SEEDS = [7, 11, 13, 17, 19];
 export const TARGET = 1 / 0.7;
 const JOBS = Math.max(1, availableParallelism() - 1);
 // the bot's trust in its own count (balance/trust.json), as sim/js/play.mjs hands it over

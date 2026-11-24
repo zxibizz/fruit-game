@@ -2,11 +2,11 @@
 //   [--keep] [--jobs N] [--out FILE] [--rng N]
 // Looks for the party that gets through the level with the fruit never bitten against the healthiest bugs
 // (sim/src/perfect.rs: a whole party at a time, a plant on any cell, the maze built and broken a cell at a time; a party
-// counts on a rung of health when it is clean there on three seeds of the game and on the rung below). It starts from
+// counts on a rung of health when it is clean on five seeds of the game there and on every rung below, from ×0.75 up). It starts from
 // the party kept (balance/perfect/L<n>.json) and from the parties of the smart bot and of the expert, --runs times over
 // with another draw of the search each time: runs that end on the same rung say the search found what there is to find,
 // runs apart say it did not, and how far. The best of them is then measured as every party is (balance/scan.mjs: a grid
-// of health, five seeds — two of them the search never saw — the margin the last rung before the first failure), with
+// of health, eight seeds — three of them the search never saw — the margin the last rung before the first failure), with
 // the margins of a plain win and of three stars beside it. --mono: the best party of one plant alone, every plant of the
 // level in turn (a fifth of the time each). --keep: it is kept in balance/perfect/ if it holds more than the one there.
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
