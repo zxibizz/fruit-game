@@ -232,12 +232,12 @@ function resize() {
   const innerW = UW - LX - RX, count = trayList().length;
   TWO = PORT || innerW < 600; TOPH = TOPY + (TWO ? 84 : 46);
   // the shelf as a row under the field…
-  const rowH = 60, rcw = Math.min(52, (innerW - 8 - CORN * 2) / count);
-  const row = { mode: 'row', cols: count, cw: rcw, ch: rowH - 8, w: rcw * count, h: rowH, fa: [LX + 4, TOPH, innerW - 8, UH - TOPH - rowH - BOTY - 2] };
+  const rcw = Math.min(52, (innerW - 8 - CORN * 2) / count), rowH = rcw + 8; // square cards
+  const row = { mode: 'row', cols: count, cw: rcw, ch: rcw, w: rcw * count, h: rowH, fa: [LX + 4, TOPH, innerW - 8, UH - TOPH - rowH - BOTY - 2] };
   row.x = LX + (innerW - row.w) / 2; row.y = UH - BOTY - rowH + 1;
   // …or as a column (two, when one would make the cards too low) left of it
   const availH = UH - TOPH - Math.max(BOTY, 4) - 2; let cols = 1; while (cols < 3 && availH / Math.ceil(count / cols) < 46) cols++;
-  const rows = Math.ceil(count / cols), cch = Math.min(62, availH / rows), ccw = 50;
+  const rows = Math.ceil(count / cols), ccw = 50, cch = Math.min(ccw, availH / rows);
   const col = { mode: 'col', cols, cw: ccw, ch: cch, w: cols * ccw, h: rows * cch, fa: [LX + cols * ccw + 8, TOPH, innerW - cols * ccw - 12, availH] };
   col.x = LX + 4; col.y = TOPH + (availH - col.h) / 2;
   const fitOf = (t) => Math.min(t.fa[2] * uk / gw, t.fa[3] * uk / gh);
@@ -915,15 +915,10 @@ function plantK(type, lvl, br = null) {
 function plantCard(type, x, y, w, h, on, poor) {
   c.save(); if (on) { c.shadowColor = 'rgba(255,220,60,.95)'; c.shadowBlur = 12; }
   A.uiPanel(c, x, y, w, h, 11, on ? '#fff0a8' : '#fbe7c2', { ol: on ? '#c88a10' : '#7a4a22', olw: on ? 3 : 2 }); c.restore();
-  // the plant above, the price on a strip of its own below
-  const PS = 14, s = plantSprite(type, 1), [bx0, by0, bx1, by1] = plantBox(type), aw = w - 6, ah = h - PS - 4, k = Math.min(aw / (bx1 - bx0), ah / (by1 - by0), 1.05);
-  c.save(); c.beginPath(); A.rrect(c, x + 2, y + 2, w - 4, h - PS - 1, 9); c.clip();
-  c.translate(x + w / 2 - (bx0 + bx1) / 2 * k, y + 3 + ah - by1 * k + Math.min(2, (ah - (by1 - by0) * k) / 2)); c.scale(k, k); blit(s, 0, 0); c.restore();
-  c.save(); c.beginPath(); A.rrect(c, x + 2, y + 2, w - 4, h - 4, 9); c.clip(); c.fillStyle = poor ? 'rgba(160,60,40,.16)' : 'rgba(120,70,30,.12)'; c.fillRect(x, y + h - PS - 1, w, PS + 1); c.restore();
-  const label = String(PLANTS[type].cost); c.save(); c.font = '900 10.5px Nunito'; const lw = c.measureText(label).width + 9; c.restore();
-  const lx = x + w / 2 - lw / 2, ly = y + h - PS / 2 - 1.5;
-  A.hdDrop(c, lx + 2, ly + .5, 3.2);
-  A.hdText(c, label, lx + 7, ly + .5, 10.5, poor ? '#c0392b' : '#6a3e1c', { stroke: null, align: 'left' });
+  // the plant alone, fitted to the card by its own outline (its price is in the panel a tap on the card opens)
+  const s = plantSprite(type, 1), [bx0, by0, bx1, by1] = plantBox(type), aw = w - 8, ah = h - 8, k = Math.min(aw / (bx1 - bx0), ah / (by1 - by0), 1.1);
+  c.save(); c.beginPath(); A.rrect(c, x + 2, y + 2, w - 4, h - 4, 9); c.clip();
+  c.translate(x + w / 2 - (bx0 + bx1) / 2 * k, y + h / 2 - (by0 + by1) / 2 * k); c.scale(k, k); blit(s, 0, 0); c.restore();
   if (poor) { c.save(); c.beginPath(); A.rrect(c, x, y, w, h, 11); c.fillStyle = 'rgba(60,40,30,.38)'; c.fill(); c.restore(); }
 }
 const cardRect = (k) => { const col = k % TRAY.cols, row = Math.floor(k / TRAY.cols); return [TRAY.x + col * TRAY.cw + 2, TRAY.y + row * TRAY.ch + 2, TRAY.cw - 4, TRAY.ch - 4]; };
@@ -959,9 +954,12 @@ function drawInfo() {
   if (drag) { const fy = drag.y / uk, fx0 = drag.x / uk; if (fx0 > x - 20 && fx0 < x + w + 20 && fy > y - 70 && fy < y + h + 30) { if (TRAY.mode === 'row') y = Math.max(TOPH + 4, fy - 90 - h); else x = Math.min(UW - RX - w - 6, fx0 + 50); if (fx0 > x - 20 && fx0 < x + w + 20 && fy > y - 70 && fy < y + h + 30) return; } }
   c.save(); c.globalAlpha = drag ? .93 : Math.min(1, infoT * 3); c.shadowColor = 'rgba(0,0,0,.35)'; c.shadowBlur = 12; A.uiPanel(c, x, y, w, h, 16, '#fff3d6', { ol: '#6a3e1c', olw: 2.5 }); c.shadowBlur = 0;
   A.hdText(c, T.plant[type], x + 11, y + 17, 15, '#6a3e1c', { stroke: null, align: 'left' });
-  // the tag on the right: the plant's part, or what planting on the cell under the finger would do
+  // its price in dew, after the name (red when there is not enough)
+  c.save(); c.font = '900 15px Nunito'; const nx = x + 11 + c.measureText(T.plant[type]).width + 10, price = String(PLANTS[type].cost), poor = game.dew < PLANTS[type].cost; c.font = '900 14px Nunito'; const pend = nx + 12 + c.measureText(price).width; c.restore();
+  A.hdDrop(c, nx + 4, y + 17.5, 5); A.hdText(c, price, nx + 12, y + 17.5, 14, poor ? '#c0392b' : '#2f7fc0', { stroke: null, align: 'left' });
+  // the tag on the right: the plant's part (left out on a panel too narrow for it after the price)
   const tag = T.role[type], col = '#b0895a';
-  if (tag) { c.font = '900 11px Nunito'; const gw = c.measureText(tag).width + 14; c.beginPath(); A.rrect(c, x + w - 9 - gw, y + 8, gw, 18, 9); c.fillStyle = col; c.fill(); A.hdText(c, tag, x + w - 9 - gw / 2, y + 17.5, 11, '#fff', { stroke: null }); }
+  c.font = '900 11px Nunito'; if (tag && x + w - 9 - (c.measureText(tag).width + 14) > pend + 6) { c.font = '900 11px Nunito'; const gw = c.measureText(tag).width + 14; c.beginPath(); A.rrect(c, x + w - 9 - gw, y + 8, gw, 18, 9); c.fillStyle = col; c.fill(); A.hdText(c, tag, x + w - 9 - gw / 2, y + 17.5, 11, '#fff', { stroke: null }); }
   let yy = y + 36;
   for (const l of lines) { A.hdText(c, l, x + 11, yy, 12, '#8a5a32', { stroke: null, align: 'left', weight: 800 }); yy += 15; }
   yy += 2; for (const l of st) { A.hdText(c, l, x + 11, yy, 11, '#3f8a2a', { stroke: null, align: 'left' }); yy += 14; }
