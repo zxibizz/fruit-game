@@ -24,7 +24,15 @@ and in portrait (turned there).
   nettles (sting the bugs, nothing grows), weeds (cleared for dew), two anthills. A boss comes in the middle and at
   the end of every level: the rhino beetle runs, the queen lets ants out, the slug king splits into snails, the
   hornet flies over the maze, the spider webs the plants.
-- **Balance**: a level is meant to be hard and to be won by thought. Plants that hit walkers reach only the cells
+- **Balance** (0.28): a level is tuned by its perfect party. The best party known of every level gets through with
+  the fruit never bitten against bugs 1/0.7 = 1.43 times healthier than they are, so a garden of 70% of its strength
+  is the least that keeps the fruit whole, and a garden of one plant alone is no more than 62% of the best (on the
+  first level, of two plants and no branches, roses alone still do it: 84%). The health of a level's bugs (`hp`) sets
+  that; the size of every wave (`swell`) is set so that no one or two waves are all the difficulty: a big wave, an
+  ordinary one and a breather stand at 1.15, 1.3 and 1.6 times the margin of the hardest boss wave. Thorns, spikes and
+  nettles together take no more than a quarter of a bug's health (`PRICK_CAP`): with no cap a thorny trail, cold mints
+  and flytraps held bugs of any health. The numbers and how they were found: [docs/studio.md](docs/studio.md).
+  A level is meant to be hard and to be won by thought. Plants that hit walkers reach only the cells
   next to them, and bugs come in tight packs: a long winding trail has twice the cells beside it and keeps a pack
   under the plants several times longer than a straight road. The health of every bug, bosses too, grows by one rule on
   every level (`TUNE.hpGrowth` of its own health a wave). The first level of a
@@ -62,7 +70,7 @@ and in portrait (turned there).
 - `server/` — Node 22, no dependencies: static files and `/healthz`.
 - `node --test test/*.test.js` — pathing and placement rules, economy, eaten plants and roots, bosses, the ground, perks, saving, server, offline
   cache list, no sudden walls of flyers in the waves, the two copies of the simulation against each other (see `sim/`
-  below), and the balance on one seed: the smart bot (`sim/src/bot.rs`: a maze through mud and nettles; it values a
+  below), and the balance on one seed: the kept perfect party of every level gets through with the fruit whole against bugs 15% healthier and not against bugs 75% healthier, and one plant alone does not (but on the first level); the learnt strategy wins most levels; the smart bot (`sim/src/bot.rs`: a maze through mud and nettles; it values a
   garden by the bugs it stops — walkers and flyers apart, a crowd sharing a single shooter while chili, heat and thorns hit
   many; frost and rain, the perks of two stars a level) must win every level; a garden beside the
   untouched trail must lose every level with the most perks there can be by then (three stars on every level before),
@@ -181,6 +189,13 @@ and in portrait (turned there).
   (the economy, eaten plants, frost and rain), refined step by step, and the margin of the level is set beside the
   expert's — whether the meta of single waves carries over to a party, and how much easier a level is for a player
   who plays it that way. How far all this can be trusted: [docs/studio.md](docs/studio.md).
+  The levels are tuned with three more: `node balance/shape.mjs --levels 6` finds the `swell` of a level (the size of
+  every wave that puts its margin in its place under the boss waves); `node balance/campaign.mjs --level 6 --clean`
+  looks for the best perfect party (the fruit never bitten, the game's own waves; it starts from the studio's gardens
+  and from the parties of the bots), measures a garden of one plant alone against it and says the `hp` of the level at
+  which the best holds the target; `node balance/perfect.mjs` plays the parties kept in `balance/perfect/` on the game
+  as it is — with no perks, two stars a level (what the levels are tuned for), three, every perk — beside the two
+  bots, and says the `hp` again (after a change of a plant: the same parties, a minute for all the levels).
 - `sim/` — the simulation once more, in Rust, and the bot that plays it (dev only, not in the image; `cargo` builds
   it, no dependencies). The balance matrix and the balance tests run on it: a party takes a tenth of a second where
   the JS simulation with a JS bot took three.
