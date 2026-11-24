@@ -20,6 +20,9 @@ const args = process.argv.slice(2), opt = (k, d) => { const i = args.indexOf(k);
 const SECS = Number(opt('--secs', 60)), ITERS = Number(opt('--iters', 3)), dir = opt('--out', join(homedir(), 'tmp', 'balance', 'shape'));
 const ranges = (s) => s.split(',').flatMap((p) => { const [a, b] = p.split('-').map(Number); return Array.from({ length: (b || a) - a + 1 }, (_, k) => a + k - 1); });
 export const PLACE = { boss: 1, big: 1.15, usual: 1.3, breather: 1.6 };
+// a wave is swelled 2.5 times at most and to no more than 220 bugs (a crowd bigger than the game ever had before the
+// waves were shaped; a wave that asks for more is left easier than its place, and said so in what is printed)
+export const MAX_SWELL = 2.5, MAX_BUGS = 220;
 const kindOf = (lv, w) => (lv.boss.some(([at]) => at === w) ? 'boss' : w <= 2 ? 'first' : w % 5 === 0 ? 'big' : w % 5 === 1 ? 'breather' : 'usual');
 const fm = (m) => (m >= INF ? '∞' : m.toFixed(2));
 
@@ -39,10 +42,14 @@ for (const L of ranges(opt('--levels', '6'))) {
     const off = rs.map((r) => { const k = kindOf(lv, r.wave); return k === 'boss' || k === 'first' ? 0 : Math.log(prof[r.wave - 1] / (PLACE[k] * B)); });
     process.stderr.write(`L${L + 1} pass ${it}: B ${fm(B)}; off its place by more than a quarter: ${off.filter((x) => Math.abs(x) > Math.log(1.25)).length} of ${n} waves; ${prof.map(fm).join(' ')}\n`);
     if (it === ITERS) break;
-    swell = swell.map((s, k) => { const x = off[k]; if (Math.abs(x) < 0.1) return s; const f = Math.max(1 / 1.6, Math.min(1.6, Math.exp(0.8 * x))); return Math.round(Math.max(0.3, Math.min(4, s * f)) * 20) / 20; });
+    swell = swell.map((s, k) => { const x = off[k]; if (Math.abs(x) < 0.1) return s; const f = Math.max(1 / 1.6, Math.min(1.6, Math.exp(0.8 * x))); return Math.round(Math.max(0.3, Math.min(MAX_SWELL, s * f)) * 20) / 20; });
+    // no wave above MAX_BUGS bugs: its swell is cut back to that (the waves are put together again to count them)
+    for (let again = 0; again < 20; again++) { const ws = (await eng.load({ set: { ...set, [`L${L + 1}.swell`]: swell } })).ui.levels[L].waves; let any = false;
+      ws.forEach((w, k) => { const c = w.reduce((t, g) => t + g[1], 0); if (c > MAX_BUGS && swell[k] > 0.3) { swell[k] = Math.max(0.3, Math.floor(swell[k] * MAX_BUGS / c * 20) / 20); any = true; } }); if (!any) break; }
     set[`L${L + 1}.swell`] = swell; d = await eng.load({ set });
   }
   console.log(`L${L + 1} ${lv.name}: B ${fm(B)}\n    swell: [${swell.join(', ')}],`);
+  { const capped = swell.map((x, k) => (x >= MAX_SWELL && prof[k] / B > PLACE[kindOf(lv, k + 1)] * 1.25 ? k + 1 : 0)).filter(Boolean); if (capped.length) console.log(`    at the most a wave may be swelled and still easier than its place: waves ${capped.join(', ')}`); }
   console.log('    ' + prof.map((m, k) => `${k + 1}:${fm(m / B)}${{ boss: 'B', big: '!', breather: '~', first: '', usual: '' }[kindOf(lv, k + 1)]}`).join(' '));
   writeFileSync(join(dir, `L${L + 1}.json`), JSON.stringify({ level: L + 1, swell, B, profile: prof }));
 }

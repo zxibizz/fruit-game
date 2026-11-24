@@ -5,6 +5,7 @@ import { PRICK_CAP, LEVELS, PLANTS, BUGS, PLANT_ORDER, PERKS, PERK_ORDER, WEED_C
 import { expectedMeta, fullMeta, fixedMap, lazyFixed } from '../balance/scenario.mjs';
 import { EXPERT } from '../balance/plans.mjs';
 import { kept, partyOf, clean, SEEDS } from '../balance/perfect.mjs';
+import { scan } from '../balance/scan.mjs';
 // the levels on an open field (the fixed paths of the first ones come before them)
 const F = LEVELS.findIndex((L) => L.name === 'Лужайка');
 import { play } from '../sim/js/play.mjs';
@@ -134,14 +135,14 @@ let smartRuns; const smart = () => (smartRuns ??= playLevels(LEVELS.map((_, n) =
 // 1/0.7 times healthier, so that a garden of 70% of its strength is the least that does it; and a garden of one plant
 // alone is not enough. The perks are those of three stars on every level before: what a player of perfect parties has.
 test('played with thought, every level is won with the fruit whole; not by far, and not with one plant alone', () => {
-  const ks = LEVELS.map((_, n) => kept(n)); ks.forEach((k, n) => assert.ok(k, `no plan kept for level ${n + 1}`));
-  // (on both seeds of the game the levels are tuned on: where the flyers come from is drawn by the game; a party that is clean on one of them at least is said so here)
-  const one7 = (hp, one, seed) => playLevels(LEVELS.map((_, n) => [n, { ...partyOf(n, ks[n], 'exp3', one), hp, seed }]));
-  const at = (hp, one, all = true) => { const a = one7(hp, one, SEEDS[0]), b = one7(hp, one, SEEDS[1]); return a.map((r, n) => (clean(r) === all ? b[n] : r)); };
-  at(1).forEach((r, n) => assert.ok(clean(r), `level ${n + 1}: ${r.won ? 'the fruit bitten' : `lost at wave ${r.wave}`}`));
-  at(1.15).forEach((r, n) => assert.ok(clean(r), `level ${n + 1}: bugs 15% healthier and it is not clean`));
-  at(1.75).forEach((r, n) => assert.ok(!clean(r), `level ${n + 1}: clean against bugs 75% healthier — too easy`));
-  at(1, true).forEach((r, n) => assert.ok(!clean(r), `level ${n + 1}: ${ks[n].mono.kind} alone gets through with the fruit whole`));
+  const ks = LEVELS.map((_, n) => kept(n)); ks.forEach((k, n) => assert.ok(k, `no party kept for level ${n + 1}`));
+  // (as the levels are tuned: balance/scan.mjs, a grid of health in steps of 5% on five seeds of the game, the margin
+  // of a party the last rung before the first it is bitten on)
+  const best = LEVELS.map((_, n) => ({ level: n, opts: partyOf(n, ks[n], 'exp3') }));
+  scan(best, { from: 0, to: 3, quiet: true }).forEach((r, n) => assert.ok(r.open, `level ${n + 1}: bitten against bugs ×${r.grid.find((g) => g[2] < SEEDS.length)?.[1]} — the best party must hold 15% more`));
+  scan(best, { from: 9, to: 14, quiet: true }).forEach((r, n) => assert.ok(!r.open, `level ${n + 1}: clean against bugs up to twice as healthy — too easy`));
+  const one = LEVELS.map((_, n) => ({ level: n, opts: partyOf(n, ks[n], 'exp3', true) }));
+  scan(one, { from: -6, to: 0, quiet: true }).forEach((r, n) => assert.ok(!r.open, `level ${n + 1}: ${ks[n].mono.kind} alone gets through with the fruit whole`));
 });
 // The learnt strategy (balance/strategy.json) is a fair player, not the best one (and here it has the perks of two
 // stars a level, not three): it wins more than half of the levels as they are now, and loses where it builds much less
