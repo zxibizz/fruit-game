@@ -312,7 +312,7 @@ fn holds_below(cx: &Ctx, plan: &[Step], top: i32) -> bool {
     (K_FLOOR..=top).rev().all(|k| if k > top - 4 { cx.all_clean(plan, k) } else { let s = cx.seeds[(k - K_MIN) as usize % cx.seeds.len()]; cx.clean_on(plan, k, &[s]) })
 }
 
-// secs: the most it runs; stall: it stops once neither the best party nor the best of any make within six rungs of it has
+// secs: the most it runs; stall: it stops once neither the best party nor the best of any make within four rungs of it has
 // risen for so long; goal: and once the best holds that rung (the question was whether a party as good as that is there)
 pub fn search(cx: &Ctx, seeds_plans: Vec<Vec<Step>>, secs: f64, stall: f64, goal: i32, jobs: usize, rng_seed: u64, log: &(dyn Fn(String) + Sync)) -> (Vec<Elite>, Vec<(f64, i32)>, u64) {
     // where every party given stands, and what its garden is made of
@@ -371,7 +371,7 @@ pub fn search(cx: &Ctx, seeds_plans: Vec<Vec<Step>>, secs: f64, stall: f64, goal
             let took = match s.arch.iter().position(|x| x.niche == e.niche) { Some(q) => if e.k > s.arch[q].k { s.arch[q] = e; true } else { false }, None => { s.arch.push(e); true } };
             if !took { continue; }
             if k > now { s.history.push((el, k)); s.last = el; log(format!("{:>5.0} s: clean against bugs ×{:.2} ({} tried, {} makes)", el, rung(k), s.tried, s.arch.len())); }
-            else if k >= now - 6 { s.last = el; }
+            else if k >= now - 4 { s.last = el; }
             if s.arch.len() > ARCH { s.arch.sort_by(|a, b| b.k.cmp(&a.k)); s.arch.truncate(ARCH * 3 / 4); }
         }
     }); } });
