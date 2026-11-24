@@ -57,6 +57,7 @@ const unlike = []; for (const e of arch) { if (unlike.length >= 8 || e.margin < 
 const champ = { plan: best.plan, margin: best.margin, mix: arch.find((e) => e.margin === best.margin)?.mix ?? null };
 const cands = [champ, ...new Set([...arch.slice(0, 6), ...unlike])].filter((e, q, a) => a.findIndex((x) => JSON.stringify(x.plan) === JSON.stringify(e.plan)) === q);
 const cs = scan(cands.map((e) => party(e.plan)), { data, ...how, quiet: true }); cands.forEach((e, q) => { e.scanned = cs[q].margin; e.cleanScan = cs[q]; });
+for (const e of unlike) if (e.scanned == null) { const c = cands.find((x) => JSON.stringify(x.plan) === JSON.stringify(e.plan)); e.scanned = c.scanned; e.cleanScan = c.cleanScan; }
 const top1 = cands.reduce((a, b) => (b.scanned > a.scanned ? b : a)); best = { ...best, plan: top1.plan, margin: top1.margin, mix: top1.mix };
 if (top1 !== champ) log(`  the champion of the search held ${pc(champ.scanned)} on all the seeds; a make of the archive ${pc(top1.scanned)}: it is the best`);
 const m = { clean: top1.cleanScan, ...(STARS ? (({ stars, won }) => ({ stars, won }))(measure(top1.plan)) : { stars: none, won: none }) };
