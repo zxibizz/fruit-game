@@ -23,7 +23,7 @@ export const PLANTS = {
   //   gnawing); ward (top) — once a wave the bite that would eat a plant it guards leaves it 1 health.
   // b, Thorny vines: thorns further and stronger; thornAir (top) — they reach the flyers over those cells too.
   pumpkin: { cost: 25, up: [60], hp: [150, 220], range: 1.5, guard: [.15, .2], thorns: [.003, .004],
-    a: { from: 2, up: [100, 180], hp: [260, 340], range: 1.5, guard: [.45, .55], thorns: .004, spikes: [.05, .08], ward: [0, 1] },
+    a: { from: 2, up: [100, 180], hp: [260, 340], range: 1.5, guard: [.45, .55], thorns: .004, spikes: [.12, .2], ward: [0, 1] },
     b: { from: 3, up: [150, 250], hp: [200, 250], range: 2.5, guard: .2, thorns: [.008, .01], thornAir: [0, 1] } },
   // One target, walkers and flyers.
   // a, Hunter: mark — a bug it has pricked takes that much more damage from everything for MARK_T seconds (it pricks
@@ -74,8 +74,9 @@ export function statOf(P, name, lvl, br) {
 // What growing a plant from level lvl costs (to level 3: on branch br), null at the top.
 export function upCost(P, lvl, br) { return lvl === 1 ? P.up[0] : lvl === 2 ? P[br]?.up[0] ?? null : lvl === 3 ? P[br].up[1] : null; }
 export const MARK_T = 3, GUARD_R = 1.5, THORN_BOSS = .3, SNIFF = .3, FALL_T = .5;
-// Thorns, spikes and nettles take a share of a bug's health a second, the same in the first wave and in the last. All
-// of them together take no more than this share of the health of one bug: without it a long thorny trail with cold
+// Thorns and nettles take a share of a bug's health a second, the same in the first wave and in the last. The two
+// together take no more than this share of the health of one bug (the spikes of a shell pumpkin are apart: they prick
+// only a bug that bites a guarded plant, and are the answer to the eaters of plants): without it a long thorny trail with cold
 // mints (twice the time on it) took all the health of any bug, and with flytraps for the worn a garden held bugs of
 // any health at all — the balance studio found such gardens on most late waves, whatever the health of the bugs.
 export const PRICK_CAP = .25;

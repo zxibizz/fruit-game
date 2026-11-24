@@ -42,8 +42,9 @@ for (const n of ranges(opt('--levels', `1-${LEVELS.length}`))) {
   const game = (change, undo) => { change(); const d = exportData(); undo(); return d; };
   const data0 = exportData(), M = scan(party(kept.plan), { data: data0, ...how })[0].margin, top = Math.max(0, Math.round(Math.log(Math.max(M, .75)) / Math.log(1.05)) + 1);
   // the best party found on a changed game: the kept one as it plays there, and a search from it where that is not enough
-  const without = (data) => { const m0 = scan(party(kept.plan), { data, to: top, ...how })[0].margin; if (m0 >= M / 1.06) return { m: Math.min(m0, M), searched: false };
-    const r = search({ level: n, opts: base, plans: [kept.plan], bots, secs: SECS, stall: STALL, goal: M, data }, how); return { m: Math.max(m0, scan(party(r.plan), { data, to: top + 2, ...how })[0].margin), searched: true }; };
+  // (long: a whole plant taken out — the garden has to be built another way, and the search is given three times as long)
+  const without = (data, long = false) => { const m0 = scan(party(kept.plan), { data, to: top, ...how })[0].margin; if (m0 >= M / 1.06) return { m: Math.min(m0, M), searched: false };
+    const r = search({ level: n, opts: base, plans: [kept.plan], bots, secs: SECS * (long ? 3 : 1), stall: STALL * (long ? 3 : 1), goal: M, data }, how); return { m: Math.max(m0, scan(party(r.plan), { data, to: top + 2, ...how })[0].margin), searched: true }; };
   // the garden the party ends with: the dew on every family
   const tmp = mkdtempSync(join(tmpdir(), 'interest-')), rec = join(tmp, 'p.json'); play([{ level: n, opts: { ...base, plan: kept.plan, seed: 7 }, record: rec }], { bin: how.bin, data: data0 });
   const cells = new Map();
@@ -58,11 +59,12 @@ for (const n of ranges(opt('--levels', `1-${LEVELS.length}`))) {
   const name = (f) => { const [k, b] = f.split('.'); return b ? BR[k][b === 'a' ? 0 : 1] : RU[k]; };
   console.log(`\nL${n + 1} ${L.name}: лучшая партия ${x2(M)} (hp ${L.hp}); ${cells.size} растений, на вершине ${maxed}`);
   console.log('  состав: ' + Object.entries(dew).sort((a, b) => b[1] - a[1]).map(([f, x]) => `${name(f)} ${pc(x / all)}`).join(', '));
-  // every plant and every branch open on the level, taken out
+  // every plant and every branch open on the level, taken out (--only rose,pumpkin.a: those alone)
+  const ONLY = opt('--only') ? opt('--only').split(',') : null, want = (f) => !ONLY || ONLY.includes(f);
   const rows = [];
   for (const k of L.plants) {
-    if (L.plants.length > 1) { const was = L.plants; rows.push({ f: k, whole: true, ...without(game(() => { L.plants = was.filter((x) => x !== k); }, () => { L.plants = was; })) }); }
-    for (const b of ['a', 'b']) { if (PLANTS[k][b].from > n + 1) continue; const was = PLANTS[k][b].from;
+    if (L.plants.length > 1) { const was = L.plants; if (want(k)) rows.push({ f: k, whole: true, ...without(game(() => { L.plants = was.filter((x) => x !== k); }, () => { L.plants = was; }), true) }); }
+    for (const b of ['a', 'b']) { if (PLANTS[k][b].from > n + 1 || !want(`${k}.${b}`)) continue; const was = PLANTS[k][b].from;
       rows.push({ f: `${k}.${b}`, ...without(game(() => { PLANTS[k][b].from = 99; }, () => { PLANTS[k][b].from = was; })) }); }
   }
   for (const r of rows) { r.cost = 1 - r.m / M; r.share = r.whole ? Object.entries(dew).filter(([f]) => f.split('.')[0] === r.f).reduce((t, [, x]) => t + x, 0) / all : (dew[r.f] || 0) / all; }
@@ -72,7 +74,7 @@ for (const n of ranges(opt('--levels', `1-${LEVELS.length}`))) {
   console.log(`              выбор (−8…−30%): ${by(.08, .3, false)}`);
   console.log(`              не нужна (меньше −8%): ${by(-9, .08, false)}`);
   console.log(`  без растения целиком: ${rows.filter((r) => r.whole).sort((a, b) => b.cost - a.cost).map(show).join(', ')}`);
-  const less = without(game(() => { L.dew0 = L.dew; L.pay0 = L.pay; L.dew = Math.round(L.dew * .8); L.pay = L.pay.map((x) => Math.round(x * .8)); }, () => { L.dew = L.dew0; L.pay = L.pay0; delete L.dew0; delete L.pay0; }));
+  const less = ONLY ? { m: M } : without(game(() => { L.dew0 = L.dew; L.pay0 = L.pay; L.dew = Math.round(L.dew * .8); L.pay = L.pay.map((x) => Math.round(x * .8)); }, () => { L.dew = L.dew0; L.pay = L.pay0; delete L.dew0; delete L.pay0; }));
   console.log(`  росы на 20% меньше: ${x2(less.m)} (−${pc(Math.max(0, 1 - less.m / M))})${1 - less.m / M < .08 ? ' — росы больше, чем нужно саду' : ''}`);
   const w = {}; let sum = 0; for (const wave of L.waves) for (const [k, c] of wave) { const v = BUGS[k].w * c; w[ask(k)] = (w[ask(k)] || 0) + v; sum += v; }
   console.log('  волны спрашивают: ' + Object.entries(w).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${pc(v / sum)}`).join(', '));

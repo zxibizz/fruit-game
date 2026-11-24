@@ -369,7 +369,7 @@ function kill(g, b, how) {
 // A bug marked by a rose takes more of everything.
 const marked = (b) => (b.mark > 0 ? 1 + b.markV : 1);
 function lose(g, b, amount, how) { if (b.hp <= 0) return; b.hp -= amount * marked(b); if (b.hp <= 0) kill(g, b, how); }
-// Thorns, spikes and nettles take a share of a bug's health, whatever its health: all of them together take no more
+// Thorns and nettles take a share of a bug's health, whatever its health: the two together take no more
 // than PRICK_CAP of it off one bug (b.pricked: the share taken so far), or a long thorny trail alone would kill any
 // bug of any wave. True when it took something.
 function prick(g, b, share, how) { const s = Math.min(share, PRICK_CAP - b.pricked); if (!(s > 0) || b.hp <= 0) return false; b.pricked += s; lose(g, b, b.maxHp * s, how); return true; }
@@ -386,7 +386,7 @@ function damage(g, b, amount, src) {
 // one plant a wave from being eaten. k: the part of a bite or a second.
 function hurtPlant(g, p, amount, b, k = 1) {
   p.hp -= amount * (1 - p.guard); p.hit = Math.max(p.hit, .12);
-  if (p.spikes) prick(g, b, p.spikes * k * (BUGS[b.kind].boss ? THORN_BOSS : 1), 'spikes');
+  if (p.spikes) lose(g, b, b.maxHp * (p.spikes * k * (BUGS[b.kind].boss ? THORN_BOSS : 1)), 'spikes'); // (not under PRICK_CAP: only a bug that bites is pricked, and a shell is the answer to those)
   if (p.hp > 0) return;
   const w = p.ward;
   if (w && !w.warded && g.plants.includes(w)) { p.hp = 1; w.warded = true; auras(g); g.events.push({ t: 'ward', p, by: w }); return; }
