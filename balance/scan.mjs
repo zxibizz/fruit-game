@@ -4,9 +4,12 @@
 // rung of a grid (the bugs 1.05^k times healthier, k from..to) on every seed asked (where the flyers come from is drawn
 // by the game: eight seeds, three of them never seen by the search); its margin is the last rung before the first it fails
 // on, on any seed.
-//   scan(tasks, { what }) → [{ margin, open (never failed up to the top rung), grid: [[k, health, seeds held]] }]
+//   scan(tasks, { what, full }) → [{ margin, open (never failed up to the top rung), seeds (how many were played: one
+//     where nothing in the level is drawn by the seed), grid: [[k, health, seeds held]] }]; the rungs above the first
+//     failure are not played unless `full`
 //   what: 'clean' (won, the fruit never bitten), 'stars' (won with three stars: 80% of the fruit left), 'won'
-//   search(request) → { plan, margin, history, tried, parties }: the best perfect party found (perfect.rs has how)
+//   search(request) → { plan, margin, history, tried, parties }: the best perfect party found (perfect.rs has how); it
+//     runs `secs` at most and stops once its champion has not risen for `stall` seconds
 import { execFileSync, spawnSync } from 'node:child_process';
 import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { availableParallelism, tmpdir } from 'node:os';
@@ -30,9 +33,9 @@ function call(cmd, body, { bin = null, jobs = JOBS, quiet = false } = {}) {
     if (r.status !== 0) throw new Error(`fruit-sim ${cmd} failed`);
     return JSON.parse(r.stdout.toString()); } finally { rmSync(dir, { recursive: true }); }
 }
-export function scan(tasks, { seeds = SEEDS, from = -6, to = 14, what = 'clean', data = exportData(), ...how } = {}) {
-  return call('scan', { data, tasks: tasks.map((t) => ({ level: t.level, opts: withTrust(t.opts, data) })), seeds, from, to, what }, how);
+export function scan(tasks, { seeds = SEEDS, from = -6, to = 14, what = 'clean', full = false, data = exportData(), ...how } = {}) {
+  return call('scan', { data, tasks: tasks.map((t) => ({ level: t.level, opts: withTrust(t.opts, data) })), seeds, from, to, what, full }, how);
 }
-export function search({ level, opts, plans = [], bots = [], seeds = SEARCH_SEEDS, secs = 120, only = null, rng = 1, data = exportData() }, how = {}) {
-  return call('perfect', { data, level, opts: withTrust(opts, data), plans, bots: bots.map((o) => withTrust(o, data)), seeds, secs, only, rng }, how);
+export function search({ level, opts, plans = [], bots = [], seeds = SEARCH_SEEDS, secs = 120, stall = 45, only = null, rng = 1, check = false, data = exportData() }, how = {}) {
+  return call('perfect', { data, level, opts: withTrust(opts, data), plans, bots: bots.map((o) => withTrust(o, data)), seeds, secs, stall, only, rng, check }, how);
 }

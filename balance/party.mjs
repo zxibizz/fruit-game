@@ -1,5 +1,5 @@
 // The best perfect party of a level: node balance/party.mjs --level 7 [--secs 300] [--runs 2] [--meta exp3] [--mono]
-//   [--keep] [--jobs N] [--out FILE] [--rng N]
+//   [--keep] [--jobs N] [--out FILE] [--rng N] [--stall 60] [--check]
 // Looks for the party that gets through the level with the fruit never bitten against the healthiest bugs
 // (sim/src/perfect.rs: a whole party at a time, a plant on any cell, the maze built and broken a cell at a time; a party
 // counts on a rung of health when it is clean on five seeds of the game there and on every rung below, from ×0.75 up). It starts from
@@ -19,7 +19,7 @@ import { EXPERT } from './plans.mjs';
 import { scan, search, TARGET, SEEDS } from './scan.mjs';
 
 const args = process.argv.slice(2), opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
-const level = Number(opt('--level', 4)) - 1, SECS = Number(opt('--secs', 300)), RUNS = Number(opt('--runs', 2)), META = opt('--meta', 'exp3');
+const level = Number(opt('--level', 4)) - 1, SECS = Number(opt('--secs', 600)), STALL = Number(opt('--stall', 60)), RUNS = Number(opt('--runs', 1)), META = opt('--meta', 'exp3');
 const how = { bin: build(), ...(opt('--jobs') ? { jobs: Number(opt('--jobs')) } : {}) }, data = exportData();
 const SMART = { route: 1, place: 'best', upgrades: 'greedy', terrain: true, powers: true, early: true };
 const base = resolve({ level, opts: { ...SMART, meta: META } }), bots = [base, ...(EXPERT ? [{ ...base, policy: EXPERT }] : [])];
@@ -27,29 +27,29 @@ const FILE = new URL(`./perfect/L${level + 1}.json`, import.meta.url), kept = ex
 const log = (s) => process.stderr.write(s + '\n'), pc = (x) => `×${x.toFixed(2)}`;
 // a party as scan and the tests play it
 const party = (plan, kind = null) => ({ level, opts: { ...base, plan, ...(kind ? { plants: [kind] } : {}) } });
-const measure = (plan, kind) => { const t = [party(plan, kind)]; return { clean: scan(t, { data, ...how, quiet: true })[0], stars: scan(t, { data, what: 'stars', ...how, quiet: true })[0], won: scan(t, { data, what: 'won', to: 24, ...how, quiet: true })[0] }; };
+const measure = (plan, kind) => { const t = [party(plan, kind)]; return { clean: scan(t, { data, full: true, ...how, quiet: true })[0], stars: scan(t, { data, what: 'stars', ...how, quiet: true })[0], won: scan(t, { data, what: 'won', to: 24, ...how, quiet: true })[0] }; };
 
-log(`L${level + 1} ${LEVELS[level].name}: the best perfect party, ${RUNS} runs of ${SECS} s, the perks ${META}`);
+log(`L${level + 1} ${LEVELS[level].name}: the best perfect party, ${RUNS} run(s) of ${SECS} s at most (stopping ${STALL} s after the last rise), the perks ${META}`);
 const runs = [];
-for (let n = 1; n <= RUNS; n++) { log(` run ${n}`); runs.push(search({ level, opts: base, plans: kept?.plan ? [kept.plan] : [], bots, secs: SECS, rng: n + Number(opt('--rng', 0)), data }, how)); }
+for (let n = 1; n <= RUNS; n++) { log(` run ${n}`); runs.push(search({ level, opts: base, plans: kept?.plan ? [kept.plan] : [], bots, secs: SECS, stall: STALL, rng: n + Number(opt('--rng', 0)), check: args.includes('--check'), data }, how)); }
 const best = runs.reduce((a, b) => (b.margin > a.margin ? b : a)), m = measure(best.plan);
 let one = null;
 if (args.includes('--mono')) {
   for (const kind of LEVELS[level].plants) { log(` ${kind} alone`);
-    const r = search({ level, opts: base, plans: kept?.mono?.kind === kind ? [kept.mono.plan] : [], bots, secs: Math.max(20, SECS / 5), only: kind, rng: 1, data }, how);
+    const r = search({ level, opts: base, plans: kept?.mono?.kind === kind ? [kept.mono.plan] : [], bots, secs: Math.max(20, SECS / 5), stall: STALL / 2, only: kind, rng: 1, data }, how);
     const mm = scan([party(r.plan, kind)], { data, ...how, quiet: true })[0];
     if (!one || mm.margin > one.margin) one = { kind, plan: r.plan, margin: mm.margin, grid: mm.grid }; }
 }
 const grid = (g) => g.grid.map(([, h, n]) => `${h.toFixed(2)}:${n}`).join(' ');
 console.log(`L${level + 1} ${LEVELS[level].name} (hp ${LEVELS[level].hp}, the perks ${META})`);
 console.log(`  the runs ended on ${runs.map((r) => pc(r.margin)).join(', ')} (${runs.map((r) => r.tried).join(', ')} parties tried)${Math.max(...runs.map((r) => r.margin)) / Math.min(...runs.map((r) => r.margin)) <= 1.06 ? ': they agree' : ': THEY DO NOT AGREE — the search has not settled'}`);
-console.log(`  the best, on ${SEEDS.length} seeds: the fruit whole against bugs ${pc(m.clean.margin)}; three stars ${pc(m.stars.margin)}; won ${pc(m.won.margin)}${m.won.open ? '+' : ''}`);
+console.log(`  the best, on ${m.clean.seeds} seed(s): the fruit whole against bugs ${pc(m.clean.margin)}; three stars ${pc(m.stars.margin)}; won ${pc(m.won.margin)}${m.won.open ? '+' : ''}`);
 console.log(`    health:seeds clean  ${grid(m.clean)}`);
 if (kept?.plan) { const k = scan([party(kept.plan)], { data, ...how, quiet: true })[0]; console.log(`  the party kept before: ${pc(k.margin)}`); }
 if (one) console.log(`  one plant alone: ${one.kind} ${pc(one.margin)} — ${Math.round(one.margin / m.clean.margin * 100)}% of the best`);
 const hp = m.clean.margin > 0 ? Math.round(LEVELS[level].hp * m.clean.margin / TARGET * 100) / 100 : null;
 console.log(`  for a garden of ${Math.round(100 / TARGET)}% of its strength to be the least that keeps the fruit whole: L${level + 1}.hp ${LEVELS[level].hp} → ${hp}`);
-const res = { level: level + 1, meta: META, secs: SECS, runs: runs.map((r) => ({ margin: r.margin, tried: r.tried, parties: r.parties, history: r.history })), plan: best.plan, clean: m.clean, stars: m.stars.margin, won: m.won.margin, mono: one, hp: { now: LEVELS[level].hp, suggested: hp } };
+const res = { level: level + 1, meta: META, secs: SECS, runs: runs.map((r) => ({ margin: r.margin, tried: r.tried, parties: r.parties, wavesSaved: r.waves_saved, history: r.history })), plan: best.plan, clean: m.clean, stars: m.stars.margin, won: m.won.margin, mono: one, hp: { now: LEVELS[level].hp, suggested: hp } };
 if (opt('--out')) { mkdirSync(dirname(opt('--out')), { recursive: true }); writeFileSync(opt('--out'), JSON.stringify(res)); }
 if (args.includes('--keep')) {
   const was = kept?.plan ? scan([party(kept.plan)], { data, ...how, quiet: true })[0].margin : -1, mono = one && (!kept?.mono || one.margin >= scan([party(kept.mono.plan, kept.mono.kind)], { data, ...how, quiet: true })[0].margin) ? { kind: one.kind, plan: one.plan } : kept?.mono ?? null;

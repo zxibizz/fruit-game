@@ -49,46 +49,70 @@ impl Rng {
     fn pick<T: Copy>(&mut self, v: &[T]) -> T { v[self.n(v.len())] }
 }
 
+// The build phases of a party as it was played (bot::Saved), for the parties of changed plans to go on from.
+pub type Snaps = Vec<Arc<bot::Saved<'static>>>;
+// What a plan did on a rung: how well (see fitness), and its build phases on every seed it was played on there.
+#[derive(Clone)]
+pub struct Runs { pub at: i32, pub fit: f64, per_seed: Vec<Option<Arc<Snaps>>> }
+
 pub struct Ctx<'a> {
-    j_data: &'a J, pub d: Data, pub level: usize, pub base: Opts, pub seeds: Vec<u32>,
-    datas: Mutex<HashMap<i32, Arc<Data>>>, pub kinds: Vec<usize>, pub parties: AtomicU64,
+    j_data: &'a J, pub d: &'static Data, pub level: usize, pub base: Opts, pub seeds: Vec<u32>,
+    datas: Mutex<HashMap<i32, &'static Data>>, pub kinds: Vec<usize>, pub parties: AtomicU64, pub saved: AtomicU64, pub check: bool,
 }
+// whether anything in the level is drawn by the seed of the game: where a flyer comes from, where a boss's brood or the
+// snails of a slug king land. Where nothing is, every seed plays the same party, and one is played.
+fn drawn(d: &Data, level: usize) -> bool { d.levels[level].waves.iter().any(|w| w.iter().any(|g| { let b = &d.bugs[g.kind]; b.fly || b.brood.is_some() || b.split.is_some() })) }
 impl<'a> Ctx<'a> {
     pub fn new(j_data: &'a J, level: usize, base: Opts, seeds: Vec<u32>, only: Option<usize>) -> Ctx<'a> {
-        let d = Data::read(j_data);
+        // (the data of every rung lives as long as the process: the build phases kept hold on to it)
+        let d: &'static Data = Box::leak(Box::new(Data::read(j_data)));
         let kinds: Vec<usize> = d.levels[level].plants.iter().cloned().filter(|&k| only.map_or(true, |o| o == k)).collect();
-        Ctx { j_data, d, level, base, seeds, datas: Mutex::new(HashMap::new()), kinds, parties: AtomicU64::new(0) }
+        let seeds = if drawn(d, level) { seeds } else { seeds.into_iter().take(1).collect() };
+        Ctx { j_data, d, level, base, seeds, datas: Mutex::new(HashMap::new()), kinds, parties: AtomicU64::new(0), saved: AtomicU64::new(0), check: false }
     }
     // the game with every bug rung(k) times healthier: the data as `fruit-sim run` scales it for a scenario with hp
-    fn data_at(&self, k: i32) -> Arc<Data> {
-        if let Some(d) = self.datas.lock().unwrap().get(&k) { return d.clone(); }
+    fn data_at(&self, k: i32) -> &'static Data {
+        if let Some(d) = self.datas.lock().unwrap().get(&k) { return d; }
         let mut x = Data::read(self.j_data); let s = rung(k); if s != 1.0 { for b in x.bugs.iter_mut() { b.hp *= s; } }
-        let x = Arc::new(x); self.datas.lock().unwrap().insert(k, x.clone()); x
+        let x: &'static Data = Box::leak(Box::new(x)); self.datas.lock().unwrap().insert(k, x); x
     }
-    pub fn party(&self, plan: Option<&[Step]>, o: &Opts, k: i32, seed: u32, stop: f64, record: bool) -> (Res, Option<Vec<Op>>) {
-        let d = self.data_at(k); let mut opt = o.clone(); opt.seed = seed; opt.stop_bitten = stop; if let Some(p) = plan { opt.plan = Some(p.to_vec()); }
+    pub fn party_from(&self, plan: Option<&[Step]>, o: &Opts, k: i32, seed: u32, stop: f64, record: bool, from: Option<&bot::Saved<'static>>, snaps: Option<&mut Snaps>) -> (Res, Option<Vec<Op>>) {
+        let dd = self.data_at(k); let mut opt = o.clone(); opt.seed = seed; opt.stop_bitten = stop; if let Some(p) = plan { opt.plan = Some(p.to_vec()); }
         self.parties.fetch_add(1, Ordering::Relaxed);
-        let (level, dd) = (self.level, &*d);
+        let level = self.level;
         let layouts = |l: usize, t: bool| bot::layout(dd, l, t);
         let mazes = |l: usize, name: &str| routes::routes(dd, l).list.iter().find(|r| format!("{}/{}", r.class, r.shape) == name).map(|r| r.walls.clone());
         let pool = |l: usize| Arc::new(routes::pool(dd, l));
-        bot::play_level(dd, level, &opt, &layouts, &mazes, &pool, record)
+        bot::play_level_from(dd, level, &opt, &layouts, &mazes, &pool, record, from, snaps)
     }
+    pub fn party(&self, plan: Option<&[Step]>, o: &Opts, k: i32, seed: u32, stop: f64, record: bool) -> (Res, Option<Vec<Op>>) { self.party_from(plan, o, k, seed, stop, record, None, None) }
     fn clean(r: &Res) -> bool { r.won && r.bitten == 0.0 }
-    // how a plan does on rung k: the seeds it is clean on before the first it is not, and on that one a part of one, the
-    // greater the less was bitten (the seeds in their order, none played after the first failure); all of them: clean
-    pub fn fitness(&self, plan: &[Step], k: i32) -> f64 {
+    // How a plan does on rung k: the seeds it is clean on before the first it is not, and on that one a part of one, the
+    // greater the later it was bitten (a party stops at its first bite: a variation that fails is not played out; the
+    // seeds in their order, none played after the first failure); all of them: clean.
+    // parent: the plan it was made from and what that did on this rung — where the two plans are the same up to a step the
+    // parent's party had not looked at by some build phase, the party goes on from that build phase.
+    pub fn fitness(&self, plan: &[Step], k: i32, parent: Option<(&[Step], &Runs)>) -> Runs {
+        let same = parent.map_or(0, |(pp, _)| pp.iter().zip(plan.iter()).take_while(|(a, b)| a == b).count());
+        let mut runs = Runs { at: k, fit: 0.0, per_seed: vec![None; self.seeds.len()] };
         for (n, &seed) in self.seeds.iter().enumerate() {
-            let (r, _) = self.party(Some(plan), &self.base, k, seed, CAP, false);
+            let mut mine: Snaps = Vec::new(); let mut from: Option<Arc<bot::Saved<'static>>> = None;
+            if let Some((_, pr)) = parent { if pr.at == k { if let Some(ps) = &pr.per_seed[n] {
+                if let Some(ix) = (0..ps.len()).rev().find(|&i| ps[i].seen_to <= same) { mine.extend(ps[..ix].iter().cloned()); from = Some(ps[ix].clone()); self.saved.fetch_add(ix as u64, Ordering::Relaxed); }
+            } } }
+            let (r, _) = self.party_from(Some(plan), &self.base, k, seed, 0.0, false, from.as_deref(), Some(&mut mine));
+            if self.check && from.is_some() { let (q, _) = self.party(Some(plan), &self.base, k, seed, 0.0, false);
+                if (q.won, q.bitten, q.wave, q.time) != (r.won, r.bitten, r.wave, r.time) { eprintln!("  CHECK: a party gone on from a build phase differs from the same played whole: won {} {}, bitten {} {}, wave {} {}, time {} {}", r.won, q.won, r.bitten, q.bitten, r.wave, q.wave, r.time, q.time); } }
+            runs.per_seed[n] = Some(Arc::new(mine));
             if Self::clean(&r) { continue; }
-            let bad = if r.won { r.bitten } else { CAP + (r.waves as f64 - r.wave as f64 + 1.0) * CAP };
-            return n as f64 + 1.0 / (1.0 + bad / CAP);
+            // bitten in wave r.wave of r.waves, r.time seconds in: the later, the nearer to clean
+            runs.fit = n as f64 + 0.98 * (r.time / (r.time + 60.0 * (r.waves as f64 - r.wave as f64 + 1.0))).min(1.0);
+            return runs;
         }
-        self.seeds.len() as f64
+        runs.fit = self.seeds.len() as f64; runs
     }
-    pub fn all_clean(&self, plan: &[Step], k: i32) -> bool {
-        self.seeds.iter().all(|&seed| Self::clean(&self.party(Some(plan), &self.base, k, seed, 0.0, false).0))
-    }
+    pub fn clean_on(&self, plan: &[Step], k: i32, seeds: &[u32]) -> bool { seeds.iter().all(|&seed| Self::clean(&self.party(Some(plan), &self.base, k, seed, 0.0, false).0)) }
+    pub fn all_clean(&self, plan: &[Step], k: i32) -> bool { self.clean_on(plan, k, &self.seeds) }
 }
 
 // ---- a plan and its garden ----
@@ -215,8 +239,8 @@ fn mutate(cx: &Ctx, plan: &[Step], other: Option<&[Step]>, r: &mut Rng) -> Optio
 }
 
 // ---- the search ----
-struct Entry { plan: Vec<Step>, fit: f64, at: i32 } // fit: on rung `at`
-struct State { champ: Vec<Step>, front: i32, pop: Vec<Entry>, seen: HashSet<u64>, tried: u64, history: Vec<(f64, i32)> }
+struct Entry { plan: Vec<Step>, runs: Runs }
+struct State { champ: Entry, front: i32, pop: Vec<Entry>, seen: HashSet<u64>, tried: u64, history: Vec<(f64, i32)>, last: f64 }
 const POP: usize = 14;
 
 // The rung a plan holds: the last before the first it is bitten on (on any seed), counted from the floor up — every rung
@@ -227,10 +251,15 @@ fn level_of(cx: &Ctx, plan: &[Step]) -> i32 {
     let mut k = K_FLOOR;
     if ok(k) { while k < K_MAX && ok(k + 1) { k += 1; } k } else { loop { k -= 1; if k < K_MIN { return K_MIN - 1; } if ok(k) { return k; } } }
 }
-// clean on every rung from the floor up to `top` (the highest first: a failure is likeliest there)
-fn holds_below(cx: &Ctx, plan: &[Step], top: i32) -> bool { (K_FLOOR..=top).rev().all(|k| cx.all_clean(plan, k)) }
+// Clean on the rungs from the floor up to `top`: the four highest on every seed (a failure is likeliest there), the ones
+// below on one seed each, another for every rung. (Every rung on every seed is what balance/scan.mjs asks in the end: a
+// champion with a hole this did not see is said so there, and its margin is the rung below the hole.)
+fn holds_below(cx: &Ctx, plan: &[Step], top: i32) -> bool {
+    (K_FLOOR..=top).rev().all(|k| if k > top - 4 { cx.all_clean(plan, k) } else { let s = cx.seeds[(k - K_MIN) as usize % cx.seeds.len()]; cx.clean_on(plan, k, &[s]) })
+}
 
-pub fn search(cx: &Ctx, seeds_plans: Vec<Vec<Step>>, secs: f64, jobs: usize, rng_seed: u64, log: &(dyn Fn(String) + Sync)) -> (Vec<Step>, i32, Vec<(f64, i32)>, u64) {
+// secs: the most it runs; stall: it stops once the champion has not risen for so long (and at least a fifth of secs is gone)
+pub fn search(cx: &Ctx, seeds_plans: Vec<Vec<Step>>, secs: f64, stall: f64, jobs: usize, rng_seed: u64, log: &(dyn Fn(String) + Sync)) -> (Vec<Step>, i32, Vec<(f64, i32)>, u64) {
     let t0 = Instant::now();
     // where every party given stands; the best of them is the first champion
     let mut starts: Vec<(Vec<Step>, i32)> = std::thread::scope(|sc| {
@@ -239,37 +268,44 @@ pub fn search(cx: &Ctx, seeds_plans: Vec<Vec<Step>>, secs: f64, jobs: usize, rng
     starts.sort_by(|a, b| b.1.cmp(&a.1));
     log(format!("the parties given hold: {}", starts.iter().map(|s| if s.1 < K_MIN { "nothing".to_string() } else { format!("×{:.2}", rung(s.1)) }).collect::<Vec<_>>().join(", ")));
     let (champ, front) = starts[0].clone();
-    let st = Mutex::new(State { champ, front, pop: starts.into_iter().skip(1).take(POP).map(|(plan, k)| Entry { plan, fit: 0.0, at: k }).collect(), seen: HashSet::new(), tried: 0, history: vec![(0.0, front)] });
+    // what each does on the rung above the champion's: the build phases their children go on from
+    let entry = |plan: Vec<Step>, target: i32| { let runs = cx.fitness(&plan, target, None); Entry { plan, runs } };
+    let target0 = (front + 1).min(K_MAX);
+    let st = Mutex::new(State { champ: entry(champ, target0), front, pop: starts.into_iter().skip(1).take(POP).map(|(plan, _)| entry(plan, target0)).collect(), seen: HashSet::new(), tried: 0, history: vec![(0.0, front)], last: 0.0 });
     std::thread::scope(|sc| { for t in 0..jobs.max(1) { let st = &st; sc.spawn(move || {
         let mut r = Rng::new(rng_seed.wrapping_mul(1000).wrapping_add(t as u64 + 1));
-        while t0.elapsed().as_secs_f64() < secs {
-            let (parent, other, target) = { let s = st.lock().unwrap();
-                let pick = |r: &mut Rng| -> Vec<Step> { if s.pop.is_empty() || r.f() < 0.55 { s.champ.clone() } else { let top = 1 + r.n(s.pop.len()); let q = r.n(top); s.pop[q].plan.clone() } };
-                (pick(&mut r), pick(&mut r), (s.front + 1).min(K_MAX)) };
+        loop {
+            let el = t0.elapsed().as_secs_f64(); if el >= secs { break; }
+            let (parent, pruns, other, target) = { let s = st.lock().unwrap();
+                if el - s.last >= stall && el >= secs / 5.0 { break; }
+                let pick = |r: &mut Rng| -> (Vec<Step>, Runs) { let e = if s.pop.is_empty() || r.f() < 0.55 { &s.champ } else { let top = 1 + r.n(s.pop.len()); let q = r.n(top); &s.pop[q] }; (e.plan.clone(), e.runs.clone()) };
+                let (p, pr) = pick(&mut r); (p, pr, pick(&mut r).0, (s.front + 1).min(K_MAX)) };
+            // one change (now and then two or three on top of each other); the party goes on from the parent's as far as the plans agree
             let mut child = parent.clone(); let mut changed = false;
             for _ in 0..1 + (r.f() < 0.4) as usize + (r.f() < 0.15) as usize { if let Some(c) = mutate(cx, &child, Some(&other), &mut r) { child = c; changed = true; } }
             if !changed { continue; }
             { let mut s = st.lock().unwrap(); if !s.seen.insert(hash_of(&child)) { continue; } s.tried += 1; }
-            let fit = cx.fitness(&child, target);
-            if fit >= cx.seeds.len() as f64 && holds_below(cx, &child, target - 1) {
-                // clean on the rung above the champion's and on every rung below it down to the floor: it is the champion, as
+            let runs = cx.fitness(&child, target, Some((&parent, &pruns)));
+            if runs.fit >= cx.seeds.len() as f64 && holds_below(cx, &child, target - 1) {
+                // clean on the rung above the champion's and on the rungs below it down to the floor: it is the champion, as
                 // far up as it goes before the first rung it is bitten on
-                let mut k = target; while k < K_MAX && cx.all_clean(&child, k + 1) { k += 1; }
+                let mut k = target; let mut next = cx.fitness(&child, (k + 1).min(K_MAX), None);
+                while k + 1 < K_MAX && next.fit >= cx.seeds.len() as f64 { k += 1; next = cx.fitness(&child, k + 1, None); }
                 let mut s = st.lock().unwrap();
-                if k > s.front { let old = std::mem::replace(&mut s.champ, child.clone()); let of = s.front; s.front = k; let el = t0.elapsed().as_secs_f64(); s.history.push((el, k));
-                    s.pop.insert(0, Entry { plan: old, fit: 0.0, at: of }); s.pop.truncate(POP);
+                if k > s.front { let old = std::mem::replace(&mut s.champ, Entry { plan: child, runs: next }); s.front = k; let el = t0.elapsed().as_secs_f64(); s.history.push((el, k)); s.last = el;
+                    s.pop.insert(0, old); s.pop.truncate(POP);
                     log(format!("{:>5.0} s: clean against bugs ×{:.2} ({} tried)", el, rung(k), s.tried)); }
                 continue;
             }
             let mut s = st.lock().unwrap();
             // a runner-up: the better the higher the rung it was tried on, then by how it did there
-            let e = Entry { plan: child, fit, at: target };
-            let at = s.pop.iter().position(|x| (e.at, e.fit) > (x.at, x.fit)).unwrap_or(s.pop.len());
+            let e = Entry { plan: child, runs };
+            let at = s.pop.iter().position(|x| (e.runs.at, e.runs.fit) > (x.runs.at, x.runs.fit)).unwrap_or(s.pop.len());
             if at < POP { s.pop.insert(at, e); s.pop.truncate(POP); }
         }
     }); } });
     let s = st.into_inner().unwrap();
-    (s.champ, s.front, s.history, s.tried)
+    (s.champ.plan, s.front, s.history, s.tried)
 }
 
 // ---- the commands ----
@@ -281,51 +317,55 @@ fn plan_json(d: &Data, plan: &[Step]) -> String {
 }
 // fruit-sim perfect: { data, level, opts (the bot's, as in a scenario of `run`: the perks, the powers, ...), seeds, secs,
 //   plans: [plan], bots: [opts] (players whose own parties are starts too: the smart bot, the expert), only: plant | null,
-//   rng } → { plan, k, margin, history: [[secs, margin]], tried, parties }
+//   stall (seconds with no rise of the champion after which it stops), rng, check (every party gone on from a build phase is
+//   played whole too and the two compared) } → { plan, k, margin, history: [[secs, margin]], tried, parties, waves_saved, seeds }
 pub fn perfect(j: &J, jobs: usize) {
     let d0 = Data::read(j.at("data")); let level = j.at("level").num() as usize;
     let only = j.get("only").filter(|v| **v != J::Null).map(|v| d0.plant(v.str()));
     let mut base = crate::opts_of(&d0, j.at("opts")); if let Some(k) = only { base.plants = Some(vec![k]); }
     let seeds: Vec<u32> = j.get("seeds").map_or(vec![7, 11, 13, 17, 19], |s| s.arr().iter().map(|x| x.num() as u32).collect());
-    let cx = Ctx::new(j.at("data"), level, base, seeds, only);
+    let mut cx = Ctx::new(j.at("data"), level, base, seeds, only); cx.check = j.get("check").map_or(false, |v| v.truthy());
     let mut plans: Vec<Vec<Step>> = j.get("plans").map_or(Vec::new(), |p| p.arr().iter().map(|x| plan_of(&cx.d, x)).collect());
     if let Some(bots) = j.get("bots") { for b in bots.arr() { let mut o = crate::opts_of(&cx.d, b); if let Some(k) = only { o.plants = Some(vec![k]); }
         let (_, ops) = cx.party(None, &o, 0, cx.seeds[0], f64::INFINITY, true); plans.push(steps_of_ops(&ops.unwrap())); } }
     if let Some(k) = only { for p in plans.iter_mut() { p.retain(|s| s.0.map_or(true, |x| x == k)); } }
     plans.retain(|p| !p.is_empty()); if plans.is_empty() { plans.push(Vec::new()); }
-    let secs = j.get("secs").map_or(60.0, |v| v.num()); let rng = j.get("rng").map_or(1.0, |v| v.num()) as u64;
+    let secs = j.get("secs").map_or(60.0, |v| v.num()); let stall = j.get("stall").map_or(f64::INFINITY, |v| v.num()); let rng = j.get("rng").map_or(1.0, |v| v.num()) as u64;
     let log = |s: String| eprintln!("  {}", s);
-    let (plan, k, history, tried) = search(&cx, plans, secs, jobs, rng, &log);
-    println!("{{\"plan\":{},\"k\":{},\"margin\":{},\"history\":[{}],\"tried\":{},\"parties\":{}}}", plan_json(&cx.d, &plan), k, if k < K_MIN { 0.0 } else { rung(k) },
-        history.iter().map(|h| format!("[{:.0},{}]", h.0, if h.1 < K_MIN { 0.0 } else { rung(h.1) })).collect::<Vec<_>>().join(","), tried, cx.parties.load(Ordering::Relaxed));
+    let (plan, k, history, tried) = search(&cx, plans, secs, stall, jobs, rng, &log);
+    println!("{{\"plan\":{},\"k\":{},\"margin\":{},\"history\":[{}],\"tried\":{},\"parties\":{},\"waves_saved\":{},\"seeds\":{}}}", plan_json(&cx.d, &plan), k, if k < K_MIN { 0.0 } else { rung(k) },
+        history.iter().map(|h| format!("[{:.0},{}]", h.0, if h.1 < K_MIN { 0.0 } else { rung(h.1) })).collect::<Vec<_>>().join(","), tried, cx.parties.load(Ordering::Relaxed), cx.saved.load(Ordering::Relaxed), cx.seeds.len());
 }
-// fruit-sim scan: { data, tasks: [{ level, opts }], seeds, from, to } → for every task the seeds it is clean on (the
-// fruit never bitten) on every rung from..=to: [[k, health, clean seeds], ...], and its margin: the last rung before the
-// first it is bitten on (0: bitten on the lowest rung asked)
+// fruit-sim scan: { data, tasks: [{ level, opts }], seeds, from, to, what, full } → for every task the seeds it holds on
+// (what: clean — the fruit never bitten; stars — won with 80% of the fruit left; won) on every rung from..=to:
+// { margin, open, seeds, grid: [[k, health, seeds held], ...] }; its margin: the last rung before the first it fails on
+// (0: it fails on the lowest rung asked; open: it never fails up to the highest). Without `full` the rungs above the
+// first failure are not played (the grid ends there). Where nothing in a level is drawn by the seed, one seed is played.
 pub fn scan(j: &J, jobs: usize) {
     let d0 = Data::read(j.at("data"));
     let seeds: Vec<u32> = j.get("seeds").map_or(vec![7, 11, 13, 17, 19], |s| s.arr().iter().map(|x| x.num() as u32).collect());
     let (from, to) = (j.get("from").map_or(-6, |v| v.num() as i32).max(K_MIN), j.get("to").map_or(14, |v| v.num() as i32).min(K_MAX));
-    let what = j.get("what").map_or("clean", |v| v.str()).to_string(); // clean | won | stars (three stars: 80% of the fruit left)
+    let what = j.get("what").map_or("clean", |v| v.str()).to_string(); let full = j.get("full").map_or(false, |v| v.truthy());
     let tasks: Vec<(usize, Opts)> = j.at("tasks").arr().iter().map(|t| (t.at("level").num() as usize, crate::opts_of(&d0, t.at("opts")))).collect();
     let mut levels: Vec<usize> = tasks.iter().map(|t| t.0).collect(); levels.sort(); levels.dedup();
     let cxs: HashMap<usize, Ctx> = levels.into_iter().map(|l| (l, Ctx::new(j.at("data"), l, Opts::default(), seeds.clone(), None))).collect();
-    // every (task, rung, seed) is a party; a rung above one the task is already bitten on is still played: the grid is the answer
-    let mut jobs_list: Vec<(usize, i32, u32)> = Vec::new();
-    for t in 0..tasks.len() { for k in from..=to { for &sd in &seeds { jobs_list.push((t, k, sd)); } } }
-    let next = std::sync::atomic::AtomicUsize::new(0); let out: Vec<Mutex<bool>> = jobs_list.iter().map(|_| Mutex::new(false)).collect();
-    std::thread::scope(|sc| { for _ in 0..jobs.max(1) { sc.spawn(|| loop {
-        let n = next.fetch_add(1, Ordering::SeqCst); if n >= jobs_list.len() { break; }
-        let (t, k, seed) = jobs_list[n]; let (level, o) = &tasks[t]; let cx = &cxs[level];
-        let stop = if what == "clean" { 0.0 } else { f64::INFINITY };
-        let (r, _) = cx.party(None, o, k, seed, stop, false);
-        *out[n].lock().unwrap() = match what.as_str() { "won" => r.won, "stars" => r.won && r.hp >= 0.8 * r.max_hp, _ => Ctx::clean(&r) };
-    }); } });
-    let ns = seeds.len(); let per = (to - from + 1) as usize * ns;
-    let rows: Vec<String> = (0..tasks.len()).map(|t| {
-        let grid: Vec<(i32, usize)> = (from..=to).enumerate().map(|(q, k)| (k, (0..ns).filter(|&s| *out[t * per + q * ns + s].lock().unwrap()).count())).collect();
-        let fail = grid.iter().position(|g| g.1 < ns); let margin = match fail { Some(0) => 0.0, Some(q) => rung(grid[q - 1].0), None => rung(to) };
-        format!("{{\"margin\":{},\"open\":{},\"grid\":[{}]}}", margin, fail.is_none(), grid.iter().map(|g| format!("[{},{},{}]", g.0, rung(g.0), g.1)).collect::<Vec<_>>().join(","))
+    let rows: Vec<String> = tasks.iter().map(|(level, o)| {
+        let cx = &cxs[level]; let ns = cx.seeds.len();
+        // the parties of the task, the lowest rung first; once a rung has failed, the rungs above it are not played
+        let list: Vec<(i32, u32)> = (from..=to).flat_map(|k| cx.seeds.iter().map(move |&s| (k, s))).collect();
+        let next = std::sync::atomic::AtomicUsize::new(0); let failed = std::sync::atomic::AtomicI32::new(i32::MAX); let held: Vec<Mutex<Option<bool>>> = list.iter().map(|_| Mutex::new(None)).collect();
+        std::thread::scope(|sc| { for _ in 0..jobs.max(1) { sc.spawn(|| loop {
+            let n = next.fetch_add(1, Ordering::SeqCst); if n >= list.len() { break; }
+            let (k, seed) = list[n]; if !full && k > failed.load(Ordering::SeqCst) { continue; }
+            let (r, _) = cx.party(None, o, k, seed, if what == "clean" { 0.0 } else { f64::INFINITY }, false);
+            let ok = match what.as_str() { "won" => r.won, "stars" => r.won && r.hp >= 0.8 * r.max_hp, _ => Ctx::clean(&r) };
+            if !ok { failed.fetch_min(k, Ordering::SeqCst); }
+            *held[n].lock().unwrap() = Some(ok);
+        }); } });
+        let fail = failed.load(Ordering::SeqCst); let top = if full { to } else { to.min(fail) };
+        let grid: Vec<(i32, usize)> = (from..=top).map(|k| (k, (0..ns).filter(|&s| held[(k - from) as usize * ns + s].lock().unwrap().unwrap_or(false)).count())).collect();
+        let margin = if fail == i32::MAX { rung(to) } else if fail == from { 0.0 } else { rung(fail - 1) };
+        format!("{{\"margin\":{},\"open\":{},\"seeds\":{},\"grid\":[{}]}}", margin, fail == i32::MAX, ns, grid.iter().map(|g| format!("[{},{},{}]", g.0, rung(g.0), g.1)).collect::<Vec<_>>().join(","))
     }).collect();
     println!("[{}]", rows.join(",\n"));
 }
