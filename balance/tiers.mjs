@@ -1,4 +1,4 @@
-// What every tier of a shooter gives for its dew: node balance/tiers.mjs [--prices FILE] [--lambda 1,1.1,1.2]
+// What every tier of a shooter gives for its dew: node balance/tiers.mjs [--prices FILE] [--lambda 1.1,1.2,1.3]
 // A rough damage a second against a crowd of three walkers next to the plant (single-target plants hit one, `multi`
 // as many as they have; a hunter's mark counted as +mark of its own damage), the dew spent on the plant in all, and
 // what the last step bought per dew. Burns do not stack (ignite in public/game.js: a weaker one does nothing, an equal
@@ -7,7 +7,7 @@
 // they need the simulation.
 // --prices FILE (JSON: { rose: { cost, up: [l2], a: [l3, l4], b: [l3, l4] }, ... }): with those prices, the damage
 // every tier needs for its dew per damage to be lambda (one per level 2, 3, 4) times that of level 1, against what it
-// has now, and the factor its damage has to grow by. Without a file: the prices of docs/rebalance-tall.md (4.A.1–2).
+// has now, and the factor its damage has to grow by (the default lambda: tall 10–15% ahead, docs/rebalance-tall.md). Without a file: the prices of docs/rebalance-tall.md (4.A.1–2).
 import { readFileSync } from 'node:fs';
 import { PLANTS, statOf, upCost } from '../public/data.js';
 
@@ -35,7 +35,7 @@ for (const k of SHOOTERS) {
   }
 }
 
-const lambda = opt('--lambda', '1,1.1,1.2').split(',').map(Number), L = { 2: lambda[0], 3: lambda[1], 4: lambda[2] };
+const lambda = opt('--lambda', '1.1,1.2,1.3').split(',').map(Number), L = { 2: lambda[0], 3: lambda[1], 4: lambda[2] };
 const prices = opt('--prices') ? JSON.parse(readFileSync(opt('--prices'), 'utf8')) : {
   rose: { cost: 40, up: [40], a: [90, 150], b: [90, 150] }, pepper: { cost: 55, up: [55], a: [120, 190], b: [120, 190] }, mint: { cost: 50, up: [50], a: [100, 160], b: [100, 160] },
 };
