@@ -27,7 +27,7 @@ import { scan, searchAsync, pool, PAR } from './scan.mjs';
 
 const args = process.argv.slice(2), opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const ranges = (s) => s.split(',').flatMap((p) => { const [a, b] = p.split('-').map(Number); return Array.from({ length: (b || a) - a + 1 }, (_, k) => a + k - 1); });
-const levels = ranges(opt('--levels', '1,4,8')), GARDENS = opt('--gardens', 'free,tall8,tall12,flat2,wide25').split(',');
+const levels = ranges(opt('--levels', '1,4,8')), GARDENS = opt('--gardens', 'free,tall8,tall12,flat2,wide25').split(',').filter((g) => g && g !== 'none');
 const SECS = Number(opt('--secs', 120)), STALL = Number(opt('--stall', 45)), RUNS = Number(opt('--runs', 2)), META = opt('--meta', 'exp3');
 const FROM = opt('--from'), OUT = opt('--out'), JOBS = Number(opt('--jobs', PAR));
 const SMART = { route: 1, place: 'best', upgrades: 'greedy', terrain: true, powers: true, early: true };
@@ -65,11 +65,18 @@ const rows = cells.map((c, q) => {
   if (OUT) writeFileSync(file(OUT, c.n, c.g), JSON.stringify(row) + '\n');
   return row;
 });
+// criterion 4: the lazy gardens of the test «a garden beside the untouched trail loses every level» (the smart bot with no
+// maze, planted best / at the end / at the start / spread) must not win once hp sets the best free party at ×1.43: their
+// margin of a plain win under 0.7 of the free party's clean one
+const LAZY = ['best', 'end', 'start', 'spread'], lazy = levels.flatMap((n) => LAZY.map((place) => ({ level: n, opts: resolve({ level: n, opts: { ...SMART, route: 0, meta: META, place } }) })));
+const lazyWon = scan(lazy, { data, bin, what: 'won', from: -14, to: 24, quiet: true });
 const x = (m, open) => `×${m.toFixed(2)}${open ? '+' : ''}`;
 for (const n of levels) {
   console.log(`L${n + 1} ${LEVELS[n].name}`);
   const mine = rows.filter((r) => r.level === n + 1), get = (g) => mine.find((r) => r.garden === g);
   for (const r of mine) console.log(`  ${r.garden.padEnd(7)} clean ${x(r.clean, r.cleanOpen).padEnd(7)} won ${x(r.won, r.wonOpen).padEnd(7)} (runs ${r.runs.map((m) => m.toFixed(2)).join(' ')})   shooters ${r.shooters}, pumpkins ${r.pumpkins}, grown ${r.grown}, top ${r.top}, dew ${r.dewIn} left ${r.dewLeft}, at levels 3-4 ${Math.round(r.tallShare * 100)}%`);
+  const lz = levels.indexOf(n), lw = LAZY.map((_, q) => lazyWon[lz * LAZY.length + q].margin), worst = Math.max(...lw);
+  console.log(`  lazy (no maze) won ${lw.map((m) => m.toFixed(2)).join(' / ')} (${LAZY.join(' / ')})${get('free') ? `: the best of them over free clean ×${(worst / get('free').clean).toFixed(2)} (wanted < 0.70)` : ''}`);
   for (const [a, b, want] of [['tall12', 'flat2', '1.10–1.15'], ['tall8', 'flat2', '≥ 1.0'], ['tall12', 'wide25', '1.10–1.15?'], ['tall12', 'free', '']]) if (get(a) && get(b)) {
     const q = (k) => (get(b)[k] > 0 ? (get(a)[k] / get(b)[k]).toFixed(2) : '-');
     console.log(`  ${a} / ${b}: clean ×${q('clean')}, won ×${q('won')} (wanted ${want})`);
