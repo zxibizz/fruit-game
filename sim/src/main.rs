@@ -20,6 +20,7 @@ mod data;
 mod game;
 mod jsmath;
 mod json;
+mod perfect;
 mod routes;
 mod studio;
 
@@ -210,6 +211,13 @@ fn main() {
             let walls = bot::layout(&d, j.at("level").num() as usize, j.at("terrain").truthy());
             println!("[{}]", walls.iter().map(|(c, g)| format!("[{},{}]", c, g)).collect::<Vec<_>>().join(","));
         }
+        Some("perfect") | Some("scan") if files.len() == 1 => {
+            // the perfect party of a level, searched for (perfect) or measured on the grid (scan): perfect.rs
+            let text = std::fs::read_to_string(files[0]).unwrap_or_else(|e| panic!("{}: {}", files[0], e));
+            let j = J::parse(&text).unwrap_or_else(|e| panic!("{}: {}", files[0], e));
+            let jobs = opt("--jobs").map_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get()), |v| v.parse().unwrap());
+            if args[0] == "perfect" { perfect::perfect(&j, jobs); } else { perfect::scan(&j, jobs); }
+        }
         Some("studio") => {
             // the balance studio's engine: commands on stdin, what it finds on stdout (studio.rs)
             let jobs = opt("--jobs").map_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get()), |v| v.parse().unwrap());
@@ -247,6 +255,6 @@ fn main() {
             println!("native total {:.1} ms over {} parties{}", total, files.len(), if bad > 0 { format!(", {} MISMATCHED", bad) } else { String::new() });
             std::process::exit(if bad > 0 { 1 } else { 0 });
         }
-        _ => { eprintln!("usage: fruit-sim run <batch.json> [--jobs N] | studio [--jobs N] | layout <request.json> | routes <request.json> | replay <party.json ...> [--no-check] [--repeat N] [--dump-at K]"); std::process::exit(2); }
+        _ => { eprintln!("usage: fruit-sim run <batch.json> [--jobs N] | studio [--jobs N] | perfect <request.json> [--jobs N] | scan <request.json> [--jobs N] | layout <request.json> | routes <request.json> | replay <party.json ...> [--no-check] [--repeat N] [--dump-at K]"); std::process::exit(2); }
     }
 }
