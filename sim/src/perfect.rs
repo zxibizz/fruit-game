@@ -318,16 +318,44 @@ pub fn search(cx: &Ctx, seeds_plans: Vec<Vec<Step>>, secs: f64, stall: f64, goal
     // where every party given stands, and what its garden is made of
     let elite = |plan: Vec<Step>, k: i32| -> Option<Elite> { if k < K_MIN { return None; }
         let mix = cx.fitness(&plan, k, None).mix?; let runs = cx.fitness(&plan, (k + 1).min(K_MAX), None); Some(Elite { niche: niche_of(&mix), stat: make_of(cx, &plan), plan, k, runs, mix }) };
+    let given: Vec<Vec<Step>> = seeds_plans.into_iter().map(|mut p| { tidy(&mut p); p }).collect();
     let starts: Vec<Option<Elite>> = std::thread::scope(|sc| {
-        let hs: Vec<_> = seeds_plans.into_iter().map(|mut p| sc.spawn(move || { cat(0); tidy(&mut p); let k = level_from(cx, &p, if goal < K_MAX { goal } else { 16 }); elite(p, k) })).collect();
+        let hs: Vec<_> = given.iter().cloned().map(|p| sc.spawn(move || { cat(0); let k = level_from(cx, &p, if goal < K_MAX { goal } else { 16 }); elite(p, k) })).collect();
         hs.into_iter().map(|h| h.join().unwrap()).collect() });
     log(format!("the parties given hold: {}", starts.iter().map(|s| s.as_ref().map_or("nothing".to_string(), |e| format!("×{:.2}", rung(e.k)))).collect::<Vec<_>>().join(", ")));
     let t0 = Instant::now(); // (the time of the search is counted from here: placing the parties given is not it)
     let mut arch: Vec<Elite> = Vec::new();
     for e in starts.into_iter().flatten() { match arch.iter().position(|x| x.niche == e.niche) { Some(q) => if e.k > arch[q].k { arch[q] = e; }, None => arch.push(e) } }
-    if arch.is_empty() { return (arch, Vec::new(), 0); }
+    // None of them clean even against bugs half as healthy (a garden of a plant gone, with the plan of the garden that
+    // had it): there is nothing to change yet, and the search used to end there — «чисто не пройти» said the search had
+    // not started, not that the level cannot be done. A climb first: against those weakest bugs, the party that gets
+    // furthest before its first bite (the seeds it is clean on, and how far into the level on the one it is bitten on)
+    // is changed till one is clean, and that one starts the search.
+    let climbed = AtomicU64::new(0);
+    if arch.is_empty() {
+        let n = cx.seeds.len() as f64;
+        let pop: Vec<(Vec<Step>, Runs)> = given.into_iter().map(|p| { let r = cx.fitness(&p, K_MIN, None); (p, r) }).collect();
+        let cur = Mutex::new(pop.into_iter().max_by(|a, b| a.1.fit.partial_cmp(&b.1.fit).unwrap()).unwrap()); let done: Mutex<Option<Vec<Step>>> = Mutex::new(None);
+        log(format!("nothing holds: a climb from the party that gets furthest ({:.2} of {} seeds)", cur.lock().unwrap().1.fit, cx.seeds.len()));
+        std::thread::scope(|sc| { for t in 0..jobs.max(1) { let (cur, done, climbed) = (&cur, &done, &climbed); sc.spawn(move || {
+            let mut r = Rng::new(rng_seed.wrapping_mul(7919).wrapping_add(t as u64 + 1));
+            loop { if t0.elapsed().as_secs_f64() >= secs || done.lock().unwrap().is_some() { break; }
+                let (parent, pruns) = { let c = cur.lock().unwrap(); (c.0.clone(), c.1.clone()) };
+                let mut child = parent.clone(); let mut changed = false;
+                for _ in 0..1 + (r.f() < 0.4) as usize + (r.f() < 0.15) as usize { if let Some(c) = mutate(cx, &child, None, &mut r) { child = c; changed = true; } }
+                if !changed { continue; }
+                climbed.fetch_add(1, Ordering::Relaxed);
+                let runs = cx.fitness(&child, K_MIN, Some((&parent, &pruns)));
+                if runs.fit >= n { *done.lock().unwrap() = Some(child); break; }
+                let mut c = cur.lock().unwrap(); if runs.fit >= c.1.fit { *c = (child, runs); }
+            }
+        }); } });
+        if let Some(p) = done.into_inner().unwrap() { let k = level_from(cx, &p, K_FLOOR); log(format!("the climb found a party clean against bugs ×{:.2} ({} tried)", rung(k), climbed.load(Ordering::Relaxed))); if let Some(e) = elite(p, k) { arch.push(e); } }
+        if arch.is_empty() { return (arch, Vec::new(), climbed.load(Ordering::Relaxed)); }
+    }
     let best0 = arch.iter().map(|e| e.k).max().unwrap();
-    let st = Mutex::new(State { arch, seen: HashSet::new(), tried: 0, history: vec![(0.0, best0)], last: 0.0 });
+    let at = t0.elapsed().as_secs_f64(); // (after a climb: its stall counts from there)
+    let st = Mutex::new(State { arch, seen: HashSet::new(), tried: climbed.load(Ordering::Relaxed), history: vec![(at, best0)], last: at });
     std::thread::scope(|sc| { for t in 0..jobs.max(1) { let st = &st; sc.spawn(move || {
         let mut r = Rng::new(rng_seed.wrapping_mul(1000).wrapping_add(t as u64 + 1));
         loop {
