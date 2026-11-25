@@ -8,8 +8,17 @@
 // --prices FILE (JSON: { rose: { cost, up: [l2], a: [l3, l4], b: [l3, l4] }, ... }): with those prices, the damage
 // every tier needs for its dew per damage to be lambda (one per level 2, 3, 4) times that of level 1, against what it
 // has now, and the factor its damage has to grow by (the default lambda: tall 10–15% ahead, docs/rebalance-tall.md). Without a file: the prices of docs/rebalance-tall.md (4.A.1–2).
+// --sim [--dew 1200] [--wave 14] [--level 9] [--bugs ant,aphid,...]: the same asked of the game itself (criterion 6 of
+// docs/rebalance-tall.md, step 1b): in the plant lab (balance/labcore.mjs: a fixed maze of pumpkins, a garden bought for
+// the dew along its trail from the fruit end, on the free cells and in the pumpkins' places — every plant is a wall —,
+// a pack of one kind of bug too big for it), a garden of every tier against
+// a garden of the same plant left at level 1, for the same dew — many cheap plants along the trail against a few grown
+// ones, coverage, overkill and armor counted. The number is the share of the pack's health the tier's garden takes per
+// dew it spent, over the same of the level-1 garden (1.00: as good for the dew; the owner wants a grown garden
+// 10–15% ahead); beside the bug, the share the level-1 garden takes (%), and the dew each garden spent.
 import { readFileSync } from 'node:fs';
 import { PLANTS, statOf, upCost } from '../public/data.js';
+import { makeLab } from './labcore.mjs';
 
 const args = process.argv.slice(2), opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const SHOOTERS = ['rose', 'pepper', 'mint'];
@@ -48,5 +57,23 @@ for (const [k, N] of Object.entries(prices)) {
     if (b && !PLANTS[k][b]) continue;
     const total = N.cost + N.up[0] + (l >= 3 ? N[b][0] : 0) + (l >= 4 ? N[b][1] : 0), need = total * base * L[l], has = dps(k, l, b);
     console.log(`  ${name(k, l, b).padEnd(10)} dew ${String(total).padStart(4)}: needs ${f(need, 1)}, has ${f(has, 1)} → ×${f(need / has, 2)}`);
+  }
+}
+
+if (args.includes('--sim')) {
+  const dew = Number(opt('--dew', 1200)), wave = Number(opt('--wave', 14)), level = Number(opt('--level', 9)) - 1;
+  const bugs = opt('--bugs', 'ant,aphid,grasshopper,beetle,pillbug,snail,butterfly,wasp').split(',');
+  const lab = makeLab({ level, wave, dew, weight: 100 * dew / 1000, walls: true });
+  const kinds = (k) => [`${k}:1`, k, ...['a', 'b'].filter((b) => PLANTS[k][b]).flatMap((b) => [`${k}.${b}3`, `${k}.${b}`])];
+  console.log(`\nthe lab (level ${level + 1}, wave ${wave}, ${dew} dew, a pack of weight ${100 * dew / 1000}): the share of the pack a tier's garden takes per dew, over the level-1 garden's`);
+  console.log(''.padEnd(12) + bugs.map((b) => b.slice(0, 7).padEnd(8)).join('') + 'dew spent, plants');
+  for (const k of [...SHOOTERS, ...(opt('--more') ? opt('--more').split(',') : [])]) {
+    const one = Object.fromEntries(bugs.map((b) => [b, lab.dealt([[`${k}:1`, 1]], b)]));
+    console.log(`${(k + ':1').padEnd(12)}` + bugs.map((b) => `${Math.round(one[b].share * 100)}%`.padEnd(8)).join('') + `${Math.round(one[bugs[0]].spent)}, ${one[bugs[0]].plants}`);
+    for (const t of kinds(k).slice(1)) {
+      const r = Object.fromEntries(bugs.map((b) => [b, lab.dealt([[t, 1]], b)]));
+      const q = (b) => (one[b].share > 0 ? (r[b].share / r[b].spent) / (one[b].share / one[b].spent) : NaN);
+      console.log(`  ${t.padEnd(10)}` + bugs.map((b) => `${f(q(b), 2)}${r[b].share > .97 ? '+' : ''}`.padEnd(8)).join('') + `${Math.round(r[bugs[0]].spent)}, ${r[bugs[0]].plants}`);
+    }
   }
 }

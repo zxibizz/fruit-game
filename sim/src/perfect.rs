@@ -164,6 +164,19 @@ fn tidy(plan: &mut Vec<Step>) {
     }
     *plan = out;
 }
+// A plan cut to the garden asked for (the options maxShooters and flat, balance/tallwide.mjs): a shooter put past the
+// cap is no step, and nor are the steps that would grow what stands on its cell after it; no shooter grown past `flat`.
+// (The bot keeps to the same when it plays the plan and spends what is left: this only keeps the search from trying
+// steps that would come to nothing.)
+fn clip(cx: &Ctx, plan: &mut Vec<Step>) {
+    let (cap, flat, pk) = (cx.base.max_shooters, cx.base.flat, cx.d.pumpkin); if cap.is_infinite() && flat >= 4 { return; }
+    let mut at: HashMap<(i32, i32), (usize, usize)> = HashMap::new(); let mut cut: HashSet<(i32, i32)> = HashSet::new();
+    plan.retain(|s| { let c = (s.1, s.2); match s.0 {
+        Some(k) => { let here = at.get(&c).map_or(false, |e| e.0 != pk); let n = at.values().filter(|e| e.0 != pk).count() - here as usize;
+            if k != pk && n as f64 >= cap { cut.insert(c); false } else { cut.remove(&c); at.insert(c, (k, 1)); true } }
+        None => { if cut.contains(&c) { return false; } match at.get_mut(&c) { Some(e) => if e.0 != pk && e.1 >= flat { false } else { e.1 += 1; true }, None => true } }
+    } });
+}
 fn hash_of(plan: &[Step]) -> u64 { let mut h: u64 = 0xcbf29ce484222325; for s in plan { for v in [s.0.map_or(99, |k| k as i64), s.1 as i64, s.2 as i64, s.3 as i64] { h = (h ^ v as u64).wrapping_mul(0x100000001b3); } } h }
 
 // the garden a plan ends in, as far as it can be told without playing: its plants, the trail, the cells a plant may
@@ -262,7 +275,7 @@ fn mutate(cx: &Ctx, plan: &[Step], other: Option<&[Step]>, r: &mut Rng) -> Optio
             both.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap()); p = both.into_iter().map(|x| x.1).collect();
         }
     }
-    tidy(&mut p);
+    tidy(&mut p); clip(cx, &mut p);
     if p == plan { None } else { Some(p) }
 }
 
@@ -320,7 +333,7 @@ pub fn search(cx: &Ctx, seeds_plans: Vec<Vec<Step>>, secs: f64, stall: f64, goal
     // where every party given stands, and what its garden is made of
     let elite = |plan: Vec<Step>, k: i32| -> Option<Elite> { if k < K_MIN { return None; }
         let mix = cx.fitness(&plan, k, None).mix?; let runs = cx.fitness(&plan, (k + 1).min(K_MAX), None); Some(Elite { niche: niche_of(&mix), stat: make_of(cx, &plan), plan, k, runs, mix }) };
-    let given: Vec<Vec<Step>> = seeds_plans.into_iter().map(|mut p| { tidy(&mut p); p }).collect();
+    let given: Vec<Vec<Step>> = seeds_plans.into_iter().map(|mut p| { tidy(&mut p); clip(cx, &mut p); p }).collect();
     let starts: Vec<Option<Elite>> = std::thread::scope(|sc| {
         let hs: Vec<_> = given.iter().cloned().map(|p| sc.spawn(move || { cat(0); let k = level_from(cx, &p, if goal < K_MAX { goal } else { 16 }); elite(p, k) })).collect();
         hs.into_iter().map(|h| h.join().unwrap()).collect() });

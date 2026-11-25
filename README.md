@@ -97,7 +97,12 @@ and in portrait (turned there).
   (`--party ID` for one party, wave by wave). `node balance/owner.mjs [FILE]` replays the owner's parties as plans on
   the sim and gives their margins beside the kept perfect party (the parties worth keeping are in `balance/owner/`).
 - Tall against wide (the measures of [docs/rebalance-tall.md](docs/rebalance-tall.md)): `node balance/tiers.mjs` —
-  damage per dew of every tier of a shooter and what a tier needs under other prices (`--prices FILE`);
+  damage per dew of every tier of a shooter and what a tier needs under other prices (`--prices FILE`); with `--sim`,
+  the same asked of the game in the plant lab (`balance/labcore.mjs`): a garden of every tier against one of the same
+  plant at level 1, for the same dew, on a fixed maze whose walls the garden may take;
+  `node balance/tallwide.mjs [--levels 1,4,8] [--secs 120] [--runs 2] [--out DIR] [--from DIR]` — the best party the
+  search finds of every kind of garden: free, tall K (`balance/party.mjs --tall K`: K shooters at most, pumpkins free)
+  and flat L (`--flat L`: no shooter grown past level L), the bot keeping to the bounds too;
   `node balance/tall.mjs` — the kept perfect party against gardens of its first N plants grown to the top;
   `node balance/cap.mjs` — the smart bot with a cap on its plants; `node balance/econ.mjs` — the dew and the garden
   of every level's perfect party.

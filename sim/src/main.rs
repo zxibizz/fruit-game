@@ -111,6 +111,8 @@ fn opts_of(d: &Data, j: &J) -> Opts {
             "early" => o.early = v.truthy(),
             "steps" => o.steps = v.num() as usize,
             "top" => o.top = v.num() as usize,
+            "maxShooters" => o.max_shooters = if *v == J::Null { f64::INFINITY } else { v.num() },
+            "flat" => o.flat = v.num() as usize,
             "trust" => o.trust = v.arr().iter().map(|x| x.num()).collect(),
             x => panic!("unknown option {}", x),
         }
