@@ -1,10 +1,11 @@
 // Tall against wide (docs/rebalance-tall.md, criteria 1 and 2): for every level the best party the search finds of
 // every kind of garden, side by side.
-//   node balance/tallwide.mjs [--levels 1,4,8] [--gardens free,tall8,tall12,flat2] [--secs 120] [--stall 45] [--runs 2]
+//   node balance/tallwide.mjs [--levels 1,4,8] [--gardens free,tall8,tall12,flat2,wide25] [--secs 120] [--stall 45] [--runs 2]
 //     [--meta exp3] [--from DIR] [--out DIR] [--jobs N]
 // Gardens: free — no bounds (what balance/party.mjs looks for); tallK — K shooters at most (every plant but the
 // pumpkins: a maze of pumpkins is free), grown as far as wanted; flatL — as many plants as wanted, no shooter grown
-// past level L. The search (sim/src/perfect.rs) and the bot spending the dew left keep to the bounds. Every search
+// past level L; wideN — N shooters at least, grown as far as wanted (the many plants of a wide garden, with what growing
+// pays on top: the best free parties of 0.31 are such). The search (sim/src/perfect.rs) and the bot spending the dew left keep to the bounds (wideN: the search only). Every search
 // starts from the kept perfect party of the level (balance/perfect/L<n>.json, cut to the bounds), the smart bot and the
 // expert playing within them, and with --from DIR the best plans of an earlier run (DIR/L<n>.<garden>.json, written
 // with --out DIR): after a change of the numbers the last best of each garden is the best start there is. Every garden
@@ -26,12 +27,12 @@ import { scan, searchAsync, pool, PAR } from './scan.mjs';
 
 const args = process.argv.slice(2), opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const ranges = (s) => s.split(',').flatMap((p) => { const [a, b] = p.split('-').map(Number); return Array.from({ length: (b || a) - a + 1 }, (_, k) => a + k - 1); });
-const levels = ranges(opt('--levels', '1,4,8')), GARDENS = opt('--gardens', 'free,tall8,tall12,flat2').split(',');
+const levels = ranges(opt('--levels', '1,4,8')), GARDENS = opt('--gardens', 'free,tall8,tall12,flat2,wide25').split(',');
 const SECS = Number(opt('--secs', 120)), STALL = Number(opt('--stall', 45)), RUNS = Number(opt('--runs', 2)), META = opt('--meta', 'exp3');
 const FROM = opt('--from'), OUT = opt('--out'), JOBS = Number(opt('--jobs', PAR));
 const SMART = { route: 1, place: 'best', upgrades: 'greedy', terrain: true, powers: true, early: true };
-const bounds = (g) => { const m = /^(free|tall|flat)(\d*)$/.exec(g); if (!m) throw new Error(`a garden is free, tallK or flatL, not ${g}`);
-  return m[1] === 'tall' ? { maxShooters: Number(m[2]) } : m[1] === 'flat' ? { flat: Number(m[2]) } : {}; };
+const bounds = (g) => { const m = /^(free|tall|flat|wide)(\d*)$/.exec(g); if (!m) throw new Error(`a garden is free, tallK, flatL or wideN, not ${g}`);
+  return m[1] === 'tall' ? { maxShooters: Number(m[2]) } : m[1] === 'flat' ? { flat: Number(m[2]) } : m[1] === 'wide' ? { minShooters: Number(m[2]) } : {}; };
 const bin = build(), data = exportData(), log = (s) => process.stderr.write(s + '\n'), T0 = Date.now();
 const file = (dir, n, g) => `${dir}/L${n + 1}.${g}.json`;
 
@@ -69,7 +70,7 @@ for (const n of levels) {
   console.log(`L${n + 1} ${LEVELS[n].name}`);
   const mine = rows.filter((r) => r.level === n + 1), get = (g) => mine.find((r) => r.garden === g);
   for (const r of mine) console.log(`  ${r.garden.padEnd(7)} clean ${x(r.clean, r.cleanOpen).padEnd(7)} won ${x(r.won, r.wonOpen).padEnd(7)} (runs ${r.runs.map((m) => m.toFixed(2)).join(' ')})   shooters ${r.shooters}, pumpkins ${r.pumpkins}, grown ${r.grown}, top ${r.top}, dew ${r.dewIn} left ${r.dewLeft}, at levels 3-4 ${Math.round(r.tallShare * 100)}%`);
-  for (const [a, b, want] of [['tall12', 'flat2', '1.10–1.15'], ['tall8', 'flat2', '≥ 1.0']]) if (get(a) && get(b)) {
+  for (const [a, b, want] of [['tall12', 'flat2', '1.10–1.15'], ['tall8', 'flat2', '≥ 1.0'], ['tall12', 'wide25', '1.10–1.15?'], ['tall12', 'free', '']]) if (get(a) && get(b)) {
     const q = (k) => (get(b)[k] > 0 ? (get(a)[k] / get(b)[k]).toFixed(2) : '-');
     console.log(`  ${a} / ${b}: clean ×${q('clean')}, won ×${q('won')} (wanted ${want})`);
   }

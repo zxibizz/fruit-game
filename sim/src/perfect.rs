@@ -177,6 +177,8 @@ fn clip(cx: &Ctx, plan: &mut Vec<Step>) {
         None => { if cut.contains(&c) { return false; } match at.get_mut(&c) { Some(e) => if e.0 != pk && e.1 >= flat { false } else { e.1 += 1; true }, None => true } }
     } });
 }
+// the shooters a plan's garden ends with (the bot may add more of its own): a wide garden (minShooters) keeps at least so many
+fn shooters_of(cx: &Ctx, plan: &[Step]) -> usize { let mut at: HashMap<(i32, i32), usize> = HashMap::new(); for s in plan { if let Some(k) = s.0 { at.insert((s.1, s.2), k); } } at.values().filter(|&&k| k != cx.d.pumpkin).count() }
 fn hash_of(plan: &[Step]) -> u64 { let mut h: u64 = 0xcbf29ce484222325; for s in plan { for v in [s.0.map_or(99, |k| k as i64), s.1 as i64, s.2 as i64, s.3 as i64] { h = (h ^ v as u64).wrapping_mul(0x100000001b3); } } h }
 
 // the garden a plan ends in, as far as it can be told without playing: its plants, the trail, the cells a plant may
@@ -276,7 +278,7 @@ fn mutate(cx: &Ctx, plan: &[Step], other: Option<&[Step]>, r: &mut Rng) -> Optio
         }
     }
     tidy(&mut p); clip(cx, &mut p);
-    if p == plan { None } else { Some(p) }
+    if p == plan || shooters_of(cx, &p) < cx.base.min_shooters { None } else { Some(p) }
 }
 
 // ---- the search ----

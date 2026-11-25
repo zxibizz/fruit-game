@@ -32,12 +32,12 @@ pub enum Upgrades { Greedy, None, First }
 #[derive(Clone, Debug)]
 pub struct Opts {
     pub seed: u32, pub max_plants: f64, pub route: f64, pub maze: Option<String>, pub hp: f64, pub plan: Option<Vec<(Option<usize>, i32, i32, u8)>>, pub policy: Option<Policy>, pub terrain: bool, pub powers: Powers, pub bank: Option<f64>, pub meta: Vec<(String, usize)>,
-    pub place: Where, pub plants: Option<Vec<usize>>, pub upgrades: Upgrades, pub early: bool, pub top: usize, pub trust: Vec<f64>, pub max_shooters: f64, pub flat: usize,
+    pub place: Where, pub plants: Option<Vec<usize>>, pub upgrades: Upgrades, pub early: bool, pub top: usize, pub trust: Vec<f64>, pub max_shooters: f64, pub flat: usize, pub min_shooters: usize,
     pub steps: usize, // the party stops after so many steps of the game (for the parity check: a part of a level is enough there)
     pub stop_bitten: f64, // the party is not played on once more fruit health than this is bitten (perfect.rs: whether it is clean is known)
 }
 impl Default for Opts {
-    fn default() -> Opts { Opts { seed: 7, max_plants: f64::INFINITY, route: 1.0, maze: None, hp: 1.0, plan: None, policy: None, terrain: true, powers: Powers::On, bank: None, meta: Vec::new(), place: Where::Best, plants: None, upgrades: Upgrades::Greedy, early: true, top: 4, trust: Vec::new(), max_shooters: f64::INFINITY, flat: 4, steps: usize::MAX, stop_bitten: f64::INFINITY } }
+    fn default() -> Opts { Opts { seed: 7, max_plants: f64::INFINITY, route: 1.0, maze: None, hp: 1.0, plan: None, policy: None, terrain: true, powers: Powers::On, bank: None, meta: Vec::new(), place: Where::Best, plants: None, upgrades: Upgrades::Greedy, early: true, top: 4, trust: Vec::new(), max_shooters: f64::INFINITY, flat: 4, min_shooters: 0, steps: usize::MAX, stop_bitten: f64::INFINITY } }
 }
 // the garden as it stood when a wave began (Bot::gauge)
 #[derive(Clone, Copy, Debug)]
