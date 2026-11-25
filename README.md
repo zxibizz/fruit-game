@@ -26,11 +26,13 @@ and in portrait (turned there).
   nettles (sting the bugs, nothing grows), weeds (cleared for dew), two anthills. A boss comes in the middle and at
   the end of every level: the rhino beetle runs, the queen lets ants out, the slug king splits into snails, the
   hornet flies over the maze, the spider webs the plants.
-- **Balance** (0.29): a level is tuned by its perfect party, played with the perks of three stars on every level
-  before it (what a player of perfect parties has). The best party known of every level gets through with
-  the fruit never bitten against bugs 1/0.7 = 1.43 times healthier than they are, so a garden of 70% of its strength
-  is the least that keeps the fruit whole (within the step of the measure: 63–75%), and a garden of one plant alone is
-  no more than 55% of the best. The health of a level's bugs (`hp`) sets
+- **Balance** (0.31): a level is tuned by its perfect party, played with the perks of three stars on every level
+  before it (what a player of perfect parties has). The best party known of every level (`balance/party.mjs`, on
+  eight seeds of the game) gets through with the fruit never bitten against bugs 1.41–1.48 times healthier than they
+  are (the target 1/0.7 = 1.43), so a garden of 67–70% of its strength is the least that keeps the fruit whole, and no
+  plant alone keeps it whole on any level (the best, roses on «Развилка», holds 58% of the best). Every branch is
+  needed on three levels at least and none on every level. The levels are hard: the learnt strategy with the perks of
+  two stars wins «Развилка» alone. The health of a level's bugs (`hp`) sets
   that; the size of every wave (`swell`) is set so that no one or two waves are all the difficulty: a big wave, an
   ordinary one and a breather stand at 1.15, 1.3 and 1.6 times the margin of the hardest boss wave. Thorns, spikes and
   nettles together take no more than a quarter of a bug's health (`PRICK_CAP`): with no cap a thorny trail, cold mints
@@ -75,7 +77,7 @@ and in portrait (turned there).
 - `server/` — Node 22, no dependencies: static files and `/healthz`.
 - `node --test test/*.test.js` — pathing and placement rules, economy, eaten plants and roots, bosses, the ground, perks, saving, server, offline
   cache list, no sudden walls of flyers in the waves, the two copies of the simulation against each other (see `sim/`
-  below), and the balance on one seed: the kept perfect party of every level gets through with the fruit whole against bugs 15% healthier and not against bugs 75% healthier, and one plant alone does not; the learnt strategy wins most levels; the smart bot (`sim/src/bot.rs`: a maze through mud and nettles; it values a
+  below), and the balance on one seed: the kept perfect party of every level gets through with the fruit whole against bugs 15% healthier and not against bugs 75% healthier, and one plant alone does not; the learnt strategy wins the first level and gets through a third of the waves of every level; the smart bot (`sim/src/bot.rs`: a maze through mud and nettles; it values a
   garden by the bugs it stops — walkers and flyers apart, a crowd sharing a single shooter while chili, heat and thorns hit
   many; frost and rain, the perks of two stars a level) must win every level; a garden beside the
   untouched trail must lose every level with the most perks there can be by then (three stars on every level before),
@@ -194,7 +196,10 @@ and in portrait (turned there).
   (the economy, eaten plants, frost and rain), refined step by step, and the margin of the level is set beside the
   expert's — whether the meta of single waves carries over to a party, and how much easier a level is for a player
   who plays it that way. How far all this can be trusted: [docs/studio.md](docs/studio.md).
-  The levels are tuned with three more: `node balance/shape.mjs --levels 6` finds the `swell` of a level (the size of
+  `node balance/party.mjs --level 6 [--from a.json,b.json] [--mono] [--out FILE]` looks for the best perfect party of a
+  level (on eight seeds, from the archives of earlier reports), measures every make it found against it, and searches
+  the game with each branch closed and each plant gone to say what the level cannot do without; it says the `hp` at
+  which the best holds the target. The levels are tuned with three more: `node balance/shape.mjs --levels 6` finds the `swell` of a level (the size of
   every wave that puts its margin in its place under the boss waves); `node balance/campaign.mjs --level 6 --clean`
   looks for the best perfect party (the fruit never bitten, the game's own waves; it starts from the studio's gardens
   and from the parties of the bots), measures a garden of one plant alone against it and says the `hp` of the level at

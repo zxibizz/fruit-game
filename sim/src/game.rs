@@ -412,7 +412,8 @@ impl<'a> Game<'a> {
         b.hp -= amount * marked(b);
         if b.hp <= 0.0 { self.kill(bi); }
     }
-    // Thorns, spikes and nettles: a share of a bug's health, all of them together no more than prick_cap of it.
+    // Thorns and nettles: a share of a bug's health, the two together no more than prick_cap of it (the spikes of a shell
+    // are apart: only a bug that bites is pricked by them).
     fn prick(&mut self, bi: usize, share: f64) {
         let b = &mut self.bugs[bi]; let s = share.min(self.d.prick_cap - b.pricked); if !(s > 0.0) || b.hp <= 0.0 { return; }
         b.pricked += s; let a = b.max_hp * s; self.lose(bi, a);
@@ -429,7 +430,7 @@ impl<'a> Game<'a> {
         let Some(pi) = self.pidx(pid) else { return };
         { let p = &mut self.plants[pi]; p.hp -= amount * (1.0 - p.guard); }
         let sp = self.plants[pi].spikes;
-        if sp != 0.0 { let b = &self.bugs[bi]; let a = sp * k * (if self.d.bugs[b.kind].boss { self.d.thorn_boss } else { 1.0 }); self.prick(bi, a); }
+        if sp != 0.0 { let b = &self.bugs[bi]; let a = b.max_hp * (sp * k * (if self.d.bugs[b.kind].boss { self.d.thorn_boss } else { 1.0 })); self.lose(bi, a); }
         if self.plants[pi].hp > 0.0 { return; }
         if let Some(w) = self.plants[pi].ward { if let Some(wi) = self.pidx(w) { if !self.plants[wi].warded { self.plants[pi].hp = 1.0; self.plants[wi].warded = true; self.auras(); return; } } }
         self.remove_plant(pid, false);
