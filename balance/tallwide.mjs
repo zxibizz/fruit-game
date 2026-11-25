@@ -1,6 +1,6 @@
 // Tall against wide (docs/rebalance-tall.md, criteria 1 and 2): for every level the best party the search finds of
 // every kind of garden, side by side.
-//   node balance/tallwide.mjs [--levels 1,4,8] [--gardens free,tall8,tall12,flat2,wide25] [--secs 120] [--stall 45] [--runs 2]
+//   node balance/tallwide.mjs [--levels 1,4,8] [--gardens free,tallD,wide25] [--set K=V,...] [--secs 120] [--stall 45] [--runs 2]
 //     [--meta exp3] [--from DIR] [--out DIR] [--jobs N]
 // Gardens: free — no bounds (what balance/party.mjs looks for); tallK — K shooters at most (every plant but the
 // pumpkins: a maze of pumpkins is free), grown as far as wanted; flatL — as many plants as wanted, no shooter grown
@@ -20,18 +20,24 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { LEVELS } from '../public/data.js';
 import { exportData } from '../sim/js/export.mjs';
 import { play, build } from '../sim/js/play.mjs';
-import { resolve } from './scenario.mjs';
+import { resolve, applyOverrides, levelDew } from './scenario.mjs';
 import { EXPERT } from './plans.mjs';
 import { kept } from './perfect.mjs';
 import { scan, searchAsync, pool, PAR } from './scan.mjs';
 
 const args = process.argv.slice(2), opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const ranges = (s) => s.split(',').flatMap((p) => { const [a, b] = p.split('-').map(Number); return Array.from({ length: (b || a) - a + 1 }, (_, k) => a + k - 1); });
-const levels = ranges(opt('--levels', '1,4,8')), GARDENS = opt('--gardens', 'free,tall8,tall12,flat2,wide25').split(',').filter((g) => g && g !== 'none');
+const levels = ranges(opt('--levels', '1,4,8')), GARDENS = opt('--gardens', 'free,tallD,wide25').split(',').filter((g) => g && g !== 'none');
 const SECS = Number(opt('--secs', 120)), STALL = Number(opt('--stall', 45)), RUNS = Number(opt('--runs', 2)), META = opt('--meta', 'exp3');
 const FROM = opt('--from'), OUT = opt('--out'), JOBS = Number(opt('--jobs', PAR));
 const SMART = { route: 1, place: 'best', upgrades: 'greedy', terrain: true, powers: true, early: true };
-const bounds = (g) => { const m = /^(free|tall|flat|wide)(\d*)$/.exec(g); if (!m) throw new Error(`a garden is free, tallK, flatL or wideN, not ${g}`);
+const num = (v) => (Number.isNaN(Number(v)) ? v : Number(v));
+// --set K=V,...: other numbers (as balance/run.mjs --set takes them: PLANTS.pepper.b.from=2, L1.budget=6/3.2)
+applyOverrides(Object.fromEntries((opt('--set', '') || '').split(',').filter(Boolean).map((kv) => { const [k, v] = kv.split('='); return [k.trim(), num(v.trim())]; })));
+// tallD: the owner's tall garden (2026-11-25) — a cap that grows with the dew of the level, at most 28: 12 shooters
+// on «Развилка», 18 on «Поляна», 21 on «Большая поляна», 28 from «Лужайка» on
+export const tallCap = (n) => Math.min(28, Math.round(levelDew(n, {}) / 450));
+const bounds = (g, n) => { if (g === 'tallD') return { maxShooters: tallCap(n) }; const m = /^(free|tall|flat|wide)(\d*)$/.exec(g); if (!m) throw new Error(`a garden is free, tallK, flatL or wideN, not ${g}`);
   return m[1] === 'tall' ? { maxShooters: Number(m[2]) } : m[1] === 'flat' ? { flat: Number(m[2]) } : m[1] === 'wide' ? { minShooters: Number(m[2]) } : {}; };
 const bin = build(), data = exportData(), log = (s) => process.stderr.write(s + '\n'), T0 = Date.now();
 const file = (dir, n, g) => `${dir}/L${n + 1}.${g}.json`;
@@ -39,8 +45,10 @@ const file = (dir, n, g) => `${dir}/L${n + 1}.${g}.json`;
 // every search: a level, a garden, a run
 const jobs = [];
 for (const n of levels) for (const g of GARDENS) {
-  const opts = resolve({ level: n, opts: { ...SMART, meta: META, ...bounds(g) } });
-  const plans = [kept(n)?.plan, FROM && existsSync(file(FROM, n, g)) ? JSON.parse(readFileSync(file(FROM, n, g), 'utf8')).plan : null].filter(Boolean);
+  const opts = resolve({ level: n, opts: { ...SMART, meta: META, ...bounds(g, n) } });
+  // (a tallD of an earlier run, or the tallK of the same cap)
+  const from = FROM ? [g, ...(g === 'tallD' ? [`tall${tallCap(n)}`] : [])].map((x) => file(FROM, n, x)).find((f) => existsSync(f)) : null;
+  const plans = [kept(n)?.plan, from ? JSON.parse(readFileSync(from, 'utf8')).plan : null].filter(Boolean);
   const bots = [opts, ...(EXPERT ? [{ ...opts, policy: EXPERT }] : [])];
   for (let r = 1; r <= RUNS; r++) jobs.push({ n, g, r, opts, plans, bots });
 }
@@ -74,14 +82,14 @@ const x = (m, open) => `×${m.toFixed(2)}${open ? '+' : ''}`;
 for (const n of levels) {
   console.log(`L${n + 1} ${LEVELS[n].name}`);
   const mine = rows.filter((r) => r.level === n + 1), get = (g) => mine.find((r) => r.garden === g);
-  for (const r of mine) console.log(`  ${r.garden.padEnd(7)} clean ${x(r.clean, r.cleanOpen).padEnd(7)} won ${x(r.won, r.wonOpen).padEnd(7)} (runs ${r.runs.map((m) => m.toFixed(2)).join(' ')})   shooters ${r.shooters}, pumpkins ${r.pumpkins}, grown ${r.grown}, top ${r.top}, dew ${r.dewIn} left ${r.dewLeft}, at levels 3-4 ${Math.round(r.tallShare * 100)}%`);
+  for (const r of mine) console.log(`  ${(r.garden === 'tallD' ? `tall${tallCap(n)}` : r.garden).padEnd(7)} clean ${x(r.clean, r.cleanOpen).padEnd(7)} won ${x(r.won, r.wonOpen).padEnd(7)} (runs ${r.runs.map((m) => m.toFixed(2)).join(' ')})   shooters ${r.shooters}, pumpkins ${r.pumpkins}, grown ${r.grown}, top ${r.top}, dew ${r.dewIn} left ${r.dewLeft}, at levels 3-4 ${Math.round(r.tallShare * 100)}%`);
   const lz = levels.indexOf(n), lw = LAZY.map((_, q) => lazyWon[lz * LAZY.length + q].margin), worst = Math.max(...lw);
   // (over the best party of any garden: each is a party of the free game too, and a short search of the free game may
   // find less than one of a bounded garden does)
   const top = Math.max(0, ...mine.map((r) => r.clean));
   console.log(`  lazy (no maze) won ${lw.map((m) => m.toFixed(2)).join(' / ')} (${LAZY.join(' / ')})${mine.length ? `: the best of them over the best clean party ×${(worst / top).toFixed(2)} (wanted < 0.70)` : ''}`);
-  for (const [a, b, want] of [['tall12', 'flat2', '1.10–1.15'], ['tall8', 'flat2', '≥ 1.0'], ['tall12', 'wide25', '1.10–1.15?']]) if (get(a) && get(b)) {
+  for (const [a, b, want] of [['tallD', 'wide25', '1.10–1.15'], ['tall12', 'wide25', '1.10–1.15'], ['tall12', 'flat2', '']]) if (get(a) && get(b)) {
     const q = (k) => (get(b)[k] > 0 ? (get(a)[k] / get(b)[k]).toFixed(2) : '-');
-    console.log(`  ${a} / ${b}: clean ×${q('clean')}, won ×${q('won')} (wanted ${want})`);
+    console.log(`  ${a} / ${b}: clean ×${q('clean')}, won ×${q('won')}${want ? ` (wanted ${want})` : ''}`);
   }
 }
