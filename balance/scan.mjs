@@ -43,7 +43,7 @@ function callAsync(cmd, body, { bin = null, jobs = 1 } = {}) {
 export async function pool(list, n, fn) { const out = new Array(list.length); let next = 0;
   await Promise.all(Array.from({ length: Math.max(1, n) }, async () => { while (next < list.length) { const q = next++; out[q] = await fn(list[q], q); } })); return out; }
 export const PAR = JOBS;
-export function scan(tasks, { seeds = SEEDS, from = -6, to = 14, what = 'clean', full = false, data = exportData(), ...how } = {}) {
+export function scan(tasks, { seeds = SEEDS, from = -6, to = 24, what = 'clean', full = false, data = exportData(), ...how } = {}) {
   return call('scan', { data, tasks: tasks.map((t) => ({ level: t.level, opts: withTrust(t.opts, data) })), seeds, from, to, what, full }, how);
 }
 export function search({ level, opts, plans = [], bots = [], seeds = SEARCH_SEEDS, secs = 120, stall = 45, goal = null, only = null, rng = 1, check = false, data = exportData() }, how = {}) {
