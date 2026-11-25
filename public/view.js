@@ -145,17 +145,62 @@ const dropSave = () => localStorage.removeItem(SAVE);
 // ---------- geometry ----------
 // Landscape: the grid as it is, entrance on the right. Portrait: the grid turned a quarter, entrance at the top,
 // fruit at the bottom. Game coordinates (x along the 14 columns, y along the 8 rows) map to logical screen pixels.
-const sp = (x, y) => (PORT ? [y * CELL, (COLS - x) * CELL] : [x * CELL, y * CELL]);
-const cellCenter = (i, j) => sp(i + .5, j + .5);
+// The map is bent (a prototype, «Развилка» only): the rules play on the straight grid, the picture lays that grid out
+// bent, so that the trail and the boxes run in curves and not along the rows and columns. A bend is a few smooth pushes
+// [x, y, radius, dx, dy] in cells; each moves the ground round (x, y) by (dx, dy), fading over its radius. The
+// pushes are kept gentle (a cell is never squeezed or stretched by more than a fifth), so the reach of a plant on the
+// screen stays what it is in the game; every ring and highlight is drawn bent the same way.
+const BENDS = {
+  'Развилка': [[13, 7.5, 6, 0, -.8], [5, 8.5, 5, 0, .5], [-1, 4, 4, .55, 0], [3.5, -1, 3.5, 0, .5], [10.5, -1, 3.5, 0, -.25], [0, 0, 2.5, .3, .3], [0, 8, 2.5, .3, -.2], [14, 0, 4.5, -.3, .2]],
+};
+let BEND = null, FLAT = false; // FLAT: the ground is being laid out straight (it is bent afterwards as a whole)
+function bend(x, y) {
+  if (!BEND || FLAT) return [x, y];
+  let dx = 0, dy = 0;
+  for (const [cx, cy, r, ux, uy] of BEND) { const w = Math.exp(-((x - cx) ** 2 + (y - cy) ** 2) / (r * r)); dx += ux * w; dy += uy * w; }
+  return [x + dx, y + dy];
+}
+function unbend(x, y) { if (!BEND) return [x, y]; let u = x, v = y; for (let n = 0; n < 16; n++) { const [bx, by] = bend(u, v); u += x - bx; v += y - by; } return [u, v]; }
+// Landscape: the grid as it is, entrance on the right. Portrait: the grid turned a quarter, entrance at the top,
+// fruit at the bottom. Game coordinates (x along the 14 columns, y along the 8 rows) map to logical screen pixels.
+const sp0 = (x, y) => (PORT ? [y * CELL, (COLS - x) * CELL] : [x * CELL, y * CELL]);
+const sp = (x, y) => sp0(...bend(x, y));
+const gameOf = (wx, wy) => (PORT ? [COLS - wy / CELL, wx / CELL] : [wx / CELL, wy / CELL]);
+// a box on a lawn stands a little off its cell and a little turned, so the boxes do not line up like a grid
+const JIT = (i, j) => { const h = Math.imul(i * 73 + 11, 0x9E3779B1) ^ Math.imul(j * 151 + 7, 0x85EBCA77), r = (s) => (((h >>> s) & 255) / 255 - .5); return [r(0) * .16, r(8) * .16, r(16) * .22]; };
+const jitOn = (i, j) => BEND && !FLAT && inBox(i, j);
+const cellCenter = (i, j) => { if (jitOn(i, j)) { const [a, b] = JIT(i, j); return sp(i + .5 + a, j + .5 + b); } return sp(i + .5, j + .5); };
 const FW = () => (PORT ? ROWS : COLS) * CELL, FH = () => (PORT ? COLS : ROWS) * CELL;
-function cellAt(x, y) { const a = Math.floor(x / CELL), b = Math.floor(y / CELL); return PORT ? [COLS - 1 - b, a] : [a, b]; }
-const screenAngle = (vx, vy) => (PORT ? Math.atan2(-vx, vy) : Math.atan2(vy, vx));
+function cellAt(x, y) { const [u, v] = unbend(...gameOf(x, y)); return [Math.floor(u), Math.floor(v)]; }
+// the screen direction of a game direction (vx, vy) at (x, y): the bend turns it
+const screenAngle = (vx, vy, x, y) => { if (!BEND || x == null) return PORT ? Math.atan2(-vx, vy) : Math.atan2(vy, vx); const [a, b] = sp(x, y), [p, q] = sp(x + vx * .05, y + vy * .05); return Math.atan2(q - b, p - a); };
+// how far the bend turns the ground at (x, y), and a box on it
+function bendTurn(x, y) { if (!BEND) return 0; const e = .1, [a, b] = sp(x - e, y), [p, q] = sp(x + e, y), [a0, b0] = sp0(x - e, y), [p0, q0] = sp0(x + e, y); return Math.atan2(q - b, p - a) - Math.atan2(q0 - b0, p0 - a0); }
+const boxTurn = (i, j) => bendTurn(i + .5, j + .5) + (jitOn(i, j) ? JIT(i, j)[2] : 0);
+// a cell's outline as it lies on the screen (inset: cells from its edges), shifted with its box
+function cellPath(i, j, inset = 0) {
+  const [cx, cy] = cellCenter(i, j), [bx, by] = sp(i + .5, j + .5), ddx = cx - bx, ddy = cy - by, a = inset, b = 1 - inset, n = 4, pts = [];
+  for (let k = 0; k < n; k++) pts.push([a + (b - a) * k / n, a]); for (let k = 0; k < n; k++) pts.push([b, a + (b - a) * k / n]);
+  for (let k = 0; k < n; k++) pts.push([b - (b - a) * k / n, b]); for (let k = 0; k < n; k++) pts.push([a, b - (b - a) * k / n]);
+  c.beginPath(); pts.forEach(([u, v], k) => { const [x, y] = sp(i + u, j + v); k ? c.lineTo(x + ddx, y + ddy) : c.moveTo(x + ddx, y + ddy); }); c.closePath();
+}
+// a circle of r cells round a cell, as it lies on the screen
+function circlePath(i, j, r) {
+  const [cx, cy] = cellCenter(i, j), [bx, by] = sp(i + .5, j + .5);
+  c.beginPath(); for (let k = 0; k <= 48; k++) { const t = k / 48 * A.TAU, [x, y] = sp(i + .5 + Math.cos(t) * r, j + .5 + Math.sin(t) * r); k ? c.lineTo(x + cx - bx, y + cy - by) : c.moveTo(x + cx - bx, y + cy - by); } c.closePath();
+}
 // The anthills stand outside the grid, in a strip of width E past the entrance edge (right in landscape, top in
 // portrait); bugs come out of them at game x = COLS + .6 and the trails start there.
 const E = CELL * 1.2, HILL_X = COLS + .6;
 const hillPos = (e = 0) => sp(HILL_X, game.entries[e][1] + .5);
 // the world kept on screen: the grid, a margin M round it and the anthill strip
-const bounds = () => (PORT ? [-M, -M - E, FW() + M, FH() + M] : [-M, -M, FW() + M + E, FH() + M]);
+function bounds() {
+  if (!BEND) return PORT ? [-M, -M - E, FW() + M, FH() + M] : [-M, -M, FW() + M + E, FH() + M];
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; const X = COLS + E / CELL;
+  const add = (gx, gy) => { const [x, y] = sp(gx, gy); x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); };
+  for (let t = 0; t <= 1; t += 1 / 64) { add(t * X, 0); add(t * X, ROWS); add(0, t * ROWS); add(X, t * ROWS); }
+  return [x0 - M, y0 - M, x1 + M, y1 + M];
+}
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 // Room kept free, in UI units: TOPY above the top row (status bar), BOTY at the bottom (home bar), LX and RX at the
 // sides (the notch of a phone on its side), CORN at the sides of a bottom shelf (rounded screen corners).
@@ -294,8 +339,12 @@ function buildTerrain() {
   const want = terrainK();
   if (Math.abs(want - tk) > 1e-3) { for (const v of sprites.values()) free(v.cnv); sprites.clear(); free(grassLayer); grassLayer = null; } // new scale: redo all
   tk = want; if (!grassLayer) buildGrass();
-  const k = tk, [cnv, x] = layer(VB[2], VB[3], k); A.setView(VB[2], VB[3]);
-  x.drawImage(grassLayer, 0, 0, VB[2], VB[3]);
+  const k = tk, [cnv, x0] = layer(VB[2], VB[3], k); A.setView(VB[2], VB[3]);
+  x0.drawImage(grassLayer, 0, 0, VB[2], VB[3]);
+  // The flat ground (water, the trail, the beds, the ground of the cells) is laid out on the straight grid; with a bend
+  // it goes to a layer of its own over the grass and is bent as a whole, the things standing on it are drawn bent after.
+  const [fc, x] = BEND ? layer(VB[2], VB[3], k) : [cnv, x0];
+  if (BEND) { x.drawImage(grassLayer, 0, 0, VB[2], VB[3]); FLAT = true; }
   x.setTransform(k, 0, 0, k, -VB[0] * k, -VB[1] * k); // world coordinates from here
   const water = (i, j, dx, dy) => obstacleAt(...screenStep(i, j, dx, dy)) === 'water';
   for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) if (obstacleAt(i, j) === 'water') {
@@ -307,30 +356,73 @@ function buildTerrain() {
     game.entries.forEach((en, e) => { const pts = trail(e).map(([i, j]) => cellCenter(i, j)); pts.unshift(hillPos(e)); A.hdPath(px, A.chaikin(pts, 3), 24, 1 + levelIdx + e); });
     x.save(); x.setTransform(1, 0, 0, 1, 0, 0); x.globalAlpha = .55; x.drawImage(pc, 0, 0); x.restore(); free(pc);
   }
+  const holes = new Set([...(inBox(-1, -1), holeOf.set)]);
   { // the stone path as one band and the beds as plots: each drawn over all its cells at once (screen directions)
     const tileAt = (i, j, dx, dy) => { const [a, b] = screenStep(i, j, dx, dy); return game.tiles[b]?.[a]; };
-    const holes = new Set([...(inBox(-1, -1), holeOf.set)]);
     const net = (kind) => { const out = [];
       for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) if (game.tiles[j][i] === kind && !holes.has(i + ',' + j)) {
         const s = (dx, dy, bit) => { const [a, b] = screenStep(i, j, dx, dy); return tileAt(i, j, dx, dy) === kind && !holes.has(a + ',' + b) ? bit : 0; }, [cx, cy] = cellCenter(i, j);
         out.push({ x: cx, y: cy, nb: s(0, -1, 1) | s(1, 0, 2) | s(0, 1, 4) | s(-1, 0, 8), dg: s(1, -1, 1) | s(1, 1, 2) | s(-1, 1, 4) | s(-1, -1, 8) }); }
       return out; };
-    A.hdBedNet(x, net('bed')); for (const [cx, cy] of [...holes].map((k) => cellCenter(...k.split(',').map(Number))).sort((a, b) => a[1] - b[1])) A.hdHole(x, cx, cy); // top to bottom on screen: a box's shadow falls under the box below A.hdStoneNet(x, net('stone'));
+    A.hdBedNet(x, net('bed'));
+    if (!BEND) for (const [cx, cy] of [...holes].map((q) => cellCenter(...q.split(',').map(Number))).sort((a, b) => a[1] - b[1])) A.hdHole(x, cx, cy); // top to bottom on screen: a box's shadow falls under the box below
+    A.hdStoneNet(x, net('stone'));
   }
   for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) { const tl = game.tiles[j][i]; if (tl && tl !== 'stone' && tl !== 'bed' && !(tl === 'mud' && game.grid[j][i])) A.hdTile(x, tl, ...cellCenter(i, j)); }
+  if (BEND) {
+    FLAT = false; x0.save(); x0.setTransform(1, 0, 0, 1, 0, 0); bendLayer(x0, fc, k); x0.restore(); free(fc);
+    x0.setTransform(k, 0, 0, k, -VB[0] * k, -VB[1] * k);
+    // the boxes, each a little off its cell and turned with the ground, top to bottom on screen
+    for (const [i, j] of [...holes].map((q) => q.split(',').map(Number)).map(([i, j]) => [i, j, cellCenter(i, j)]).sort((a, b) => a[2][1] - b[2][1])) {
+      const [cx, cy] = cellCenter(i, j); x0.save(); x0.translate(cx, cy); x0.rotate(boxTurn(i, j)); x0.translate(-cx, -cy); A.hdHole(x0, cx, cy); x0.restore();
+    }
+  }
+  drawStanding(x0, k);
+  const out = cnv;
+  finishTerrain(x0, out, k);
+}
+// what stands on the ground: obstacles, the soil of plants, the fruit's stump and the anthills
+// The flat ground laid out straight (src, a layer as big as the terrain) drawn bent onto x: the grid is cut into small
+// triangles, each moved to where the bend puts it by its own affine map (exact at its corners; the bend is smooth, so
+// the seams do not show). Each triangle is clipped a little larger than itself, so no hairline of grass shows between.
+function bendLayer(x, src, k) {
+  const px = ([wx, wy]) => [(wx - VB[0]) * k, (wy - VB[1]) * k];
+  const [ga, gb] = [gameOf(VB[0], VB[1]), gameOf(VB[0] + VB[2], VB[1] + VB[3])];
+  const st = .5, X0 = Math.floor(Math.min(ga[0], gb[0])) - 2, X1 = Math.ceil(Math.max(ga[0], gb[0])) + 2, Y0 = Math.floor(Math.min(ga[1], gb[1])) - 2, Y1 = Math.ceil(Math.max(ga[1], gb[1])) + 2;
+  const tri = (s0, s1, s2, d0, d1, d2) => {
+    const u1 = s1[0] - s0[0], v1 = s1[1] - s0[1], u2 = s2[0] - s0[0], v2 = s2[1] - s0[1], den = u1 * v2 - u2 * v1; if (!den) return;
+    const X1 = d1[0] - d0[0], X2 = d2[0] - d0[0], Y1 = d1[1] - d0[1], Y2 = d2[1] - d0[1];
+    const a = (X1 * v2 - X2 * v1) / den, cc = (u1 * X2 - u2 * X1) / den, b = (Y1 * v2 - Y2 * v1) / den, d = (u1 * Y2 - u2 * Y1) / den;
+    const e = d0[0] - a * s0[0] - cc * s0[1], f = d0[1] - b * s0[0] - d * s0[1];
+    const mx = (d0[0] + d1[0] + d2[0]) / 3, my = (d0[1] + d1[1] + d2[1]) / 3, grow = (p) => { const l = Math.hypot(p[0] - mx, p[1] - my) || 1; return [p[0] + (p[0] - mx) / l * 1.2, p[1] + (p[1] - my) / l * 1.2]; };
+    const [g0, g1, g2] = [grow(d0), grow(d1), grow(d2)];
+    const sx0 = Math.max(0, Math.floor(Math.min(s0[0], s1[0], s2[0])) - 3), sy0 = Math.max(0, Math.floor(Math.min(s0[1], s1[1], s2[1])) - 3);
+    const sx1 = Math.min(src.width, Math.ceil(Math.max(s0[0], s1[0], s2[0])) + 3), sy1 = Math.min(src.height, Math.ceil(Math.max(s0[1], s1[1], s2[1])) + 3);
+    if (sx1 <= sx0 || sy1 <= sy0) return;
+    x.save(); x.beginPath(); x.moveTo(...g0); x.lineTo(...g1); x.lineTo(...g2); x.closePath(); x.clip();
+    x.setTransform(a, b, cc, d, e, f); x.drawImage(src, sx0, sy0, sx1 - sx0, sy1 - sy0, sx0, sy0, sx1 - sx0, sy1 - sy0); x.restore();
+  };
+  for (let gy = Y0; gy < Y1; gy += st) for (let gx = X0; gx < X1; gx += st) {
+    const q = [[gx, gy], [gx + st, gy], [gx + st, gy + st], [gx, gy + st]], so = q.map(([u, v]) => px(sp0(u, v))), de = q.map(([u, v]) => px(sp(u, v)));
+    tri(so[0], so[1], so[2], de[0], de[1], de[2]); tri(so[0], so[2], so[3], de[0], de[2], de[3]);
+  }
+}
+function drawStanding(x, k) {
   for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) {
     const o = game.grid[j][i]; if (!o) continue; const [cx, cy] = cellCenter(i, j);
     if (o.obstacle === 'rock') A.hdRock(x, cx, cy + 4, 1);
     else if (o.obstacle === 'stump') A.hdStump(x, cx, cy + 4, 15);
     else if (o.obstacle === 'weed') A.hdWeed(x, cx, cy + 4);
-    else if (o.obstacle === 'bush') A.hdBush(x, cx, cy);
+    else if (o.obstacle === 'bush') { const [a, b] = BEND ? JIT(i + 40, j) : [0, 0]; A.hdBush(x, cx + a * 40, cy + b * 30); } // bent: a little off the grid, as bushes grow
     else if (o.obstacle === 'log' && game.grid[j][i + 1]?.obstacle === 'log') {
-      const [nx, ny] = cellCenter(i + 1, j); x.save(); x.translate((cx + nx) / 2, (cy + ny) / 2 + 4); if (PORT) x.rotate(-Math.PI / 2); A.hdLog(x, 0, 0, CELL * 2 - 8); x.restore();
+      const [nx, ny] = cellCenter(i + 1, j); x.save(); x.translate((cx + nx) / 2, (cy + ny) / 2 + 4); if (PORT) x.rotate(-Math.PI / 2); x.rotate(bendTurn(i + 1, j + .5)); A.hdLog(x, 0, 0, CELL * 2 - 8); x.restore();
     }
     else if (o.type && game.tiles[j][i] !== 'bed') A.hdSoil(x, cx, cy + 15);
   }
   const [fx0, fy0] = cellCenter(...game.fruit); A.hdStump(x, fx0, fy0 + 12, 23);
   game.entries.forEach((en, e) => { const [hx, hy] = hillPos(e); A.hdAnthill(x, hx, hy + 8, 1.05); }); // the mound covers the trail's end
+}
+function finishTerrain(x, cnv, k) {
   x.setTransform(k, 0, 0, k, 0, 0);
   A.hdDapple(x); A.hdSun2(x); A.hdGrade(x); A.hdVignette(x);
   // a little more colour; done here, not as a CSS filter on the canvas: Safari renders filtered canvases blurry
@@ -370,7 +462,7 @@ const bugPic = (kind) => pic(`b:${kind}`, 72, 72, (x) => { const s = isBoss(kind
 // ---------- game flow ----------
 const metaNow = () => ({ ...progress.perks });
 function enterLevel(g, resumed = false) {
-  game = g; levelIdx = g.level; resize(); tm.start(g, resumed);
+  game = g; levelIdx = g.level; BEND = new URLSearchParams(location.search).has('flat') ? null : BENDS[g.L.name] || null; resize(); tm.start(g, resumed);
   sel = drag = pop = null; fx = []; banners = []; appleMood('idle', 0); angles.clear(); anim.clear(); speed = 1; bossSeen.clear();
   grassLayer = null; terrainDirty = true; paused = false;
   showHome(false); showModal(null); ufx = []; zoom = 1; applyCam(); dropLayers(); muffleMusic(false);
@@ -598,7 +690,7 @@ function draw(dt) {
   if (pop && !game.plants.includes(pop) && !game.stubs.includes(pop) && game.grid[pop.j]?.[pop.i] !== pop) pop = null;
   if (pop && pop.type && game.plants.includes(pop) && pstat(game, pop, 'range')) { // the reach now, and after the upgrade (at level 2: of the branch that reaches further)
     const r = pstat(game, pop, 'range'), r2 = pop.lvl === 2 ? Math.max(...BRANCHES.map((br) => pstat(game, { ...pop, lvl: 3, br }, 'range'))) : pop.lvl < 4 ? pstat(game, { ...pop, lvl: pop.lvl + 1 }, 'range') : r;
-    ring(...cellCenter(pop.i, pop.j), r * CELL); if (r2 > r + .01) ring(...cellCenter(pop.i, pop.j), r2 * CELL, true); groundRing(pop, ...cellCenter(pop.i, pop.j), r);
+    ring(pop.i, pop.j, r); if (r2 > r + .01) ring(pop.i, pop.j, r2, true); groundRing(pop, pop.i, pop.j, r);
   }
 
   drawDigWay(dt);
@@ -675,8 +767,8 @@ function drawDigMarks(t) {
   }
 }
 // the reach of a plant that hits walkers only close by (a far shot rose): an inner ring
-function groundRing(p, x, y, r) { const g = pstat(game, p, 'groundRange'); if (g && g < r) { c.save(); c.beginPath(); c.arc(x, y, g * CELL, 0, A.TAU); c.fillStyle = 'rgba(255,230,150,.16)'; c.fill(); c.lineWidth = 1.5; c.strokeStyle = 'rgba(255,240,190,.75)'; c.stroke(); c.restore(); } }
-function ring(x, y, r, next = false) { c.save(); c.beginPath(); c.arc(x, y, r, 0, A.TAU); if (!next) { c.fillStyle = 'rgba(255,255,255,.13)'; c.fill(); } c.setLineDash(next ? [3, 7] : [8, 6]); c.lineWidth = 2.2; c.strokeStyle = next ? 'rgba(150,255,120,.9)' : 'rgba(255,255,255,.85)'; c.stroke(); c.restore(); }
+function groundRing(p, i, j, r) { const g = pstat(game, p, 'groundRange'); if (g && g < r) { c.save(); circlePath(i, j, g); c.fillStyle = 'rgba(255,230,150,.16)'; c.fill(); c.lineWidth = 1.5; c.strokeStyle = 'rgba(255,240,190,.75)'; c.stroke(); c.restore(); } }
+function ring(i, j, r, next = false) { c.save(); circlePath(i, j, r); if (!next) { c.fillStyle = 'rgba(255,255,255,.13)'; c.fill(); } c.setLineDash(next ? [3, 7] : [8, 6]); c.lineWidth = 2.2; c.strokeStyle = next ? 'rgba(150,255,120,.9)' : 'rgba(255,255,255,.85)'; c.stroke(); c.restore(); }
 function drawGrid() {
   if (game.phase === 'wave' && Math.floor(now / 500) !== blockCache?.tick) blockCache = null;
   if (!blockCache) { blockCache = new Set(blockingCells(game).map(([i, j]) => i + ',' + j)); blockCache.tick = Math.floor(now / 500); if (drag) drag.key = null; } // the field changed: refresh the preview too
@@ -684,7 +776,7 @@ function drawGrid() {
   for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) {
     if (game.grid[j][i] || (i === game.fruit[0] && j === game.fruit[1]) || game.entries.some((e) => e[0] === i && e[1] === j)) continue;
     const bad = blockCache.has(i + ',' + j) || game.tiles[j][i] === 'nettle' || game.tiles[j][i] === 'stone' || !!stubAt(game, i, j), [cx, cy] = cellCenter(i, j), x = cx - CELL / 2, y = cy - CELL / 2;
-    c.beginPath(); A.rrect(c, x + 4, y + 4, CELL - 8, CELL - 8, 8);
+    c.lineJoin = 'round'; if (BEND) cellPath(i, j, .1); else { c.beginPath(); A.rrect(c, x + 4, y + 4, CELL - 8, CELL - 8, 8); }
     if (bad) { c.fillStyle = 'rgba(235,70,70,.1)'; c.fill(); }
     c.lineWidth = 1; c.strokeStyle = bad ? 'rgba(200,40,40,.28)' : 'rgba(255,255,255,.17)'; c.stroke();
   }
@@ -737,7 +829,7 @@ function drawStub(st, t) {
 // coming out of the anthill: small and faint at its hole, full size a step later
 const emerge = (b) => (b.fly || b.brood ? 1 : clamp((HILL_X - b.x) / .55, 0, 1));
 function drawBug(b, t, dt) {
-  let [x, y] = bugPos(b); const target = screenAngle(b.vx, b.vy);
+  let [x, y] = bugPos(b); const target = screenAngle(b.vx, b.vy, b.x, b.y);
   // a flyer shot down drops from where it was hit onto the trail, spinning
   const falling = b.fall > 0 && b.fx != null, fk = falling ? 1 - b.fall / FALL_T : 1;
   if (falling) { const [x0, y0] = sp(b.fx, b.fy); x = x0 + (x - x0) * fk; y = y0 + (y - y0) * fk - Math.sin(fk * Math.PI) * 14; }
@@ -863,7 +955,7 @@ function dragCell() {
   const px = drag.x, py = drag.y - (drag.touch ? 34 : 0);
   if (px < FA[0] || py < FA[1] - 20 || px > FA[0] + FA[2] || py > FA[1] + FA[3]) return null;
   const wx = (px - ox) / ws, wy = (py - oy) / ws, [i, j] = cellAt(wx, wy);
-  return wx >= 0 && wy >= 0 && i >= 0 && j >= 0 && i < COLS && j < ROWS ? [i, j] : null;
+  return i >= 0 && j >= 0 && i < COLS && j < ROWS ? [i, j] : null;
 }
 const drawDragCell = () => dragCell();
 function drawDrag() {
@@ -880,8 +972,8 @@ function drawDrag() {
   if (!drag.cell) return;
   const [i, j] = drag.cell, ok = !drag.problem, [x, y] = cellCenter(i, j);
   if (ok && drag.trails) drag.trails.forEach((tr, e) => { const pts = tr.map(([a, b]) => cellCenter(a, b)); pts.unshift(hillPos(e)); c.save(); c.shadowColor = 'rgba(255,200,40,.9)'; c.shadowBlur = 8; A.strokePts(c, A.chaikin(pts, 3), 4, '#ffd23a', { dash: [10, 7] }); c.restore(); });
-  c.save(); c.beginPath(); A.rrect(c, x - 19, y - 19, 38, 38, 10); c.fillStyle = ok ? 'rgba(140,255,120,.35)' : 'rgba(255,80,70,.4)'; c.fill(); c.lineWidth = 3; c.strokeStyle = ok ? '#ffffff' : '#ff4a3a'; c.stroke(); c.restore();
-  { const q = { type: drag.type, lvl: 1, i, j }, r = pstat(game, q, 'range'); if (r) { ring(x, y, r * CELL); groundRing(q, x, y, r); } }
+  c.save(); c.lineJoin = 'round'; if (BEND) cellPath(i, j, .05); else { c.beginPath(); A.rrect(c, x - 19, y - 19, 38, 38, 10); } c.fillStyle = ok ? 'rgba(140,255,120,.35)' : 'rgba(255,80,70,.4)'; c.fill(); c.lineWidth = 3; c.strokeStyle = ok ? '#ffffff' : '#ff4a3a'; c.stroke(); c.restore();
+  { const q = { type: drag.type, lvl: 1, i, j }, r = pstat(game, q, 'range'); if (r) { ring(i, j, r); groundRing(q, i, j, r); } }
   const pk = plantK(drag.type, 1); c.save(); c.globalAlpha = ok ? .9 : .45; c.translate(x, y + 14); c.scale(pk, pk); blit(plantSprite(drag.type, 1), -PBX, -PBY); c.restore();
   if (game.tiles[j][i] === 'fertile' && ok) A.hdText(c, '+30%', x, y + 26, 11 * Math.max(1, .8 / ws), '#eaffd8', { stroke: '#2a6a1a', sw: 3.5 });
 }
@@ -1278,7 +1370,7 @@ function tap(px, py) {
   const u = hit(ui.filter((q) => q.s === 'u'), px / uk, py / uk); if (u) { u.fn(); return; }
   const wx = (px - ox) / ws, wy = (py - oy) / ws, w = hit(ui.filter((q) => q.s === 'w'), wx, wy); if (w) { w.fn(); return; }
   const [i, j] = cellAt(wx, wy);
-  if (wx >= 0 && wy >= 0 && i >= 0 && j >= 0 && i < COLS && j < ROWS) tapCell(i, j); else pop = null;
+  if (i >= 0 && j >= 0 && i < COLS && j < ROWS) tapCell(i, j); else pop = null;
 }
 const startPress = (id, x, y, moved = false, touch = false) => { const u = moved ? null : hit(ui.filter((q) => q.s === 'u'), x / uk, y / uk); press = { id, x, y, cx: camX, cy: camY, moved, onUI: !!u, card: u?.tray ? u.card : null, touch }; };
 function startPinch() {
