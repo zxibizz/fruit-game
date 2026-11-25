@@ -94,7 +94,13 @@ and in portrait (turned there).
   gives them back only with `Authorization: Bearer $TELEMETRY_TOKEN` (`GET /api/telemetry?from=&to=`).
   `node balance/players.mjs` fetches them (token in `$FRUIT_TELEMETRY_TOKEN` or
   `~/.config/homelab/fruit-game/telemetry-token`) and sums them up level by level and wave by wave
-  (`--party ID` for one party, wave by wave).
+  (`--party ID` for one party, wave by wave). `node balance/owner.mjs [FILE]` replays the owner's parties as plans on
+  the sim and gives their margins beside the kept perfect party (the parties worth keeping are in `balance/owner/`).
+- Tall against wide (the measures of [docs/rebalance-tall.md](docs/rebalance-tall.md)): `node balance/tiers.mjs` —
+  damage per dew of every tier of a shooter and what a tier needs under other prices (`--prices FILE`);
+  `node balance/tall.mjs` — the kept perfect party against gardens of its first N plants grown to the top;
+  `node balance/cap.mjs` — the smart bot with a cap on its plants; `node balance/econ.mjs` — the dew and the garden
+  of every level's perfect party.
 - `balance/` — the balance matrix (dev only, not in the image): `node balance/run.mjs [quick|full|routes] [--margin] [--levels 5,6-8]
   [--set L5.dew=500,FLY_SHARE=.2] [--grid 'L5.budget=12/5.8|12/6.4;L5.pay=150/270|170/300']`. For every level it plays many
   scenarios in parallel (the native bot of `sim/` on a snapshot of the code, a batch per variant of the data; half the
