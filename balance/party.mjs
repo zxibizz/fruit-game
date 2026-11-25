@@ -38,7 +38,12 @@ const runs = [];
 // --from FILE: an earlier report (--out) is a start: the best party of every make it found (not the best alone: after a
 // change of the game another make may be the best, and it starts where it was), and for every branch taken out the
 // best party found without it. Whether this finds what a search from nothing finds is asked by --cold (none of it).
-const FROM = opt('--from') && existsSync(opt('--from')) && !args.includes('--cold') ? JSON.parse(readFileSync(opt('--from'), 'utf8')) : null;
+// Several reports (--from a.json,b.json: a warm pass and a cold one) are one start: the best party of them all, their
+// archives together, and for every branch the best party found without it in any.
+const FROMS = args.includes('--cold') ? [] : (opt('--from') || '').split(',').filter((f) => f && existsSync(f)).map((f) => JSON.parse(readFileSync(f, 'utf8')));
+const FROM = FROMS.length ? { plan: FROMS.reduce((a, b) => ((b.clean?.margin ?? 0) > (a.clean?.margin ?? 0) ? b : a)).plan,
+  archive: FROMS.flatMap((r) => r.archive || []).sort((a, b) => b.margin - a.margin),
+  without: [...new Set(FROMS.flatMap((r) => (r.without || []).map((w) => w.f)))].map((f) => FROMS.map((r) => r.without?.find((w) => w.f === f)).filter((w) => w?.plan?.length).reduce((a, b) => (!a || b.margin > a.margin ? b : a), null)).filter(Boolean) } : null;
 const FROM_PLANS = FROM ? [FROM.plan, ...(FROM.archive || []).slice(0, 40).map((e) => e.plan)] : [];
 for (let n = 1; n <= RUNS; n++) { log(` run ${n}`); runs.push(search({ level, opts: base, plans: [...(kept?.plan ? [kept.plan] : []), ...FROM_PLANS], bots, secs: SECS, stall: STALL, rng: n + Number(opt('--rng', 0)), check: args.includes('--check'), data }, how)); }
 tm('searched'); let best = runs.reduce((a, b) => (b.margin > a.margin ? b : a));
