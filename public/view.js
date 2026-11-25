@@ -288,43 +288,47 @@ function buildGrass() {
   A.hdGrass(x, { seed: 5 + levelIdx }); A.hdBorderBushes(x, 2 + levelIdx); grassLayer = cnv;
 }
 const obstacleAt = (i, j) => game.grid[j]?.[i]?.obstacle;
-// A wooden fence round the field, just outside its edge: it is why the bugs keep inside. Posts a cell apart; along
-// the sides that run across the screen a panel of pickets between them, along the sides that run up and down it two
-// rails (seen from the end, pickets would be a thin stripe). The fence opens where the bugs come in from an anthill.
-// near: only the side lowest on the screen (drawn last, in front of what stands in the field), or every other side.
+// A little white picket fence along the two long sides of the field (not on the anthill's side, where the bugs come in,
+// nor on the fruit's): it is why the bugs keep inside. Cream pickets with round tops, a rail behind them, a taller
+// post with a knob every cell, now and then a vine with a flower on it. near: only a side that runs across the screen
+// low on it (drawn in front of what stands in the field); otherwise the rest.
 function drawFence(x, near) {
-  const ol = '#4a2e14', out = 5;
-  const gaps = new Set(game.entries.map(([, j]) => j)); // rows of the entrance edge left open
-  const edges = [[[0, 0], [COLS, 0]], [[COLS, 0], [COLS, ROWS]], [[COLS, ROWS], [0, ROWS]], [[0, ROWS], [0, 0]]];
-  const mid = sp(COLS / 2, ROWS / 2), sy = edges.map(([a, b]) => (sp(...a)[1] + sp(...b)[1]) / 2), low = Math.max(...sy);
-  edges.forEach(([a, b], ei) => {
-    if ((Math.abs(sy[ei] - low) < 1) !== near) return;
-    const n = Math.round(Math.abs(b[0] - a[0]) + Math.abs(b[1] - a[1])), entrance = a[0] === COLS && b[0] === COLS;
-    const pt = (t) => { const [px, py] = sp(a[0] + (b[0] - a[0]) * t / n, a[1] + (b[1] - a[1]) * t / n), dx = px - mid[0], dy = py - mid[1], l = Math.hypot(dx, dy) || 1, sa = sp(...a), sb = sp(...b);
-      // pushed straight out of the field, across its edge
-      const ex = sb[0] - sa[0], ey = sb[1] - sa[1], el = Math.hypot(ex, ey), nx = -ey / el, ny = ex / el, s2 = Math.sign(nx * dx + ny * dy) || 1; return [px + nx * out * s2, py + ny * out * s2]; };
-    const across = Math.abs(sp(...b)[1] - sp(...a)[1]) < Math.abs(sp(...b)[0] - sp(...a)[0]);
-    const post = ([px, py]) => { x.beginPath(); x.ellipse(px + 1, py + 1.5, 4, 1.8, 0, 0, A.TAU); x.fillStyle = 'rgba(30,20,5,.3)'; x.fill();
-      x.beginPath(); A.rrect(x, px - 2.6, py - 15, 5.2, 16, 1.6); x.fillStyle = '#7a4e24'; x.fill(); x.lineWidth = 1.1; x.strokeStyle = ol; x.stroke();
-      x.beginPath(); x.ellipse(px, py - 15, 2.6, 1.1, 0, 0, A.TAU); x.fillStyle = '#b58350'; x.fill(); };
+  const ol = '#9a6a3c', out = 6;
+  const mid = sp(COLS / 2, ROWS / 2);
+  const sides = [[[0, 0], [COLS, 0]], [[COLS, ROWS], [0, ROWS]]];
+  for (const [a, b] of sides) {
+    const sa = sp(...a), sb = sp(...b), across = Math.abs(sb[1] - sa[1]) < Math.abs(sb[0] - sa[0]), isNear = across && (sa[1] + sb[1]) / 2 > mid[1];
+    if (isNear !== near) continue;
+    const ex = sb[0] - sa[0], ey = sb[1] - sa[1], el = Math.hypot(ex, ey), nx = -ey / el, ny = ex / el, sg = Math.sign(nx * (sa[0] - mid[0]) + ny * (sa[1] - mid[1])) || 1;
+    const at = (t) => [sa[0] + ex * t + nx * out * sg, sa[1] + ey * t + ny * out * sg];
+    const pitch = across ? 7 : 5.5, n = Math.round(el / pitch), R = A.rng(levelIdx * 13 + (a[1] ? 7 : 3));
     x.save(); x.lineCap = 'round'; x.lineJoin = 'round';
-    for (let t = 0; t < n; t++) {
-      const row = Math.min(a[1], b[1]) + (b[1] > a[1] ? t : n - 1 - t);
-      if (entrance && gaps.has(row)) continue;
-      const p0 = pt(t), p1 = pt(t + 1);
-      if (across) {
-        for (const dy of [-10, -4]) { x.beginPath(); x.moveTo(p0[0], p0[1] + dy); x.lineTo(p1[0], p1[1] + dy); x.lineWidth = 3; x.strokeStyle = ol; x.stroke(); x.lineWidth = 1.8; x.strokeStyle = '#8a5a2c'; x.stroke(); }
-        for (let q = 1; q < 6; q++) { const f = q / 6, px = p0[0] + (p1[0] - p0[0]) * f, py = p0[1] + (p1[1] - p0[1]) * f;
-          x.beginPath(); x.moveTo(px - 2.2, py + 1); x.lineTo(px - 2.2, py - 11); x.lineTo(px, py - 14); x.lineTo(px + 2.2, py - 11); x.lineTo(px + 2.2, py + 1); x.closePath(); x.fillStyle = '#d2a16a'; x.fill(); x.lineWidth = 1; x.strokeStyle = ol; x.stroke();
-          x.beginPath(); x.moveTo(px - 1, py - 10); x.lineTo(px - 1, py); x.lineWidth = .8; x.strokeStyle = 'rgba(255,235,200,.6)'; x.stroke(); }
-      } else for (const dy of [-11, -5]) { x.beginPath(); x.moveTo(p0[0], p0[1] + dy); x.lineTo(p1[0], p1[1] + dy); x.lineWidth = 3.6; x.strokeStyle = ol; x.stroke(); x.lineWidth = 2.2; x.strokeStyle = '#a8733c'; x.stroke(); }
+    // a soft shadow along the foot of the fence
+    x.save(); x.filter = 'blur(2px)'; x.beginPath(); x.moveTo(...at(0)); x.lineTo(...at(1)); x.lineWidth = 6; x.strokeStyle = 'rgba(40,70,20,.28)'; x.translate(1.5, 2); x.stroke(); x.restore();
+    // the rail behind the pickets
+    for (const dy of [-8.5]) { const [p0x, p0y] = at(0), [p1x, p1y] = at(1); x.beginPath(); x.moveTo(p0x, p0y + dy); x.lineTo(p1x, p1y + dy); x.lineWidth = 4.6; x.strokeStyle = ol; x.stroke(); x.lineWidth = 2.8; x.strokeStyle = '#f3dfbd'; x.stroke(); }
+    const items = [];
+    for (let q = 0; q <= n; q++) {
+      const [px, py] = at(q / n), post = q % Math.round(CELL / pitch) === 0;
+      items.push([py, () => {
+        const w = post ? 3.4 : 2.7, h = post ? 16 : 12.5;
+        x.beginPath(); x.moveTo(px - w, py + 1); x.lineTo(px - w, py - h + w); x.arc(px, py - h + w, w, Math.PI, 0); x.lineTo(px + w, py + 1); x.closePath();
+        x.fillStyle = '#fff4e2'; x.fill(); x.lineWidth = 1.3; x.strokeStyle = ol; x.stroke();
+        x.save(); x.clip(); x.fillStyle = 'rgba(214,170,120,.35)'; x.fillRect(px + w * .25, py - h, w, h + 2); x.restore();
+        if (post) A.hdBall(x, px, py - h - 1.2, 2.6, 2.4, '#fff4e2', { olk: .6, specA: .7 });
+      }]);
     }
-    for (let t = 0; t <= n; t++) {
-      const row = Math.min(a[1], b[1]) + (b[1] > a[1] ? t : n - t), open = entrance && gaps.has(row) && gaps.has(row - 1); // no post inside a wider opening
-      if (!open) post(pt(t));
+    items.sort((p, q) => p[0] - q[0]); for (const [, f] of items) f();
+    // a vine with leaves and a flower on the rail, here and there
+    for (let v = 0; v < n / 18; v++) {
+      const t = (v + .3 + R() * .4) / (n / 18), [px, py] = at(Math.min(.97, t)), col = ['#ff8fb0', '#ffd84a', '#ffffff'][Math.floor(R() * 3)];
+      x.beginPath(); x.moveTo(px - 9, py - 7); x.quadraticCurveTo(px - 3, py - 13, px + 2, py - 8.5); x.quadraticCurveTo(px + 6, py - 4, px + 10, py - 9); x.lineWidth = 1.4; x.strokeStyle = '#4f9a36'; x.stroke();
+      A.hdLeaf(x, px - 5, py - 10, 5.5, -2.2, '#6cbc48', { w: .55 }); A.hdLeaf(x, px + 6, py - 6.5, 5, .4, '#5aac3e', { w: .55 });
+      for (let k = 0; k < 5; k++) { const ang = k / 5 * A.TAU; A.hdBall(x, px + 1 + Math.cos(ang) * 2.1, py - 10 + Math.sin(ang) * 2.1, 1.8, 1.8, col, { olk: .5, specA: .3 }); }
+      A.hdBall(x, px + 1, py - 10, 1.2, 1.2, '#f0a020', { olk: .5, specA: 0 });
     }
     x.restore();
-  });
+  }
 }
 // a plant on open grass stands a little off the middle of its cell, so a row of them does not line up like a grid
 // (in a box or on a bed it keeps to the middle)
