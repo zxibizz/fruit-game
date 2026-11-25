@@ -36,7 +36,7 @@ function call(cmd, body, { bin = null, jobs = JOBS, quiet = false } = {}) {
 // the same without waiting: several of them side by side, a job each
 function callAsync(cmd, body, { bin = null, jobs = 1 } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'fruit-scan-')), file = join(dir, 'req.json'); writeFileSync(file, JSON.stringify(body));
-  return new Promise((ok, no) => { const c = spawn(bin || build(), [cmd, file, '--jobs', String(jobs)], { stdio: ['ignore', 'pipe', process.env.FRUIT_LOG ? openSync(process.env.FRUIT_LOG, 'a') : 'ignore'] }); // FRUIT_LOG=file: what they say, there let out = '';
+  return new Promise((ok, no) => { const c = spawn(bin || build(), [cmd, file, '--jobs', String(jobs)], { stdio: ['ignore', 'pipe', process.env.FRUIT_LOG ? openSync(process.env.FRUIT_LOG, 'a') : 'ignore'] }); let out = ''; // FRUIT_LOG=file: what they say, there
     c.stdout.on('data', (d) => { out += d; }); c.on('close', (code) => { rmSync(dir, { recursive: true }); if (code !== 0) no(new Error(`fruit-sim ${cmd} failed`)); else ok(JSON.parse(out)); }); });
 }
 // every one of `list` through `fn`, `n` at a time
