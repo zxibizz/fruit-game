@@ -62,7 +62,7 @@ const best = new Map();
 jobs.forEach((j, q) => { const key = j.n + ':' + j.g, r = found[q], b = best.get(key); if (!b || r.margin > b.res.margin) best.set(key, { ...j, res: r, runs: [] }); });
 jobs.forEach((j, q) => best.get(j.n + ':' + j.g).runs.push(found[q].margin));
 const cells = [...best.values()], tasks = cells.map((c) => ({ level: c.n, opts: { ...c.opts, plan: c.res.plan } }));
-const clean = scan(tasks, { data, bin, quiet: true }), won = scan(tasks, { data, bin, what: 'won', to: 24, quiet: true });
+const clean = scan(tasks, { data, bin, to: 24, quiet: true }), won = scan(tasks, { data, bin, what: 'won', to: 24, quiet: true }); // (to 24: ×3.2 — the default ×1.98 cut the best parties short once the numbers moved past the hp of 0.31)
 const one = play(tasks.map((t) => ({ level: t.level, opts: { ...t.opts, seed: 7 } })), { bin, data });
 if (OUT) mkdirSync(OUT, { recursive: true });
 const rows = cells.map((c, q) => {
