@@ -6,8 +6,9 @@ export const FRUIT_HP = 20;
 // After the first wave the next one comes by itself after BREAK seconds; calling it early pays EARLY_DEW per second left.
 export const BREAK = 20, EARLY_DEW = 1;
 
-// The first level of a plant is cheap, so a trail is quick to shape; the upgrades are dear and there is never dew for
-// all of them: which plants to grow, and which way, is the choice of the level.
+// The first level of a shooter is dear and growing it pays (since 0.32: a few grown plants hold a level a tenth or so
+// better than many cheap ones, docs/rebalance-tall.md); a pumpkin stays cheap, the maze is built of pumpkins. There is
+// never dew for all of it: which plants to grow, and which way, is the choice of the level.
 // A plant has four levels: 1 and 2 are the plant itself, at 3 it takes one of its two branches (a or b, every plant
 // on the field its own) and 4 is the top of that branch. Stats are pairs: [level 1, level 2] on the plant, [level 3,
 // level 4] on a branch; a single number is the same on both. A branch lists everything it has: what it leaves out, it

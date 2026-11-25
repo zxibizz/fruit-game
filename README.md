@@ -42,8 +42,10 @@ and in portrait (turned there).
   A level is meant to be hard and to be won by thought. Plants that hit walkers reach only the cells
   next to them, and bugs come in tight packs: a long winding trail has twice the cells beside it and keeps a pack
   under the plants several times longer than a straight road. The health of every bug, bosses too, grows by one rule on
-  every level (`TUNE.hpGrowth` of its own health a wave). The first level of a
-  plant is cheap — a trail is quick to shape — and the upgrades are dear: there is never dew for all of them. Most of
+  every level (`TUNE.hpGrowth` of its own health a wave). Since 0.32 the first level of
+  a shooter is dear and growing pays: a few grown plants hold a level about a tenth better than many cheap ones (the
+  owner's call; `balance/tallwide.mjs` measures it), while a pumpkin stays cheap — the maze is built of pumpkins.
+  There is never dew for all of it. Most of
   the dew is the pay for every wave got through, growing evenly over a level (`pay` of the level); a bug gives its own
   small reward, the same everywhere. Bosses are strong but a grown garden kills them. No
   plant makes dew (it comes from finished waves, beaten bugs and waves called early). Caterpillars bite plants, mole
