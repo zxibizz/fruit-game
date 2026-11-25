@@ -338,7 +338,7 @@ export const LEVELS = [
     ],
     dew: 620, pay: [470, 835],
     plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
-    swell: [1, 1, 1.25, 1.25, .8, .95, .75, .9, .5, .95, .7, .45, 1, .75, 1.7, 1.35, .55, 1, .65, .45, 2.2, 1.4, .85, 1.65, .75, 1],
+    swell: [1, 1, 1.25, 1.25, .8, .95, .75, .9, .5, .8, .7, .45, 1, .75, 1.7, 1.35, .55, 1, .65, .45, 2.2, 1.4, .85, 1.65, .75, 1],
     hp: 2.12, count: 26, budget: [10.7, 5.1], roster: [['ant', 1], ['aphid', 2], ['beetle', 3], ['wasp', 5], ['caterpillar', 7], ['firefly', 9], ['cricket', 11], ['pillbug', 14], ['snail', 17]], boss: [[13, 'queen', 1], [26, 'rhino', 2]],
   },
   {
@@ -355,7 +355,7 @@ export const LEVELS = [
     ],
     dew: 620, pay: [330, 610],
     plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
-    swell: [1, 1, 1.15, 1.8, 2.25, 2.1, 1.35, 1.65, 1, .9, 1.15, 1.35, .8, 1.8, 1.15, 1, .45, 1, 1, .9, 1.05, .7, .55, .85, 1.5, 1.25, .35, 1],
+    swell: [1, 1, 1.15, 1.8, 2.25, 2.1, 1.35, 1.65, 1, .9, 1.15, 1.35, .8, 1.53, 1.15, 1, .45, 1, 1, .9, 1.05, .7, .55, .85, 1.5, 1.25, .35, 1],
     hp: 2.1, count: 28, budget: [5.1, 2.3], roster: [['ant', 1], ['grasshopper', 2], ['pillbug', 3], ['caterpillar', 5], ['butterfly', 7], ['cricket', 9], ['firefly', 11], ['snail', 13], ['wasp', 16], ['aphid', 19]], boss: [[9, 'rhino', 1], [18, 'slugking', 1], [28, 'spider', 2]],
   },
   {
