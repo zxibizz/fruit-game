@@ -50,8 +50,8 @@ export const PLANTS = {
   // much slower for frostT seconds (slows do not add up; snails do not slow).
   // a, Cold: throws no more; every bug around it is `slow` slower, flyers too; rime (top) — every so many seconds the
   //   bugs around freeze for a second (snails too; a boss for half of it), and then cannot freeze again for a while.
-  // b, Icicle: a heavy icicle from above on the thickest walker next to it, rare and hard (armor hardly matters to
-  //   such a hit, bosses take it whole); stack (top) — every next hit on the same bug that much harder, up to twice.
+  // b, Icicle: a heavy icicle from above on the thickest bug next to it, flyers too (since 0.31), rare and hard (armor
+  //   hardly matters to such a hit, bosses take it whole); stack (top) — every next hit on the same bug that much harder, up to twice.
   mint: { cost: 35, up: [80], hp: [60, 80], range: [1.5, 1.6], rate: [.9, 1], dmg: [9, 12], frost: [.3, .4], frostT: 1.5, air: 1, shot: 'icicle', speed: 8,
     a: { from: 1, up: [130, 220], hp: [80, 100], range: [2, 2.2], slow: .5, rime: [0, 5], air: 1 },
     b: { from: 2, up: [130, 220], hp: [80, 100], range: 1.6, rate: [.4, .45], dmg: [120, 160], frost: .15, frostT: .6, heavy: 1, air: 1, stack: [0, .25], shot: 'icicleBig', speed: 7 } },
@@ -269,7 +269,7 @@ export const LEVELS = [
     ],
     dew: 380, pay: [380, 660],
     plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
-    swell: [1, 1, 1.75, 1.15, 1, 1.15, 2.5, 2, 2.5, 1.95, 1, 2.5, 2.5, .6, 1.3, 1, 1.55, 1.45, 1.35, 1.45, .65, 1],
+    swell: [1, 1, 1.75, 1.15, 1, 1.15, 2.5, 2, 2.5, 1.95, 1, 2.5, 2.5, .5, 1.3, 1, 1.55, 1.45, 1.35, 1.45, .65, 1],
     hp: 1.12, count: 22, budget: [10.5, 5.3], roster: [['ant', 1], ['aphid', 2], ['grasshopper', 3], ['beetle', 4], ['butterfly', 5], ['snail', 6], ['caterpillar', 8], ['cricket', 11], ['wasp', 14]], boss: [[11, 'queen', 1], [22, 'queen', 2]],
   },
   {
@@ -303,7 +303,7 @@ export const LEVELS = [
     ],
     dew: 410, pay: [415, 930], fly: .3,
     plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
-    swell: [1, 1, 1.1, .6, 1, .6, .9, 1, .9, .95, .85, 1, 1.25, 1.4, 2.2, .95, .9, 1.5, 1.85, .85, 1, .75, .5, 1],
+    swell: [1, 1, 1.1, .6, 1, .6, .9, 1, .9, .95, .85, 1, 1.25, 1.4, 2.2, .95, .9, 1.35, 1.85, .85, 1, .75, .5, 1],
     hp: 2.29, count: 24, budget: [6.5, 3], roster: [['ant', 1], ['butterfly', 3], ['beetle', 4], ['caterpillar', 6], ['cricket', 10], ['snail', 13], ['aphid', 16]], boss: [[12, 'hornet', 1], [24, 'hornet', 2]],
   },
   {

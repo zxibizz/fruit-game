@@ -145,11 +145,13 @@ test('played with thought, every level is won with the fruit whole; not by far, 
   scan(one, { from: -6, to: 0, quiet: true }).forEach((r, n) => assert.ok(!r.open, `level ${n + 1}: ${ks[n].mono.kind} alone gets through with the fruit whole`));
 });
 // The learnt strategy (balance/strategy.json) is a fair player, not the best one (and here it has the perks of two
-// stars a level, not three): it wins more than half of the levels as they are now, and loses where it builds much less
-// than the level allows.
-test('a fair player wins half of the levels at least', () => {
-  const won = smart().filter((r) => r.won).length;
-  assert.ok(won >= LEVELS.length / 2, `${won} of ${LEVELS.length} levels won`);
+// stars a level, not three). Till 0.30 it won more than half of the levels; since 0.31 the levels are tuned by far
+// stronger perfect parties (the search plays every party on eight seeds and goes on from the parties of earlier passes),
+// and it wins the first level only — the owner keeps the levels that hard. It still gets through more than a third
+// of the waves of every level: a level is not lost at its start.
+test('a fair player wins the first level and gets through a third of the waves of every level', () => {
+  const rs = smart(); assert.ok(rs[0].won, 'the first level is lost');
+  rs.forEach((r, n) => assert.ok(r.won || r.wave > r.waves / 3, `level ${n + 1}: lost in wave ${r.wave} of ${r.waves}`));
 });
 
 // The full picture — many seeds, other draws of the waves, exploits, every skill and perk switched off — is the balance
@@ -349,7 +351,7 @@ test('every plant is used, and every branch looks and plays different', () => {
   const heat = grow('pepper', 'a', 12, 0), burn = grow('pepper', 'b', 12, 7);
   assert.ok(pstat(g, heat, 'blaze') && !pstat(g, heat, 'splash')); assert.ok(pstat(g, burn, 'melt') && pstat(g, burn, 'splash'));
   const cold = grow('mint', 'a', 11, 0), ice = grow('mint', 'b', 11, 7);
-  assert.ok(pstat(g, cold, 'slow') && !pstat(g, cold, 'dmg')); assert.ok(pstat(g, ice, 'heavy') && !pstat(g, ice, 'air'));
+  assert.ok(pstat(g, cold, 'slow') && !pstat(g, cold, 'dmg')); assert.ok(pstat(g, ice, 'heavy') && pstat(g, ice, 'air')); // (the icicle hits flyers too since 0.31: the owner's call)
 });
 
 test('a level in progress is saved between waves and comes back as it was', () => {
