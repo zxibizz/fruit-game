@@ -34,9 +34,10 @@ pub struct Opts {
     pub seed: u32, pub max_plants: f64, pub route: f64, pub maze: Option<String>, pub hp: f64, pub plan: Option<Vec<(Option<usize>, i32, i32, u8)>>, pub policy: Option<Policy>, pub terrain: bool, pub powers: Powers, pub bank: Option<f64>, pub meta: Vec<(String, usize)>,
     pub place: Where, pub plants: Option<Vec<usize>>, pub upgrades: Upgrades, pub early: bool, pub top: usize, pub trust: Vec<f64>,
     pub steps: usize, // the party stops after so many steps of the game (for the parity check: a part of a level is enough there)
+    pub stop_bitten: f64, // the party is not played on once more fruit health than this is bitten (perfect.rs: whether it is clean is known)
 }
 impl Default for Opts {
-    fn default() -> Opts { Opts { seed: 7, max_plants: f64::INFINITY, route: 1.0, maze: None, hp: 1.0, plan: None, policy: None, terrain: true, powers: Powers::On, bank: None, meta: Vec::new(), place: Where::Best, plants: None, upgrades: Upgrades::Greedy, early: true, top: 4, trust: Vec::new(), steps: usize::MAX } }
+    fn default() -> Opts { Opts { seed: 7, max_plants: f64::INFINITY, route: 1.0, maze: None, hp: 1.0, plan: None, policy: None, terrain: true, powers: Powers::On, bank: None, meta: Vec::new(), place: Where::Best, plants: None, upgrades: Upgrades::Greedy, early: true, top: 4, trust: Vec::new(), steps: usize::MAX, stop_bitten: f64::INFINITY } }
 }
 // the garden as it stood when a wave began (Bot::gauge)
 #[derive(Clone, Copy, Debug)]
@@ -45,7 +46,8 @@ pub struct Gauge { pub wave: usize, pub ground: f64, pub air: f64, pub towers: u
 pub struct Res {
     pub worth: f64, pub trail: usize, pub won: bool, pub hp: f64, pub max_hp: f64, pub wave: usize, pub waves: usize, pub plants: usize, pub grown: usize, pub maxed: usize,
     pub dew: f64, pub eaten: usize, pub income: f64, pub kinds: Vec<(usize, usize)>, pub bites: Vec<((usize, usize, bool), usize)>, pub powers_used: usize, pub time: f64,
-    pub gauge: Vec<Gauge>,
+    pub gauge: Vec<Gauge>, pub bitten: f64, // the fruit health bitten off, all in all
+    pub spent: Vec<f64>, // the dew standing in the garden at the end, by family: plant * 3 + branch (0: levels 1-2, 1: a, 2: b)
 }
 // what the bot did, for a replay by the JS simulation (sim/js/replay.mjs)
 #[derive(Clone, Debug)]
@@ -266,6 +268,7 @@ struct Bot<'a, 'o> {
     eaten_at: Vec<(i32, i32)>, seen: Option<(usize, Phase, usize, f64)>, need: f64,
     ops: Option<Vec<Op>>, dew_seen: f64, buf: Vec<f64>,
     done: Vec<bool>, // the steps of the plan that are done with
+    seen_to: usize, // how far into the plan it has looked so far: one past the last step it came to (past the end once the plan is done and it spends on its own)
 }
 
 impl<'a, 'o> Bot<'a, 'o> {
@@ -462,6 +465,7 @@ impl<'a, 'o> Bot<'a, 'o> {
             let mut left = false;
             for n in 0..plan.len() {
                 if self.done[n] { continue; }
+                self.seen_to = self.seen_to.max(n + 1);
                 let (kind, i, j, _) = plan[n];
                 if self.g.stub_at(i, j).is_some() { left = true; continue; }
                 match kind {
@@ -492,6 +496,7 @@ impl<'a, 'o> Bot<'a, 'o> {
                 }
             }
             if left { return; }
+            self.seen_to = plan.len() + 1;
         }
         // the maze grows with the level: two walls at once and one more every wave: first-level pumpkins are cheap, and
         // a long trail keeps a pack under the plants longer, with pumpkins where nothing stands yet
@@ -540,7 +545,21 @@ impl<'a, 'o> Bot<'a, 'o> {
 // the free function behind Game::compute_dist, for a field the bot only imagines
 fn compute_dist(grid: &[Cell; N], tiles: &[Tile; N], fruit: (i32, i32), extra: i32) -> [f64; N] { crate::game::dist_over(grid, tiles, fruit, extra) }
 
+// A party as it stood when a build phase began: everything a party goes on from. A party with another plan goes on from
+// it as long as the two plans are the same up to the step this one had looked at by then (seen_to): what a plan says
+// further on changes nothing before the bot comes to it. perfect.rs: a changed plan is not played from the first wave.
+#[derive(Clone)]
+pub struct Saved<'a> {
+    g: Game<'a>, o: Soon, r: i32, eaten_at: Vec<(i32, i32)>, seen: Option<(usize, Phase, usize, f64)>, need: f64, dew_seen: f64, done: Vec<bool>, pub seen_to: usize,
+    t: f64, income: f64, eaten: usize, powers_used: usize, bites: Vec<((usize, usize, bool), usize)>, steps: usize, gauge: Vec<Gauge>, bitten: f64,
+}
 pub fn play_level<'a>(d: &'a Data, level: usize, opt: &Opts, layouts: &dyn Fn(usize, bool) -> Vec<(i32, i32)>, mazes: &dyn Fn(usize, &str) -> Option<Vec<Wall>>, pool: &dyn Fn(usize) -> std::sync::Arc<Vec<(Vec<Wall>, [f64; NM])>>, record: bool) -> (Res, Option<Vec<Op>>) {
+    play_level_from(d, level, opt, layouts, mazes, pool, record, None, None)
+}
+// from: the party goes on from there (a build phase of a party whose plan was the same so far); snaps: the build phases of
+// this party are put there as it goes
+pub fn play_level_from<'a>(d: &'a Data, level: usize, opt: &Opts, layouts: &dyn Fn(usize, bool) -> Vec<(i32, i32)>, mazes: &dyn Fn(usize, &str) -> Option<Vec<Wall>>, pool: &dyn Fn(usize) -> std::sync::Arc<Vec<(Vec<Wall>, [f64; NM])>>, record: bool,
+    from: Option<&Saved<'a>>, mut snaps: Option<&mut Vec<std::sync::Arc<Saved<'a>>>>) -> (Res, Option<Vec<Op>>) {
     let g = Game::new(d, level, opt.seed, &opt.meta); let lv = &d.levels[level];
     let pick = opt.policy.as_ref().and_then(|p| p.maze);
     let walls: Vec<Wall> = if opt.plan.is_some() { Vec::new() } else if let (Some(m), None) = (pick, &opt.maze) {
@@ -568,15 +587,23 @@ pub fn play_level<'a>(d: &'a Data, level: usize, opt: &Opts, layouts: &dyn Fn(us
     }
     let dew0 = g.dew;
     let mut b = Bot { g, d, lv, opt, o: Soon::default(), r: (opt.seed as i32).wrapping_mul(7919).wrapping_add(13), walls, planned, keep, kinds, others, reach, first_digger,
-        eaten_at: Vec::new(), seen: None, need: 0.0, ops: if record { Some(Vec::new()) } else { None }, dew_seen: dew0, buf: Vec::new(), done: vec![false; opt.plan.as_ref().map_or(0, |p| p.len())] };
+        eaten_at: Vec::new(), seen: None, need: 0.0, ops: if record { Some(Vec::new()) } else { None }, dew_seen: dew0, buf: Vec::new(), done: vec![false; opt.plan.as_ref().map_or(0, |p| p.len())], seen_to: 0 };
     if let Some(bank) = opt.bank { b.g.dew = bank; }
     let (mut t, mut income, mut eaten, mut powers_used) = (0.0, 0.0, 0usize, 0usize);
     let mut bites: Vec<((usize, usize, bool), usize)> = Vec::new();
     let bank = opt.bank.is_some();
-    let mut steps = 0; let mut gauge: Vec<Gauge> = Vec::new();
-    while b.g.phase != Phase::Won && b.g.phase != Phase::Lost && t < 3600.0 && steps < opt.steps {
+    let mut steps = 0; let mut gauge: Vec<Gauge> = Vec::new(); let mut bitten = 0.0;
+    if let Some(s) = from {
+        b.g = s.g.clone(); b.o = s.o; b.r = s.r; b.eaten_at = s.eaten_at.clone(); b.seen = s.seen; b.need = s.need; b.dew_seen = s.dew_seen; b.seen_to = s.seen_to;
+        for n in 0..s.seen_to.min(s.done.len()).min(b.done.len()) { b.done[n] = s.done[n]; }
+        t = s.t; income = s.income; eaten = s.eaten; powers_used = s.powers_used; bites = s.bites.clone(); steps = s.steps; gauge = s.gauge.clone(); bitten = s.bitten;
+    }
+    while b.g.phase != Phase::Won && b.g.phase != Phase::Lost && t < 3600.0 && steps < opt.steps && bitten <= opt.stop_bitten {
         // it builds, then calls the wave at once (for the dew of an early start)
-        if b.g.phase == Phase::Build && (opt.early || b.g.wave == 0) { b.try_build(); let dew = b.g.dew; b.start_wave(); if bank { b.g.dew = dew; } }
+        if b.g.phase == Phase::Build && (opt.early || b.g.wave == 0) {
+            if let Some(v) = snaps.as_mut() { v.push(std::sync::Arc::new(Saved { g: b.g.clone(), o: b.o, r: b.r, eaten_at: b.eaten_at.clone(), seen: b.seen, need: b.need, dew_seen: b.dew_seen, done: b.done.clone(), seen_to: b.seen_to,
+                t, income, eaten, powers_used, bites: bites.clone(), steps, gauge: gauge.clone(), bitten })); }
+            b.try_build(); let dew = b.g.dew; b.start_wave(); if bank { b.g.dew = dew; } }
         for _ in 0..15 { b.step(1.0 / 30.0); }
         if b.g.wave > gauge.len() && b.g.phase == Phase::Wave { gauge.push(b.gauge()); }
         t += 0.5; steps += 15; b.use_powers();
@@ -586,7 +613,7 @@ pub fn play_level<'a>(d: &'a Data, level: usize, opt: &Opts, layouts: &dyn Fn(us
                 Event::Kill { reward } => { income += reward; if bank { b.g.dew -= reward; } }
                 Event::WaveDone { bonus } => { income += bonus; if bank { b.g.dew -= bonus; } }
                 Event::PlantDead { i, j } => { eaten += 1; b.eaten_at.push((i, j)); }
-                Event::Bite { kind, brood } => { let k = (b.g.wave, kind, brood); if let Some(x) = bites.iter_mut().find(|x| x.0 == k) { x.1 += 1; } else { bites.push((k, 1)); } }
+                Event::Bite { kind, brood } => { bitten += d.bugs[kind].bite; let k = (b.g.wave, kind, brood); if let Some(x) = bites.iter_mut().find(|x| x.0 == k) { x.1 += 1; } else { bites.push((k, 1)); } }
                 Event::Power => powers_used += 1,
             }
         }
@@ -596,9 +623,11 @@ pub fn play_level<'a>(d: &'a Data, level: usize, opt: &Opts, layouts: &dyn Fn(us
     let g = &b.g; let tr = trail_of(g, &g.dist);
     let mut kinds: Vec<(usize, usize)> = Vec::new();
     for k in g.plants.iter().map(|p| p.kind).chain(g.stubs.iter().map(|s| s.kind)) { if let Some(x) = kinds.iter_mut().find(|x| x.0 == k) { x.1 += 1; } else { kinds.push((k, 1)); } }
+    let mut spent = vec![0.0; d.plants.len() * 3];
+    for (kind, lvl, br, dew) in g.plants.iter().map(|p| (p.kind, p.lvl, p.br, p.spent)).chain(g.stubs.iter().map(|s| (s.kind, s.lvl, s.br, s.spent))) { spent[kind * 3 + if lvl <= 2 { 0 } else { br as usize }] += dew; }
     let res = Res {
         worth: if b.o.set { round(worth(g, &tr, &b.o, opt.terrain, None) * 100.0) / 100.0 } else { 0.0 }, trail: tr.len(), won: g.phase == Phase::Won, hp: g.hp, max_hp: g.max_hp, wave: g.wave, waves: g.waves,
-        plants: g.plants.len(), grown: g.plants.iter().filter(|p| p.lvl > 1).count(), maxed: g.plants.iter().filter(|p| p.lvl == 4).count(), dew: g.dew, eaten, income, kinds, bites, powers_used, time: round(t), gauge,
+        plants: g.plants.len(), grown: g.plants.iter().filter(|p| p.lvl > 1).count(), maxed: g.plants.iter().filter(|p| p.lvl == 4).count(), dew: g.dew, eaten, income, kinds, bites, powers_used, time: round(t), gauge, bitten, spent,
     };
     (res, b.ops)
 }
@@ -609,7 +638,7 @@ pub fn play_level<'a>(d: &'a Data, level: usize, opt: &Opts, layouts: &dyn Fn(us
 pub fn play_random<'a>(d: &'a Data, level: usize, opt: &Opts) -> Vec<Op> {
     let g = Game::new(d, level, opt.seed, &opt.meta); let lv = &d.levels[level]; let dew0 = g.dew;
     let mut b = Bot { g, d, lv, opt, o: Soon::default(), r: (opt.seed as i32).wrapping_mul(7919).wrapping_add(13), walls: Vec::new(), planned: Vec::new(), keep: [false; N], kinds: Vec::new(), others: Vec::new(), reach: 0.0, first_digger: 0,
-        eaten_at: Vec::new(), seen: None, need: 0.0, ops: Some(Vec::new()), dew_seen: dew0, buf: Vec::new(), done: vec![false; opt.plan.as_ref().map_or(0, |p| p.len())] };
+        eaten_at: Vec::new(), seen: None, need: 0.0, ops: Some(Vec::new()), dew_seen: dew0, buf: Vec::new(), done: vec![false; opt.plan.as_ref().map_or(0, |p| p.len())], seen_to: 0 };
     let mut r = b.r; let mut rnd = move |n: usize| -> usize { ((js_rng(&mut r) * n as f64).floor() as usize).min(n.saturating_sub(1)) };
     let rich = rnd(3) != 0; // most of these players have dew to burn: more gets planted
     let mut steps = 0;
