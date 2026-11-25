@@ -288,6 +288,81 @@ function buildGrass() {
   A.hdGrass(x, { seed: 5 + levelIdx }); A.hdBorderBushes(x, 2 + levelIdx); grassLayer = cnv;
 }
 const obstacleAt = (i, j) => game.grid[j]?.[i]?.obstacle;
+// a plant on open grass stands a little off the middle of its cell, so a row of them does not line up like a grid
+// (in a box or on a bed it keeps to the middle)
+function plantJit(i, j) {
+  if (inBox(i, j) || game.tiles[j]?.[i] === 'bed') return [0, 0];
+  const h = Math.imul(i * 73 + 11 + levelIdx, 0x9E3779B1) ^ Math.imul(j * 151 + 7, 0x85EBCA77), r = (sh) => ((h >>> sh) & 255) / 255 - .5;
+  return [r(0) * 9, r(8) * 6];
+}
+// the way of the bugs drawn wandering a little to either side of the cells' middles (the bugs keep to their lanes,
+// a few pixels either way, so they stay on the path)
+function wander(pts, seed) {
+  let L = 0; return pts.map(([x, y], n) => { if (n) L += Math.hypot(x - pts[n - 1][0], y - pts[n - 1][1]); if (n === 0 || n === pts.length - 1) return [x, y];
+    const a = n < pts.length - 1 ? Math.atan2(pts[n + 1][1] - pts[n - 1][1], pts[n + 1][0] - pts[n - 1][0]) : 0, o = 2.6 * Math.sin(L * .05 + seed) + 1.6 * Math.sin(L * .13 + seed * 2.7);
+    return [x - Math.sin(a) * o, y + Math.cos(a) * o]; });
+}
+// The trodden path of the bugs, as the roads of Kingdom Rush are drawn: flat sand, its width wandering a little; the
+// lawn cuts into it with small points that are the lawn itself (the same grass shows through), one dark line runs round
+// the whole jagged edge, the grass by it a little lighter, the sand under it a shade darker. All of it from one mask,
+// so where two trails meet they run into each other. ways: polylines in world units; w: the width of the path.
+function drawTrodden(x, k, ways, w) {
+  const lay = () => { const [cv2, c2] = layer(VB[2], VB[3], k); c2.setTransform(k, 0, 0, k, -VB[0] * k, -VB[1] * k); return [cv2, c2]; };
+  const roads = ways.filter((pts) => pts.length > 1).map((pts, id) => { let len = 0; for (let n = 1; n < pts.length; n++) len += Math.hypot(pts[n][0] - pts[n - 1][0], pts[n][1] - pts[n - 1][1]); return { pts, len, id }; });
+  const segD = (p, a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], l = dx * dx + dy * dy, t = l ? clamp(((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l, 0, 1) : 0; return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy); };
+  const inOther = (r, px, py, d) => roads.some((q) => { if (q === r) return false; for (let n = 1; n < q.pts.length; n++) if (segD([px, py], q.pts[n - 1], q.pts[n]) < d) return true; return false; });
+  const half = (r, t) => w / 2 + 1.5 * Math.sin(t * r.len * .09 + r.id * 2.1) + 1 * Math.sin(t * r.len * .031 + r.id * 5.3);
+  const put = (cv2, filter) => { x.save(); x.setTransform(1, 0, 0, 1, 0, 0); if (filter) x.filter = filter; x.drawImage(cv2, 0, 0); x.restore(); };
+  // the sand's shape, the lawn's points cut into its sides
+  const [S, sm] = lay();
+  sm.fillStyle = '#000'; sm.beginPath();
+  for (const r of roads) { const n = Math.ceil(r.len / 1.5); for (let i = 0; i <= n; i++) { const t = i / n, p = A.along(r.pts, t), rr = half(r, t); sm.moveTo(p.x + rr, p.y); sm.arc(p.x, p.y, rr, 0, A.TAU); } }
+  sm.fill(); sm.globalCompositeOperation = 'destination-out'; sm.beginPath();
+  for (const r of roads) {
+    const R = A.rng(r.id * 41 + 9 + levelIdx * 7);
+    for (const sg of [1, -1]) {
+      let d = R() * 3;
+      while (d < r.len) {
+        const kind = R(), t = d / r.len, p = A.along(r.pts, t), nx = -Math.sin(p.a) * sg, ny = Math.cos(p.a) * sg, rr = half(r, t), ux = Math.cos(p.a), uy = Math.sin(p.a);
+        if (kind < .16) { d += 3 + R() * 5; continue; }
+        if (kind < .32) { const cr = 2 + R() * 2.2, cx = p.x + nx * (rr - cr * .45), cy = p.y + ny * (rr - cr * .45); if (!inOther(r, cx - nx * cr * .6, cy - ny * cr * .6, w / 2 - .5)) { sm.moveTo(cx + cr, cy); sm.arc(cx, cy, cr, 0, A.TAU); } d += cr * 1.6 + 1; continue; }
+        const nb = kind > .8 ? 2 + Math.floor(R() * 2) : 1;
+        for (let b = 0; b < nb; b++) {
+          const tt = Math.min(1, (d + b * 2.2) / r.len), q = A.along(r.pts, tt), qr = half(r, tt), len = R() < .2 ? 4.5 + R() * 3 : 1.6 + R() * 2.4, wd = 1.1 + R() * 1.1, lean = (R() - .5) * 2;
+          const qnx = -Math.sin(q.a) * sg, qny = Math.cos(q.a) * sg, tx = q.x + qnx * (qr - len) + ux * lean, ty = q.y + qny * (qr - len) + uy * lean;
+          if (inOther(r, tx, ty, w / 2 - .5)) continue;
+          const bx = q.x + qnx * (qr + 1.5), by = q.y + qny * (qr + 1.5);
+          sm.moveTo(bx - ux * wd, by - uy * wd); sm.lineTo(tx, ty); sm.lineTo(bx + ux * wd, by + uy * wd); sm.closePath();
+        }
+        d += nb * 2.2 + 1.2 + R() * 2.2;
+      }
+    }
+  }
+  sm.fill(); sm.globalCompositeOperation = 'source-over';
+  // shapes grown or shrunk by r, and one shape less another, coloured (all in device pixels)
+  const morph = (src, r, grow, col) => { const [m, mx] = layer(VB[2], VB[3], k); mx.setTransform(1, 0, 0, 1, 0, 0); mx.drawImage(src, 0, 0); mx.globalCompositeOperation = grow ? 'source-over' : 'destination-in';
+    for (let i = 0; i < 12; i++) { const a = i / 12 * A.TAU; mx.drawImage(src, Math.cos(a) * r * k, Math.sin(a) * r * k); }
+    if (col) { mx.globalCompositeOperation = 'source-in'; mx.fillStyle = col; mx.fillRect(0, 0, m.width, m.height); } return m; };
+  const minus = (a, b, col) => { const [m, mx] = layer(VB[2], VB[3], k); mx.setTransform(1, 0, 0, 1, 0, 0); mx.drawImage(a, 0, 0); mx.globalCompositeOperation = 'destination-out'; mx.drawImage(b, 0, 0); mx.globalCompositeOperation = 'source-in'; mx.fillStyle = col; mx.fillRect(0, 0, m.width, m.height); return m; };
+  // the grass by the edge lit, fading into the lawn
+  put(minus(morph(S, 7, true), S, 'rgba(170,225,110,.2)'), `blur(${3 * k}px)`);
+  put(minus(morph(S, 2.4, true), S, 'rgba(146,206,92,.6)'), `blur(${.6 * k}px)`);
+  // the sand, a little worn and pebbled
+  const [F, fx] = lay(); fx.save(); fx.setTransform(1, 0, 0, 1, 0, 0); fx.drawImage(S, 0, 0); fx.globalCompositeOperation = 'source-in'; fx.fillStyle = '#dcbd85'; fx.fillRect(0, 0, F.width, F.height); fx.restore();
+  fx.globalCompositeOperation = 'source-atop';
+  fx.save(); fx.filter = 'blur(5px)'; for (const r of roads) A.strokePts(fx, r.pts, w * .5, 'rgba(240,222,176,.6)'); fx.restore();
+  for (const r of roads) { const R = A.rng(r.id * 17 + 3 + levelIdx);
+    for (let i = 0; i < r.len / 7; i++) { const p = A.along(r.pts, R()), o = (R() - .5) * w * .8; fx.beginPath(); fx.ellipse(p.x - Math.sin(p.a) * o, p.y + Math.cos(p.a) * o, 1 + R() * 1.6, .6 + R() * .8, R() * 3, 0, A.TAU); fx.fillStyle = R() > .45 ? 'rgba(170,125,70,.3)' : 'rgba(250,236,200,.5)'; fx.fill(); }
+    for (let i = 0; i < r.len / 55; i++) { const p = A.along(r.pts, R()), o = (R() - .5) * w * .55; A.hdBall(fx, p.x - Math.sin(p.a) * o, p.y + Math.cos(p.a) * o, 1.7 + R() * .9, 1.3 + R() * .6, '#cdbf9f', { olk: .4, specA: .4 }); } }
+  fx.setTransform(1, 0, 0, 1, 0, 0);
+  fx.filter = `blur(${1 * k}px)`; fx.drawImage(minus(S, morph(S, 3, false), 'rgba(150,100,50,.4)'), 0, 0);
+  const [Sh, sx] = layer(VB[2], VB[3], k); sx.setTransform(1, 0, 0, 1, 0, 0); sx.drawImage(S, 0, 0); sx.globalCompositeOperation = 'destination-out'; sx.drawImage(S, 0, 4.5 * k); sx.globalCompositeOperation = 'source-in'; sx.fillStyle = 'rgba(120,80,35,.3)'; sx.fillRect(0, 0, Sh.width, Sh.height);
+  fx.filter = `blur(${1.5 * k}px)`; fx.drawImage(Sh, 0, 0); fx.filter = 'none';
+  put(F);
+  // one dark line round the whole jagged edge, on the lawn's side
+  put(minus(morph(S, 1.1, true), S, 'rgba(48,100,30,.9)'));
+  for (const cv2 of [S, F, Sh]) free(cv2);
+}
 // the cell one step up / right / down / left on the screen
 const screenStep = (i, j, dx, dy) => (PORT ? [i - dy, j + dx] : [i + dx, j + dy]);
 function buildTerrain() {
@@ -302,11 +377,8 @@ function buildTerrain() {
     const [cx, cy] = cellCenter(i, j), w = (dx, dy, bit) => (water(i, j, dx, dy) ? bit : 0);
     A.hdWater(x, cx, cy, w(0, -1, 1) | w(1, 0, 2) | w(0, 1, 4) | w(-1, 0, 8), w(1, -1, 1) | w(1, 1, 2) | w(-1, 1, 4) | w(-1, -1, 8));
   }
-  { // the trail of the bugs, quiet: narrower and half see-through over the grass
-    const [pc, px] = layer(VB[2], VB[3], k); px.setTransform(k, 0, 0, k, -VB[0] * k, -VB[1] * k);
-    game.entries.forEach((en, e) => { const pts = trail(e).map(([i, j]) => cellCenter(i, j)); pts.unshift(hillPos(e)); A.hdPath(px, A.chaikin(pts, 3), 24, 1 + levelIdx + e); });
-    x.save(); x.setTransform(1, 0, 0, 1, 0, 0); x.globalAlpha = .55; x.drawImage(pc, 0, 0); x.restore(); free(pc);
-  }
+  // the trail of the bugs: a trodden path through the lawn along their way, smoothed, the lawn's own edge round it
+  drawTrodden(x, k, game.entries.map((en, e) => { const pts = trail(e).map(([i, j]) => cellCenter(i, j)); pts.unshift(hillPos(e)); return wander(A.chaikin(pts, 4), e + levelIdx * 3); }), 26);
   { // the stone path as one band and the beds as plots: each drawn over all its cells at once (screen directions)
     const tileAt = (i, j, dx, dy) => { const [a, b] = screenStep(i, j, dx, dy); return game.tiles[b]?.[a]; };
     const holes = new Set([...(inBox(-1, -1), holeOf.set)]);
@@ -327,7 +399,7 @@ function buildTerrain() {
     else if (o.obstacle === 'log' && game.grid[j][i + 1]?.obstacle === 'log') {
       const [nx, ny] = cellCenter(i + 1, j); x.save(); x.translate((cx + nx) / 2, (cy + ny) / 2 + 4); if (PORT) x.rotate(-Math.PI / 2); A.hdLog(x, 0, 0, CELL * 2 - 8); x.restore();
     }
-    else if (o.type && game.tiles[j][i] !== 'bed') A.hdSoil(x, cx, cy + 15);
+    else if (o.type && game.tiles[j][i] !== 'bed') { const [ox2, oy2] = plantJit(i, j); A.hdSoil(x, cx + ox2, cy + 15 + oy2); }
   }
   const [fx0, fy0] = cellCenter(...game.fruit); A.hdStump(x, fx0, fy0 + 12, 23);
   game.entries.forEach((en, e) => { const [hx, hy] = hillPos(e); A.hdAnthill(x, hx, hy + 8, 1.05); }); // the mound covers the trail's end
@@ -344,7 +416,7 @@ const trail = (e = 0) => trails(game)[e];
 // plants: a 76×92 box with the plant's base at (38, 76); frame 1 is the flytrap with its jaws shut
 const PW = 76, PH = 92, PBX = 38, PBY = 76;
 const plantSprite = (type, lvl, frame = 0, br = null) => sprite(`p:${type}:${lvl}:${br}:${frame}`, PW, PH, (x) => A.hdPlant(x, type, PBX, PBY, 1, { noShadow: true, lvl, br, frame }));
-const BUG_SIZE = { rhino: 1.3, queen: 1.25, spider: 1.25, slugking: 1.3, hornet: 1.2, snail: 1.25, beetle: 1.15, cricket: 1.2, pillbug: 1.1, caterpillar: 1 }, BUG_K = .78;
+const BUG_SIZE = { rhino: 1.3, queen: 1.25, spider: 1.25, slugking: 1.3, hornet: 1.2, snail: 1.25, beetle: 1.15, cricket: 1.2, pillbug: 1.1, caterpillar: 1 }, BUG_K = .6;
 const isBoss = (kind) => !!BUGS[kind].boss;
 // Walking bugs keep a small fixed offset from the trail's middle, so a faster bug visibly passes a slower one.
 const LANE = [-.17, .17, 0, -.09, .09];
@@ -694,7 +766,7 @@ function drawGrid() {
 let holeOf = { level: -1, set: new Set() };
 const inBox = (i, j) => { if (holeOf.level !== levelIdx) holeOf = { level: levelIdx, set: new Set((LEVELS[levelIdx]?.holes || []).map(([a, b]) => a + ',' + b)) }; return holeOf.set.has(i + ',' + j); };
 function drawPlant(p, t) {
-  const s = plantSprite(p.type, p.lvl, p.busy > 0 ? 1 : 0, p.br), [x, y] = cellCenter(p.i, p.j), base = y + (inBox(p.i, p.j) ? 5 : game.tiles[p.j][p.i] === 'bed' ? 7 : 14);
+  const s = plantSprite(p.type, p.lvl, p.busy > 0 ? 1 : 0, p.br), [x0, y0] = cellCenter(p.i, p.j), [jx, jy] = plantJit(p.i, p.j), x = x0 + jx, y = y0 + jy, base = y + (inBox(p.i, p.j) ? 5 : game.tiles[p.j][p.i] === 'bed' ? 7 : 14);
   let sx = 1, sy = 1; const a = anim.get(p.id);
   if (a) { a.t += 1 / 60; const e = Math.exp(-a.t * 9) * Math.cos(a.t * 26); sx = 1 + a.k * e * (a.grow ? .6 : -.4); sy = 1 - a.k * e * (a.grow ? -.8 : .5); if (a.t > .8) anim.delete(p.id); }
   if (p.hit > 0) { sx *= 1.08; sy *= .9; }
