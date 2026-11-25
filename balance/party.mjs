@@ -110,7 +110,7 @@ if (arch.length) {
   unlike.forEach((e, q) => console.log(`    ${q + 1}. ${pc(e.scanned)} / ${pc(e.margin)}  ${mixRu(e)}`));
 }
 if (without.length) {
-  const show = (w) => `${famRu(w.f)} ${w.margin ? `−${Math.round(Math.max(0, w.cost) * 100)}%` : 'чисто не пройти'}`;
+  const show = (w) => `${famRu(w.f)} ${w.margin ? `−${Math.round(Math.max(0, w.cost) * 100)}%` : 'чистой не нашёл'}`;
   const row = (lo, hi, whole) => without.filter((w) => w.f.includes('.') !== whole && w.cost >= lo && w.cost < hi).sort((a, b) => b.cost - a.cost).map(show).join(', ') || '—';
   console.log(`  без ветки (лучшая партия игры, где ветка закрыта; все сиды) — единственный путь (−30% и больше): ${row(.3, 9, false)}`);
   console.log(`      выбор (−8…−30%): ${row(.08, .3, false)}`);

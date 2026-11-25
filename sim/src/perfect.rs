@@ -335,19 +335,27 @@ pub fn search(cx: &Ctx, seeds_plans: Vec<Vec<Step>>, secs: f64, stall: f64, goal
     if arch.is_empty() {
         let n = cx.seeds.len() as f64;
         let pop: Vec<(Vec<Step>, Runs)> = given.into_iter().map(|p| { let r = cx.fitness(&p, K_MIN, None); (p, r) }).collect();
-        let cur = Mutex::new(pop.into_iter().max_by(|a, b| a.1.fit.partial_cmp(&b.1.fit).unwrap()).unwrap()); let done: Mutex<Option<Vec<Step>>> = Mutex::new(None);
-        log(format!("nothing holds: a climb from the party that gets furthest ({:.2} of {} seeds)", cur.lock().unwrap().1.fit, cx.seeds.len()));
-        std::thread::scope(|sc| { for t in 0..jobs.max(1) { let (cur, done, climbed) = (&cur, &done, &climbed); sc.spawn(move || {
+        // (a pool of the eight that get furthest, not the one: the best given may be a dead end — the party of the garden
+        // that had the plant, its steps of that plant left out — and a climb from it alone stood still)
+        let mut pop = pop; pop.sort_by(|a, b| b.1.fit.partial_cmp(&a.1.fit).unwrap()); pop.truncate(8);
+        log(format!("nothing holds: a climb from the {} parties that get furthest ({:.2} of {} seeds at best)", pop.len(), pop[0].1.fit, cx.seeds.len()));
+        // (and it starts again from them when the best of the pool has not risen for 200 changes: a climb that stood still
+        // on one draw of the search got there in some thirty changes on another)
+        let first = pop.clone(); let cur = Mutex::new((pop, 0u32)); let done: Mutex<Option<Vec<Step>>> = Mutex::new(None);
+        std::thread::scope(|sc| { for t in 0..jobs.max(1) { let (cur, done, climbed, first) = (&cur, &done, &climbed, &first); sc.spawn(move || {
             let mut r = Rng::new(rng_seed.wrapping_mul(7919).wrapping_add(t as u64 + 1));
             loop { if t0.elapsed().as_secs_f64() >= secs || done.lock().unwrap().is_some() { break; }
-                let (parent, pruns) = { let c = cur.lock().unwrap(); (c.0.clone(), c.1.clone()) };
+                let (parent, pruns) = { let g = cur.lock().unwrap(); let c = &g.0; let (a, b) = (r.n(c.len()), r.n(c.len())); let q = if c[a].1.fit >= c[b].1.fit { a } else { b }; (c[q].0.clone(), c[q].1.clone()) };
                 let mut child = parent.clone(); let mut changed = false;
                 for _ in 0..1 + (r.f() < 0.4) as usize + (r.f() < 0.15) as usize { if let Some(c) = mutate(cx, &child, None, &mut r) { child = c; changed = true; } }
                 if !changed { continue; }
                 climbed.fetch_add(1, Ordering::Relaxed);
                 let runs = cx.fitness(&child, K_MIN, Some((&parent, &pruns)));
                 if runs.fit >= n { *done.lock().unwrap() = Some(child); break; }
-                let mut c = cur.lock().unwrap(); if runs.fit >= c.1.fit { *c = (child, runs); }
+                let mut g = cur.lock().unwrap(); let top = g.0.iter().map(|x| x.1.fit).fold(f64::MIN, f64::max);
+                if runs.fit > top { g.1 = 0; } else { g.1 += 1; if g.1 >= 200 { g.0 = first.clone(); g.1 = 0; continue; } }
+                let c = &mut g.0;
+                if c.len() < 8 { c.push((child, runs)); } else { let w = (0..c.len()).min_by(|&a, &b| c[a].1.fit.partial_cmp(&c[b].1.fit).unwrap()).unwrap(); if runs.fit >= c[w].1.fit { c[w] = (child, runs); } }
             }
         }); } });
         if let Some(p) = done.into_inner().unwrap() { let k = level_from(cx, &p, K_FLOOR); log(format!("the climb found a party clean against bugs ×{:.2} ({} tried)", rung(k), climbed.load(Ordering::Relaxed))); if let Some(e) = elite(p, k) { arch.push(e); } }
