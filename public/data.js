@@ -44,8 +44,8 @@ export const PLANTS = {
   // b, Burn-through: throws at the armored and the thick first; melt — a bug it set burning has no armor while it
   //   burns, against every plant; crack (top) — every hit takes a point of armor off for good.
   pepper: { cost: 55, up: [55], hp: [60, 80], range: [1.6, 1.7], rate: [.6, .65], dmg: [8, 12], splash: .8, hits: [3, 4], burn: [3, 4.5], burnT: 2, shot: 'pepper', speed: 5,
-    a: { from: 1, up: [120, 190], hp: [80, 100], range: [1.8, 2], rate: [.5, .55], dmg: [12, 16], burn: [9, 15], burnT: [2.5, 3], blaze: 1, air: 1, spread: [0, 1] },
-    b: { from: 1, up: [120, 190], hp: [80, 100], range: [1.8, 2], rate: [.65, .7], dmg: [24, 36], splash: [1, 1.1], hits: [5, 6], burn: [6, 9], burnT: [2.5, 3], melt: 1, crack: [0, 1], shot: 'pepper', speed: 5 } },
+    a: { from: 1, up: [150, 240], hp: [80, 100], range: 1.7, rate: [.5, .55], dmg: [12, 16], burn: [9, 13], burnT: [2.5, 3], blaze: 1, air: 1, spread: [0, 1] },
+    b: { from: 1, up: [150, 240], hp: [80, 100], range: 1.7, rate: [.65, .7], dmg: [24, 36], splash: [1, 1.1], hits: [5, 6], burn: [6, 9], burnT: [2.5, 3], melt: 1, crack: [0, 1], shot: 'pepper', speed: 5 } },
   // Ice: the only plant that slows. Throws an icicle at one bug, walkers and flyers: frost — the bug it hits is that
   // much slower for frostT seconds (slows do not add up; snails do not slow).
   // a, Cold: throws no more; every bug around it is `slow` slower, flyers too; rime (top) — every so many seconds the
