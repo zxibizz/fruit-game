@@ -32,9 +32,9 @@ export const PLANTS = {
   // b, Far shot (the dandelion that was): far at flyers and them first; walkers only on the cells next to it
   //   (groundRange) and for the `ground` share of the damage; down (top) — a flyer (not a boss) left with no more
   //   than that share of its health falls onto the trail and walks on; a boss hangs still for a moment.
-  rose: { cost: 25, up: [60], hp: [60, 80], range: 1.5, rate: [1.3, 1.5], dmg: [8, 11], air: 1, shot: 'thorn', speed: 9,
-    a: { from: 1, up: [120, 200], hp: [90, 100], range: [1.5, 1.6], rate: [1.6, 1.7], dmg: [11, 13], multi: 2, mark: .3, chain: [0, 2], air: 1, shot: 'thorn', speed: 9 },
-    b: { from: 3, up: [120, 200], hp: [70, 80], range: [3.5, 3.8], rate: [.8, .9], dmg: [40, 55], ground: .35, groundRange: 1.5, down: [0, .5], air: 1, shot: 'fluff', speed: 11 } },
+  rose: { cost: 40, up: [40], hp: [60, 80], range: 1.5, rate: [1.3, 1.5], dmg: [8, 12], air: 1, shot: 'thorn', speed: 9,
+    a: { from: 1, up: [90, 150], hp: [90, 100], range: [1.5, 1.6], rate: [1.6, 1.7], dmg: [11, 20], multi: 2, mark: .3, chain: [0, 2], air: 1, shot: 'thorn', speed: 9 },
+    b: { from: 3, up: [90, 150], hp: [70, 80], range: [3.5, 3.8], rate: [.8, .9], dmg: [40, 55], ground: .35, groundRange: 1.5, down: [0, .5], air: 1, shot: 'fluff', speed: 11 } },
   // Fire (the pepper is the chili now). Lobs a pepper that bursts where it lands: it hits up to `hits` walkers within
   // `splash` of it and sets them burning (burn a second for burnT seconds). Fire is weak against armor: a burning bug's
   // armor comes off every second of the burn.
@@ -43,27 +43,27 @@ export const PLANTS = {
   //   spread (top) — a bug it set burning sets the next bug it touches burning too (one link).
   // b, Burn-through: throws at the armored and the thick first; melt — a bug it set burning has no armor while it
   //   burns, against every plant; crack (top) — every hit takes a point of armor off for good.
-  pepper: { cost: 35, up: [90], hp: [60, 80], range: [1.6, 1.7], rate: [.6, .65], dmg: [8, 12], splash: .8, hits: [3, 4], burn: [3, 4.5], burnT: 2, shot: 'pepper', speed: 5,
-    a: { from: 1, up: [180, 280], hp: [80, 100], range: 1.7, rate: [.5, .55], dmg: [12, 16], burn: [9, 13], burnT: [2.5, 3], blaze: 1, air: 1, spread: [0, 1] },
-    b: { from: 1, up: [180, 280], hp: [80, 100], range: 1.7, rate: [.65, .7], dmg: [24, 32], splash: [1, 1.1], hits: [5, 6], burn: [6, 9], burnT: [2.5, 3], melt: 1, crack: [0, 1], shot: 'pepper', speed: 5 } },
+  pepper: { cost: 55, up: [55], hp: [60, 80], range: [1.6, 1.7], rate: [.6, .65], dmg: [8, 12], splash: .8, hits: [3, 4], burn: [3, 4.5], burnT: 2, shot: 'pepper', speed: 5,
+    a: { from: 1, up: [120, 190], hp: [80, 100], range: 1.7, rate: [.5, .55], dmg: [12, 16], burn: [9, 13], burnT: [2.5, 3], blaze: 1, air: 1, spread: [0, 1] },
+    b: { from: 1, up: [120, 190], hp: [80, 100], range: 1.7, rate: [.65, .7], dmg: [24, 32], splash: [1, 1.1], hits: [5, 6], burn: [6, 9], burnT: [2.5, 3], melt: 1, crack: [0, 1], shot: 'pepper', speed: 5 } },
   // Ice: the only plant that slows. Throws an icicle at one bug, walkers and flyers: frost — the bug it hits is that
   // much slower for frostT seconds (slows do not add up; snails do not slow).
   // a, Cold: throws no more; every bug around it is `slow` slower, flyers too; rime (top) — every so many seconds the
   //   bugs around freeze for a second (snails too; a boss for half of it), and then cannot freeze again for a while.
   // b, Icicle: a heavy icicle from above on the thickest bug next to it, flyers too (since 0.31), rare and hard (armor
   //   hardly matters to such a hit, bosses take it whole); stack (top) — every next hit on the same bug that much harder, up to twice.
-  mint: { cost: 35, up: [80], hp: [60, 80], range: [1.5, 1.6], rate: [.9, 1], dmg: [9, 12], frost: [.3, .4], frostT: 1.5, air: 1, shot: 'icicle', speed: 8,
-    a: { from: 1, up: [130, 220], hp: [80, 100], range: [2, 2.2], slow: .5, rime: [0, 5], air: 1 },
-    b: { from: 2, up: [130, 220], hp: [80, 100], range: 1.6, rate: [.4, .45], dmg: [120, 160], frost: .15, frostT: .6, heavy: 1, air: 1, stack: [0, .25], shot: 'icicleBig', speed: 7 } },
+  mint: { cost: 50, up: [50], hp: [60, 80], range: [1.5, 1.6], rate: [.9, 1], dmg: [9, 12], frost: [.3, .4], frostT: 1.5, air: 1, shot: 'icicle', speed: 8,
+    a: { from: 1, up: [100, 160], hp: [80, 100], range: [2, 2.2], slow: .5, rime: [0, 5], air: 1 },
+    b: { from: 2, up: [100, 160], hp: [80, 100], range: 1.6, rate: [.4, .45], dmg: [120, 160], frost: .15, frostT: .6, heavy: 1, air: 1, stack: [0, .25], shot: 'icicleBig', speed: 7 } },
   // Finishing off. Every `eat` seconds swallows whole a walker (not a boss) with no more than `gulp` of its full health
   // left; a healthier bug it does not touch at all: its job is to make sure, not to deal damage.
   // a, Glutton: quicker; heads (top) — two at once.
   // b, Lure: healthier bugs than the glutton does, slower; nectar — a flyer within `lure` turns to it, sniffs it a moment and flies on to the fruit (every flyer
   //   once): into the reach of the plants around; it swallows worn flyers too (eatAir); lureBoss (top) — the hornet too
   //   (it is not swallowed).
-  flytrap: { cost: 60, up: [140], hp: [70, 90], range: 1.5, eat: [3, 2.5], gulp: [.4, .5],
-    a: { from: 2, up: [170, 260], hp: [100, 120], range: [1.5, 1.6], eat: [1.5, 1.2], gulp: .6, heads: [1, 2] },
-    b: { from: 3, up: [130, 220], hp: [90, 110], range: 1.5, eat: [2, 1.6], gulp: .6, eatAir: 1, lure: [3, 5], lureBoss: [0, 1] } },
+  flytrap: { cost: 75, up: [75], hp: [70, 90], range: 1.5, eat: [3, 2.5], gulp: [.4, .5],
+    a: { from: 2, up: [150, 230], hp: [100, 120], range: [1.5, 1.6], eat: [1.5, 1.2], gulp: .6, heads: [1, 2] },
+    b: { from: 3, up: [120, 200], hp: [90, 110], range: 1.5, eat: [2, 1.6], gulp: .6, eatAir: 1, lure: [3, 5], lureBoss: [0, 1] } },
 };
 export const BRANCHES = ['a', 'b'];
 // A stat of a plant of type P at level lvl on branch br (levels 3 and 4): null when it has no such stat.
