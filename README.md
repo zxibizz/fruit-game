@@ -26,7 +26,7 @@ and in portrait (turned there).
   nettles (sting the bugs, nothing grows), weeds (cleared for dew), two anthills. A boss comes in the middle and at
   the end of every level: the rhino beetle runs, the queen lets ants out, the slug king splits into snails, the
   hornet flies over the maze, the spider webs the plants.
-- **Balance** (0.31): a level is tuned by its perfect party, played with the perks of three stars on every level
+- **Balance** (0.32: tall against wide, [docs/rebalance-tall.md](docs/rebalance-tall.md); the levels retuned the 0.31 way): a level is tuned by its perfect party, played with the perks of three stars on every level
   before it (what a player of perfect parties has). The best party known of every level (`balance/party.mjs`, on
   eight seeds of the game) gets through with the fruit never bitten against bugs 1.41–1.48 times healthier than they
   are (the target 1/0.7 = 1.43), so a garden of 67–70% of its strength is the least that keeps the fruit whole, and no
