@@ -147,7 +147,7 @@ test('played with thought, every level is won with the fruit whole; not by far, 
 // The learnt strategy (balance/strategy.json) is a fair player, not the best one (and here it has the perks of two
 // stars a level, not three). Till 0.30 it won more than half of the levels; since 0.31 the levels are tuned by far
 // stronger perfect parties (the search plays every party on eight seeds and goes on from the parties of earlier passes),
-// and it wins the first level only — the owner keeps the levels that hard. It still gets through more than a third
+// and in 0.31 it won the first level only; retrained on 0.32 (balance/strategy.mjs) it wins five of the twelve. It still gets through more than a third
 // of the waves of every level: a level is not lost at its start.
 test('a fair player wins the first level and gets through a third of the waves of every level', () => {
   const rs = smart(); assert.ok(rs[0].won, 'the first level is lost');

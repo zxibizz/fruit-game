@@ -26,13 +26,13 @@ and in portrait (turned there).
   nettles (sting the bugs, nothing grows), weeds (cleared for dew), two anthills. A boss comes in the middle and at
   the end of every level: the rhino beetle runs, the queen lets ants out, the slug king splits into snails, the
   hornet flies over the maze, the spider webs the plants.
-- **Balance** (0.31): a level is tuned by its perfect party, played with the perks of three stars on every level
+- **Balance** (0.32: tall against wide, [docs/rebalance-tall.md](docs/rebalance-tall.md); the levels retuned the 0.31 way): a level is tuned by its perfect party, played with the perks of three stars on every level
   before it (what a player of perfect parties has). The best party known of every level (`balance/party.mjs`, on
   eight seeds of the game) gets through with the fruit never bitten against bugs 1.41–1.48 times healthier than they
   are (the target 1/0.7 = 1.43), so a garden of 67–70% of its strength is the least that keeps the fruit whole, and no
-  plant alone keeps it whole on any level (the best, roses on «Развилка», holds 58% of the best). Every branch is
+  plant alone keeps it whole on any level (the best, roses on «Развилка», holds 53% of the best). Every branch is
   needed on three levels at least and none on every level. The levels are hard: the learnt strategy with the perks of
-  two stars wins «Развилка» alone. The health of a level's bugs (`hp`) sets
+  two stars wins five of the twelve («Развилка», «Старый сад», «Пруд», «Заросли», «Закат»). The health of a level's bugs (`hp`) sets
   that; the size of every wave (`swell`) is set so that no one or two waves are all the difficulty: a big wave, an
   ordinary one and a breather stand at 1.15, 1.3 and 1.6 times the margin of the hardest boss wave. Thorns, spikes and
   nettles together take no more than a quarter of a bug's health (`PRICK_CAP`): with no cap a thorny trail, cold mints
@@ -42,8 +42,10 @@ and in portrait (turned there).
   A level is meant to be hard and to be won by thought. Plants that hit walkers reach only the cells
   next to them, and bugs come in tight packs: a long winding trail has twice the cells beside it and keeps a pack
   under the plants several times longer than a straight road. The health of every bug, bosses too, grows by one rule on
-  every level (`TUNE.hpGrowth` of its own health a wave). The first level of a
-  plant is cheap — a trail is quick to shape — and the upgrades are dear: there is never dew for all of them. Most of
+  every level (`TUNE.hpGrowth` of its own health a wave). Since 0.32 the first level of
+  a shooter is dear and growing pays: a few grown plants hold a level about a tenth better than many cheap ones (the
+  owner's call; `balance/tallwide.mjs` measures it), while a pumpkin stays cheap — the maze is built of pumpkins.
+  There is never dew for all of it. Most of
   the dew is the pay for every wave got through, growing evenly over a level (`pay` of the level); a bug gives its own
   small reward, the same everywhere. Bosses are strong but a grown garden kills them. No
   plant makes dew (it comes from finished waves, beaten bugs and waves called early). Caterpillars bite plants, mole
@@ -97,7 +99,12 @@ and in portrait (turned there).
   (`--party ID` for one party, wave by wave). `node balance/owner.mjs [FILE]` replays the owner's parties as plans on
   the sim and gives their margins beside the kept perfect party (the parties worth keeping are in `balance/owner/`).
 - Tall against wide (the measures of [docs/rebalance-tall.md](docs/rebalance-tall.md)): `node balance/tiers.mjs` —
-  damage per dew of every tier of a shooter and what a tier needs under other prices (`--prices FILE`);
+  damage per dew of every tier of a shooter and what a tier needs under other prices (`--prices FILE`); with `--sim`,
+  the same asked of the game in the plant lab (`balance/labcore.mjs`): a garden of every tier against one of the same
+  plant at level 1, for the same dew, on a fixed maze whose walls the garden may take;
+  `node balance/tallwide.mjs [--levels 1,4,8] [--secs 120] [--runs 2] [--out DIR] [--from DIR]` — the best party the
+  search finds of every kind of garden: free, tall K (`balance/party.mjs --tall K`: K shooters at most, pumpkins free)
+  and flat L (`--flat L`: no shooter grown past level L), the bot keeping to the bounds too;
   `node balance/tall.mjs` — the kept perfect party against gardens of its first N plants grown to the top;
   `node balance/cap.mjs` — the smart bot with a cap on its plants; `node balance/econ.mjs` — the dew and the garden
   of every level's perfect party.
