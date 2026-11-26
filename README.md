@@ -28,13 +28,12 @@ and in portrait (turned there).
   hornet flies over the maze, the spider webs the plants.
 - **Balance** (0.32: tall against wide, [docs/rebalance-tall.md](docs/rebalance-tall.md); the levels retuned the 0.31 way): a level is tuned by its perfect party, played with the perks of three stars on every level
   before it (what a player of perfect parties has). The best party known of every level (`balance/party.mjs`, on
-  eight seeds of the game) gets through with the fruit never bitten against bugs about twice as healthy as they are
-  (the target 1/0.5 = 2, `TARGET` in `balance/scan.mjs`; till 0.32 it was 1/0.7), so a garden of half its strength is
-  the least that keeps the fruit whole. «Опушка» and «Болото» are tuned to 60% (`TARGETS`): at half, a garden there
-  with no maze got through. On «Развилка», the first level and the lesson, a garden with no maze and roses alone get
-  through (the owner keeps it so; the tests know it); on every other level no plant alone keeps the fruit whole.
-  Every branch is needed on one level at least and none on every level. The learnt strategy with the perks of two
-  stars wins most levels. The health of a level's bugs (`hp`) sets
+  eight seeds of the game) gets through with the fruit never bitten against bugs 1.41–1.48 times healthier than they
+  are (the target 1/0.7 = 1.43, `TARGET` in `balance/scan.mjs`; 0.33 tried 1/0.5 and came back), so a garden of
+  67–70% of its strength is the least that keeps the fruit whole, and no plant alone keeps it whole on any level
+  (the best, roses on «Развилка» and «Крапивный лог», hold 53% of the best). Every branch is needed on one level at
+  least and none on every level. The learnt strategy with the perks of two
+  stars wins some levels and gets through a third of the waves of every one. The health of a level's bugs (`hp`) sets
   that; the size of every wave (`swell`) is set so that no one or two waves are all the difficulty: a big wave, an
   ordinary one and a breather stand at 1.15, 1.3 and 1.6 times the margin of the hardest boss wave. Thorns, spikes and
   nettles together take no more than a quarter of a bug's health (`PRICK_CAP`): with no cap a thorny trail, cold mints
@@ -47,10 +46,12 @@ and in portrait (turned there).
   every level (`TUNE.hpGrowth` of its own health a wave). Since 0.32 the first level of
   a shooter is dear and growing pays: a few grown plants hold a level about a tenth better than many cheap ones (the
   owner's call; `balance/tallwide.mjs` measures it), while a pumpkin stays cheap — the maze is built of pumpkins.
-  There is never dew for all of it. Most of
-  the dew is the pay for every wave got through, growing evenly over a level (`pay` of the level); a bug gives its own
-  small reward, the same everywhere. Bosses are strong but a grown garden kills them. No
-  plant makes dew (it comes from finished waves, beaten bugs and waves called early). Caterpillars bite plants, mole
+  There is never dew for all of it. Since 0.34 the
+  dew comes as the bugs are killed, at once (the owner: a crowd ground down should pay there and then): the dew of a
+  wave — its pay, growing evenly over a level (`pay` of the level), and what its bugs gave before — is shared among
+  its bugs by their weight, an elite bug and a boss paying more, and a bug that gets to the fruit pays nothing
+  (`wavePool` in `public/data.js`). Bosses are strong but a grown garden kills them. No
+  plant makes dew (it comes from beaten bugs and waves called early). Caterpillars bite plants, mole
   crickets eat through walls. **No plant is healed in a wave**: its health is all it has for the wave, an eaten plant
   leaves roots — a hole the bugs walk through, where nothing can be planted — till the wave is over; then the whole
   garden grows back for nothing, at its levels and in full health. The rain (rare: it comes back every tenth wave)
@@ -81,11 +82,11 @@ and in portrait (turned there).
 - `server/` — Node 22, no dependencies: static files and `/healthz`.
 - `node --test test/*.test.js` — pathing and placement rules, economy, eaten plants and roots, bosses, the ground, perks, saving, server, offline
   cache list, no sudden walls of flyers in the waves, the two copies of the simulation against each other (see `sim/`
-  below), and the balance on one seed: the kept perfect party of every level gets through with the fruit whole against bugs 15% healthier and not against bugs 75% healthier, and one plant alone does not; the learnt strategy wins the first level and gets through a third of the waves of every level; the smart bot (`sim/src/bot.rs`: a maze through mud and nettles; it values a
+  below), and the balance on one seed: the kept perfect party of every level gets through with the fruit whole against bugs 15% healthier and not against bugs 75% healthier, and one plant alone does not; the learnt strategy gets through a third of the waves of every level; the smart bot (`sim/src/bot.rs`: a maze through mud and nettles; it values a
   garden by the bugs it stops — walkers and flyers apart, a crowd sharing a single shooter while chili, heat and thorns hit
   many; frost and rain, the perks of two stars a level) must win every level; a garden beside the
   untouched trail must lose every level with the most perks there can be by then (three stars on every level before),
-  planted any of four ways; half a garden or no powers must do worse. The suite takes half a minute and needs `cargo`
+  planted any of four ways; no powers must do worse. The suite takes half a minute and needs `cargo`
   (the bot is native); the full picture is the balance matrix below.
 - Party analytics: `public/telemetry.js` records every party wave by wave — the garden when a wave is called
   (every plant, its level and cell, the roots of eaten ones), the trail through it, the dew and the fruit, the early
