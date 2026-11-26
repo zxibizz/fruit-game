@@ -32,12 +32,12 @@ pub enum Upgrades { Greedy, None, First }
 #[derive(Clone, Debug)]
 pub struct Opts {
     pub seed: u32, pub max_plants: f64, pub route: f64, pub maze: Option<String>, pub hp: f64, pub plan: Option<Vec<(Option<usize>, i32, i32, u8)>>, pub policy: Option<Policy>, pub terrain: bool, pub powers: Powers, pub bank: Option<f64>, pub meta: Vec<(String, usize)>,
-    pub place: Where, pub plants: Option<Vec<usize>>, pub upgrades: Upgrades, pub early: bool, pub top: usize, pub trust: Vec<f64>,
+    pub place: Where, pub plants: Option<Vec<usize>>, pub upgrades: Upgrades, pub early: bool, pub top: usize, pub trust: Vec<f64>, pub max_shooters: f64, pub flat: usize, pub min_shooters: usize,
     pub steps: usize, // the party stops after so many steps of the game (for the parity check: a part of a level is enough there)
     pub stop_bitten: f64, // the party is not played on once more fruit health than this is bitten (perfect.rs: whether it is clean is known)
 }
 impl Default for Opts {
-    fn default() -> Opts { Opts { seed: 7, max_plants: f64::INFINITY, route: 1.0, maze: None, hp: 1.0, plan: None, policy: None, terrain: true, powers: Powers::On, bank: None, meta: Vec::new(), place: Where::Best, plants: None, upgrades: Upgrades::Greedy, early: true, top: 4, trust: Vec::new(), steps: usize::MAX, stop_bitten: f64::INFINITY } }
+    fn default() -> Opts { Opts { seed: 7, max_plants: f64::INFINITY, route: 1.0, maze: None, hp: 1.0, plan: None, policy: None, terrain: true, powers: Powers::On, bank: None, meta: Vec::new(), place: Where::Best, plants: None, upgrades: Upgrades::Greedy, early: true, top: 4, trust: Vec::new(), max_shooters: f64::INFINITY, flat: 4, min_shooters: 0, steps: usize::MAX, stop_bitten: f64::INFINITY } }
 }
 // the garden as it stood when a wave began (Bot::gauge)
 #[derive(Clone, Copy, Debug)]
@@ -291,6 +291,15 @@ impl<'a, 'o> Bot<'a, 'o> {
         top.1
     }
     fn room(&self) -> bool { ((self.g.plants.len() + self.g.stubs.len()) as f64) < self.opt.max_plants }
+    // the tall and flat gardens of balance/tallwide.mjs: no more than max_shooters plants but pumpkins (a plant eaten and
+    // growing back counts; one put on a cell where another shooter stands takes its place), no shooter grown past `flat`
+    fn may_place(&self, kind: usize, i: i32, j: i32) -> bool {
+        if kind == self.d.pumpkin || self.opt.max_shooters.is_infinite() { return true; }
+        let pk = self.d.pumpkin; let n = self.g.plants.iter().filter(|p| p.kind != pk).count() + self.g.stubs.iter().filter(|p| p.kind != pk).count();
+        let here = self.g.plant_at(i, j).map_or(false, |pi| self.g.plants[pi].kind != pk);
+        ((n - here as usize) as f64) < self.opt.max_shooters
+    }
+    fn may_grow(&self, kind: usize, lvl: usize) -> bool { kind == self.d.pumpkin || lvl < self.opt.flat }
 
     // the coming waves: how many walkers stand on a cell of the trail (from their pace: speed and gap), weighed by
     // health; the bites at stake (what gets through bites by its kind's bite); the health of one bug; and the armor
@@ -365,6 +374,7 @@ impl<'a, 'o> Bot<'a, 'o> {
         // a strategy's say in it (Policy): how much more a step is worth for where it puts what
         let pol = self.opt.policy.as_ref(); let heat = if pol.is_some() { heat_map(g, &s, &tr) } else { (Vec::new(), Vec::new()) };
         let planned = &self.planned;
+        let may_place = |kind: usize, i: i32, j: i32| self.may_place(kind, i, j); let may_grow = |kind: usize, lvl: usize| self.may_grow(kind, lvl);
         let lean = |kind: usize, i: i32, j: i32| -> f64 { match pol { None => 1.0, Some(p) => bias(&p.place[kind], &feat(g, &s, &tr, &heat, far, kind, i, j, on[key(i, j)] || planned.contains(&(i, j)))) } };
         let lean_up = |kind: usize| -> f64 { pol.map_or(1.0, |p| p.up[kind].max(-8.0).min(8.0).exp()) };
         let allowed_at = |i: i32, j: i32, kind: usize| kind == d.pumpkin || wh == Where::Best || wh == Where::Spread || seg.iter().any(|&(a, b)| hyp((a - i) as f64, (b - j) as f64) <= d.plants[kind].st[Stat::Range as usize][0] + 0.01);
@@ -393,7 +403,7 @@ impl<'a, 'o> Bot<'a, 'o> {
         let try_cell = |i: i32, j: i32, kinds: &[usize], offer: &mut dyn FnMut(f64, f64, Act, bool)| {
             if g.grid[key(i, j)] != Cell::Empty || g.stub_at(i, j).is_some() || g.place_problem(i, j) { return; }
             for &kind in kinds {
-                if !allowed_at(i, j, kind) { continue; }
+                if !allowed_at(i, j, kind) || !may_place(kind, i, j) { continue; }
                 let gain = gain_of(BP { kind, lvl: 1, br: 0, i, j }, i, j);
                 let gain = if kind == d.pumpkin { gain } else { ahead(kind, i, j, gain, d.plants[kind].cost, 0.0) };
                 offer(gain * lean(kind, i, j), d.plants[kind].cost, Act::Place(kind, i, j), false);
@@ -410,7 +420,7 @@ impl<'a, 'o> Bot<'a, 'o> {
             // growing: one way, or at level 2 either branch open here
             let ways: &[u8] = if p.lvl == 2 { &[1, 2] } else { &[0] };
             for &br in ways {
-                if upgrades == Upgrades::None || p.lvl >= self.opt.top.min(4) || (p.lvl == 2 && !g.branch_open(p.kind, br)) { continue; }
+                if upgrades == Upgrades::None || p.lvl >= self.opt.top.min(4) || !may_grow(p.kind, p.lvl) || (p.lvl == 2 && !g.branch_open(p.kind, br)) { continue; }
                 let Some(c) = g.upgrade_cost(pi, br) else { continue };
                 let up = BP { lvl: p.lvl + 1, br: if p.lvl == 2 { br } else { p.br }, ..bp };
                 let gain = if wide(g, &up) || wide(g, &bp) { worth(g, &tr, &o, terrain, Some(up)) - now } else { let was = term(g, &s, &tr, &o, terrain, &bp); add(term(g, &s, &tr, &o, terrain, &up), was) };
@@ -433,7 +443,7 @@ impl<'a, 'o> Bot<'a, 'o> {
             }
             if p.kind == d.pumpkin && p.lvl == 1 && g.phase == Phase::Build {
                 for &kind in self.others.iter().filter(|&&k| k != d.pumpkin) {
-                    if !allowed_at(p.i, p.j, kind) { continue; }
+                    if !allowed_at(p.i, p.j, kind) || !may_place(kind, p.i, p.j) { continue; }
                     let q = BP { kind, ..bp };
                     let gain = if wide(g, &q) { worth(g, &tr, &o, terrain, Some(q)) - now } else { add(term(g, &s, &tr, &o, terrain, &q), (0.0, 0.0)) };
                     offer(gain * lean(kind, p.i, p.j), d.plants[kind].cost - g.refund_of(p) + 0.01, Act::Swap(p.id, kind), false);
@@ -470,6 +480,7 @@ impl<'a, 'o> Bot<'a, 'o> {
                 if self.g.stub_at(i, j).is_some() { left = true; continue; }
                 match kind {
                     Some(k) => {
+                        if !self.may_place(k, i, j) { self.done[n] = true; continue; }
                         // another plant stands there (a pumpkin of the wall, as a rule): it is sold for this one
                         if let Some(pi) = self.g.plant_at(i, j) {
                             if self.g.plants[pi].kind == k { self.done[n] = true; continue; }
@@ -488,6 +499,7 @@ impl<'a, 'o> Bot<'a, 'o> {
                     None => {
                         // a plant not there yet: its own step is still to come (left for later), or it never will
                         let Some(pi) = self.g.plant_at(i, j) else { if (0..n).any(|m| !self.done[m] && plan[m].0.is_some() && (plan[m].1, plan[m].2) == (i, j)) { left = true; } else { self.done[n] = true; } continue };
+                        if !self.may_grow(self.g.plants[pi].kind, self.g.plants[pi].lvl) { self.done[n] = true; continue; }
                         let br = { let want = plan[n].3; let p = &self.g.plants[pi]; if want != 0 && p.lvl == 2 && self.g.branch_open(p.kind, want) { want } else { self.branch_for(pi) } };
                         let Some(c) = self.g.upgrade_cost(pi, br) else { self.done[n] = true; continue };
                         if self.g.dew < c { left = true; break; }

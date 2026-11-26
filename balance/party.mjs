@@ -1,5 +1,6 @@
 // The best perfect party of a level: node balance/party.mjs --level 7 [--secs 300] [--runs 2] [--meta exp3] [--mono]
 //   [--keep] [--jobs N] [--out FILE] [--rng N] [--stall 60] [--check] [--no-without] [--ban-secs S] [--ban-stall S] [--without f1,f2] [--from FILE]
+//   [--tall K] [--flat L] [--wide N]
 // Looks for the party that gets through the level with the fruit never bitten against the healthiest bugs
 // (sim/src/perfect.rs: a whole party at a time, a plant on any cell, the maze built and broken a cell at a time; a party
 // counts on a rung of health when it is clean on five seeds of the game there and on every rung below, from ×0.75 up). It starts from
@@ -11,6 +12,9 @@
 // plants a garden ends as), so the same run says the different ways to play the level and what it cannot do without:
 // the best party with a branch or a plant absent, against the best of all. --mono: the best party of one plant alone, every plant of the
 // level in turn (a fifth of the time each). --keep: it is kept in balance/perfect/ if it holds more than the one there.
+// --tall K: a garden of K shooters at most (every plant but the pumpkins; docs/rebalance-tall.md); --flat L: no shooter
+// grown past level L (both kept to by the search and by the bot spending what is left); --wide N: N shooters at least
+// (the search keeps to it). Such a party is not --kept.
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { LEVELS, PLANTS } from '../public/data.js';
@@ -24,7 +28,9 @@ const args = process.argv.slice(2), opt = (k, d) => { const i = args.indexOf(k);
 const level = Number(opt('--level', 4)) - 1, SECS = Number(opt('--secs', 600)), STALL = Number(opt('--stall', 60)), RUNS = Number(opt('--runs', 1)), META = opt('--meta', 'exp3');
 const how = { bin: build(), ...(opt('--jobs') ? { jobs: Number(opt('--jobs')) } : {}) }, data = exportData();
 const SMART = { route: 1, place: 'best', upgrades: 'greedy', terrain: true, powers: true, early: true };
-const base = resolve({ level, opts: { ...SMART, meta: META } }), bots = [base, ...(EXPERT ? [{ ...base, policy: EXPERT }] : [])];
+const LIMIT = { ...(opt('--tall') ? { maxShooters: Number(opt('--tall')) } : {}), ...(opt('--flat') ? { flat: Number(opt('--flat')) } : {}), ...(opt('--wide') ? { minShooters: Number(opt('--wide')) } : {}) };
+if (Object.keys(LIMIT).length && args.includes('--keep')) throw new Error('--keep is for the free party only, not with --tall, --flat or --wide');
+const base = resolve({ level, opts: { ...SMART, meta: META, ...LIMIT } }), bots = [base, ...(EXPERT ? [{ ...base, policy: EXPERT }] : [])];
 const FILE = new URL(`./perfect/L${level + 1}.json`, import.meta.url), kept = existsSync(FILE) ? JSON.parse(readFileSync(FILE, 'utf8')) : null;
 const T0 = Date.now(), log = (s) => process.stderr.write(s + '\n'), tm = (s) => log(`  [${Math.round((Date.now() - T0) / 1000)} s] ${s}`), pc = (x) => `×${x.toFixed(2)}`;
 // a party as scan and the tests play it
