@@ -59,8 +59,8 @@ pub struct Data {
 }
 
 impl Level {
-    // wavePay of data.js: the dew for a wave got through. The JS side sends the pay of every wave counted (pay_at);
-    // the bot also asks for the pay before the first wave, so the rule is here too, and read() checks one against the other.
+    // wavePay of data.js: the pay of a wave (shared among its bugs as they are killed, game.rs start_wave). The JS side
+    // sends the pay of every wave counted (pay_at); the rule is here too only for read() to check one against the other.
     pub fn wave_pay(&self, wave: usize) -> f64 {
         (self.pay[0] + (self.pay[1] - self.pay[0]) * (1.0f64).min((0.0f64).max(wave as f64 - 1.0) / (1.0f64).max(self.count as f64 - 2.0)) + 0.5).floor()
     }

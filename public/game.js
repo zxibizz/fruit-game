@@ -1,5 +1,5 @@
 // Simulation: no DOM, plain data. The view reads the state and the events, and calls the actions below.
-import { COLS, ROWS, FRUIT_HP, PLANTS, BUGS, LEVELS, PERKS, BREAK, EARLY_DEW, REFUND, CHEW_GROWTH, POWER_EVERY, POWER_MAX, wavePay, FERTILE, FERTILE_ADD, MUD, NETTLE, NETTLE_BOSS, WEED_COST, BROOD_REWARD, FLY_HP, TUNE, MARK_T, BRANCHES, GUARD_R, THORN_BOSS, PRICK_CAP, SNIFF, FALL_T, statOf, upCost } from './data.js';
+import { COLS, ROWS, FRUIT_HP, PLANTS, BUGS, LEVELS, PERKS, BREAK, EARLY_DEW, REFUND, CHEW_GROWTH, POWER_EVERY, POWER_MAX, wavePool, FERTILE, FERTILE_ADD, MUD, NETTLE, NETTLE_BOSS, WEED_COST, BROOD_REWARD, FLY_HP, TUNE, MARK_T, BRANCHES, GUARD_R, THORN_BOSS, PRICK_CAP, SNIFF, FALL_T, statOf, upCost } from './data.js';
 
 export const VERSION = '0.33.0';
 // The version of a saved level: raised when the balance changes so much that a garden grown under the old rules does
@@ -289,6 +289,7 @@ export function startWave(g) {
   const bonus = earlyBonus(g); g.nextIn = null;
   if (bonus) { gain(g, bonus); g.events.push({ t: 'early', bonus }); }
   const spec = g.L.waves[g.wave]; g.wave++; g.phase = 'wave'; g.waveTime = 0; g.queue = [];
+  const { pool, weight } = wavePool(g.L, g.wave); g.payPerW = weight ? pool / weight : 0; // the dew of the wave, by weight
   // with two anthills the groups of a wave come out of them in turn; a group starts when half the one before is out,
   // but diggers only once all the others are (a hole they eat must not be a road for the rest of the wave)
   let t0 = 0, e = g.wave, last = 0;
@@ -352,9 +353,10 @@ export function usePower(g, kind) {
   g.events.push({ t: 'power', kind });
   return true;
 }
-export const rewardOf = (b) => Math.max(1, Math.round(BUGS[b.kind].reward * (b.brood ? BROOD_REWARD : 1)));
+// What a bug pays when it is killed: its share of the wave's dew by its weight (a brood: its own small reward)
+export const rewardOf = (b, g) => Math.max(1, Math.round(b.brood ? BUGS[b.kind].reward * BROOD_REWARD : BUGS[b.kind].w * (g?.payPerW ?? 0)));
 function kill(g, b, how) {
-  const B = BUGS[b.kind], reward = rewardOf(b);
+  const B = BUGS[b.kind], reward = rewardOf(b, g);
   b.hp = 0; gain(g, reward); g.stats.kills++;
   g.events.push({ t: 'kill', b, reward, how });
   if (B.boss) g.events.push({ t: 'bossDead', b });
@@ -627,7 +629,7 @@ export function step(g, dt) {
       for (const s of g.stubs.slice()) regrow(g, s, 'wave');
       for (const p of g.plants) { p.hp = p.maxHp; p.warded = false; }
       auras(g);
-      const bonus = wavePay(g.L, g.wave); g.phase = 'build'; g.nextIn = BREAK; gain(g, bonus);
+      const bonus = 0; g.phase = 'build'; g.nextIn = BREAK; // (the dew of the wave came with its bugs)
       const powers = g.wave % POWER_EVERY === 0;
       if (powers) for (const k in g.powers) g.powers[k] = Math.min(g.powerMax, g.powers[k] + 1);
       g.events.push({ t: 'waveDone', n: g.wave, bonus, powers });
