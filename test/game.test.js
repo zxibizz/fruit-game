@@ -148,11 +148,12 @@ test('played with thought, every level is won with the fruit whole; not by far, 
 });
 // The learnt strategy (balance/strategy.json) is a fair player, not the best one (and here it has the perks of two
 // stars a level, not three). Till 0.30 it won more than half of the levels; since 0.31 the levels are tuned by far
-// stronger perfect parties (the search plays every party on eight seeds and goes on from the parties of earlier passes),
-// and in 0.31 it won the first level only; retrained on 0.32 (balance/strategy.mjs) it wins five of the twelve. It still gets through more than a third
-// of the waves of every level: a level is not lost at its start.
-test('a fair player wins the first level and gets through a third of the waves of every level', () => {
-  const rs = smart(); assert.ok(rs[0].won, 'the first level is lost');
+// stronger perfect parties. Since the dew comes with the bugs (0.32) a bug let through takes its share of the wave's
+// pay with it, and a player who starts to leak falls further behind: it wins four of the twelve, and not the first
+// (there it plants too few: eight plants grown to the top, where the best party has some forty). It still gets
+// through more than a third of the waves of every level: a level is not lost at its start.
+test('a fair player gets through a third of the waves of every level', () => {
+  const rs = smart();
   rs.forEach((r, n) => assert.ok(r.won || r.wave > r.waves / 3, `level ${n + 1}: lost in wave ${r.wave} of ${r.waves}`));
 });
 
@@ -177,11 +178,12 @@ test('a garden beside the untouched trail loses every level, however it is plant
   lazy.forEach(([n, name], k) => assert.equal(runs[k].won, false, `level ${n + 1}, ${name}`));
 });
 
-test('half a garden or no frost and rain: the levels go worse', () => {
+// (0.32: no longer «half a garden» too — the learnt strategy spreads its dew over too many plants, and capped at 30 it
+// plays better on the later levels, where a few grown plants are now worth more than many cheap ones)
+test('no frost and rain: the levels go worse', () => {
   const score = (list) => list.reduce((s, r) => s + (r.won ? r.hp / r.maxHp : -(1 - (r.wave - 1) / r.waves)), 0), some = [1, 2, 4, 6, 7].map((n) => F + n);
   const base = score(some.map((n) => smart()[n]));
   const P = EXPERT ? { policy: EXPERT } : {};
-  assert.ok(score(playLevels(some.map((n) => [n, { maxPlants: 30, meta: expectedMeta(n), ...P }]))) < base, 'half a garden');
   assert.ok(score(playLevels(some.map((n) => [n, { powers: false, meta: expectedMeta(n), ...P }]))) < base, 'no powers');
 });
 
