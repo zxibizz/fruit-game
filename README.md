@@ -30,9 +30,9 @@ and in portrait (turned there).
   before it (what a player of perfect parties has). The best party known of every level (`balance/party.mjs`, on
   eight seeds of the game) gets through with the fruit never bitten against bugs 1.41–1.48 times healthier than they
   are (the target 1/0.7 = 1.43), so a garden of 67–70% of its strength is the least that keeps the fruit whole, and no
-  plant alone keeps it whole on any level (the best, roses on «Развилка», holds 58% of the best). Every branch is
+  plant alone keeps it whole on any level (the best, roses on «Развилка», holds 53% of the best). Every branch is
   needed on three levels at least and none on every level. The levels are hard: the learnt strategy with the perks of
-  two stars wins «Развилка» alone. The health of a level's bugs (`hp`) sets
+  two stars wins five of the twelve («Развилка», «Старый сад», «Пруд», «Заросли», «Закат»). The health of a level's bugs (`hp`) sets
   that; the size of every wave (`swell`) is set so that no one or two waves are all the difficulty: a big wave, an
   ordinary one and a breather stand at 1.15, 1.3 and 1.6 times the margin of the hardest boss wave. Thorns, spikes and
   nettles together take no more than a quarter of a bug's health (`PRICK_CAP`): with no cap a thorny trail, cold mints
