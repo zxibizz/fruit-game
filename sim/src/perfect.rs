@@ -333,7 +333,9 @@ fn holds_below(cx: &Ctx, plan: &[Step], top: i32) -> bool {
 // risen for so long; goal: and once the best holds that rung (the question was whether a party as good as that is there)
 pub fn search(cx: &Ctx, seeds_plans: Vec<Vec<Step>>, secs: f64, stall: f64, goal: i32, jobs: usize, rng_seed: u64, log: &(dyn Fn(String) + Sync)) -> (Vec<Elite>, Vec<(f64, i32)>, u64) {
     // where every party given stands, and what its garden is made of
-    let elite = |plan: Vec<Step>, k: i32| -> Option<Elite> { if k < K_MIN { return None; }
+    // (a party given with fewer shooters than a wide garden asks for, minShooters, is not one: the kept free party and the
+    // bots' parties do not keep to it)
+    let elite = |plan: Vec<Step>, k: i32| -> Option<Elite> { if k < K_MIN || shooters_of(cx, &plan) < cx.base.min_shooters { return None; }
         let mix = cx.fitness(&plan, k, None).mix?; let runs = cx.fitness(&plan, (k + 1).min(K_MAX), None); Some(Elite { niche: niche_of(&mix), stat: make_of(cx, &plan), plan, k, runs, mix }) };
     let given: Vec<Vec<Step>> = seeds_plans.into_iter().map(|mut p| { tidy(&mut p); clip(cx, &mut p); p }).collect();
     let starts: Vec<Option<Elite>> = std::thread::scope(|sc| {

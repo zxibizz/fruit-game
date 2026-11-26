@@ -15,7 +15,8 @@
 // (a grid of health, eight seeds); then, of the best party played once at the health as it is (seed 7): shooters,
 // pumpkins, how many grown / at the top, the dew it got and the dew left at the end, and the share of the dew spent
 // on plants at levels 3-4 (the families on a branch, from the search). The ratios printed under every level are those
-// of criterion 1: tall12 / flat2 (the owner's band ×1.10–1.15) and tall8 / flat2 (at least ×1.0).
+// of criterion 1, for the gardens that were searched: tallD / wide25 and tall12 / wide25 (the owner's band ×1.10–1.15),
+// and tall12 / flat2.
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { LEVELS } from '../public/data.js';
 import { exportData } from '../sim/js/export.mjs';
@@ -87,7 +88,7 @@ for (const n of levels) {
   // (over the best party of any garden: each is a party of the free game too, and a short search of the free game may
   // find less than one of a bounded garden does)
   const top = Math.max(0, ...mine.map((r) => r.clean));
-  console.log(`  lazy (no maze) won ${lw.map((m) => m.toFixed(2)).join(' / ')} (${LAZY.join(' / ')})${mine.length ? `: the best of them over the best clean party ×${(worst / top).toFixed(2)} (wanted < 0.70)` : ''}`);
+  console.log(`  lazy (no maze) won ${lw.map((m) => m.toFixed(2)).join(' / ')} (${LAZY.join(' / ')})${mine.length ? `: the best of them over the best clean party ${top > 0 ? `×${(worst / top).toFixed(2)}` : '-'} (wanted < 0.70)` : ''}`);
   for (const [a, b, want] of [['tallD', 'wide25', '1.10–1.15'], ['tall12', 'wide25', '1.10–1.15'], ['tall12', 'flat2', '']]) if (get(a) && get(b)) {
     const q = (k) => (get(b)[k] > 0 ? (get(a)[k] / get(b)[k]).toFixed(2) : '-');
     console.log(`  ${a} / ${b}: clean ×${q('clean')}, won ×${q('won')}${want ? ` (wanted ${want})` : ''}`);

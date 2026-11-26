@@ -82,11 +82,11 @@ and in portrait (turned there).
 - `server/` — Node 22, no dependencies: static files and `/healthz`.
 - `node --test test/*.test.js` — pathing and placement rules, economy, eaten plants and roots, bosses, the ground, perks, saving, server, offline
   cache list, no sudden walls of flyers in the waves, the two copies of the simulation against each other (see `sim/`
-  below), and the balance on one seed: the kept perfect party of every level gets through with the fruit whole against bugs 15% healthier and not against bugs 75% healthier, and one plant alone does not; the learnt strategy wins the first level and gets through a third of the waves of every level; the smart bot (`sim/src/bot.rs`: a maze through mud and nettles; it values a
+  below), and the balance on one seed: the kept perfect party of every level gets through with the fruit whole against bugs 15% healthier and not against bugs 75% healthier, and one plant alone does not; the learnt strategy gets through a third of the waves of every level; the smart bot (`sim/src/bot.rs`: a maze through mud and nettles; it values a
   garden by the bugs it stops — walkers and flyers apart, a crowd sharing a single shooter while chili, heat and thorns hit
   many; frost and rain, the perks of two stars a level) must win every level; a garden beside the
   untouched trail must lose every level with the most perks there can be by then (three stars on every level before),
-  planted any of four ways; half a garden or no powers must do worse. The suite takes half a minute and needs `cargo`
+  planted any of four ways; no powers must do worse. The suite takes half a minute and needs `cargo`
   (the bot is native); the full picture is the balance matrix below.
 - Party analytics: `public/telemetry.js` records every party wave by wave — the garden when a wave is called
   (every plant, its level and cell, the roots of eaten ones), the trail through it, the dew and the fruit, the early

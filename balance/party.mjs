@@ -29,7 +29,7 @@ const level = Number(opt('--level', 4)) - 1, SECS = Number(opt('--secs', 600)), 
 const how = { bin: build(), ...(opt('--jobs') ? { jobs: Number(opt('--jobs')) } : {}) }, data = exportData();
 const SMART = { route: 1, place: 'best', upgrades: 'greedy', terrain: true, powers: true, early: true };
 const LIMIT = { ...(opt('--tall') ? { maxShooters: Number(opt('--tall')) } : {}), ...(opt('--flat') ? { flat: Number(opt('--flat')) } : {}), ...(opt('--wide') ? { minShooters: Number(opt('--wide')) } : {}) };
-if (Object.keys(LIMIT).length && args.includes('--keep')) throw new Error('--keep is for the free party only, not with --tall or --flat');
+if (Object.keys(LIMIT).length && args.includes('--keep')) throw new Error('--keep is for the free party only, not with --tall, --flat or --wide');
 const base = resolve({ level, opts: { ...SMART, meta: META, ...LIMIT } }), bots = [base, ...(EXPERT ? [{ ...base, policy: EXPERT }] : [])];
 const FILE = new URL(`./perfect/L${level + 1}.json`, import.meta.url), kept = existsSync(FILE) ? JSON.parse(readFileSync(FILE, 'utf8')) : null;
 const T0 = Date.now(), log = (s) => process.stderr.write(s + '\n'), tm = (s) => log(`  [${Math.round((Date.now() - T0) / 1000)} s] ${s}`), pc = (x) => `×${x.toFixed(2)}`;
