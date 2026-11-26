@@ -16,7 +16,7 @@ import { exportData } from '../sim/js/export.mjs';
 import { build } from '../sim/js/play.mjs';
 import { resolve } from './scenario.mjs';
 import { EXPERT } from './plans.mjs';
-import { scan, SEEDS, TARGET } from './scan.mjs';
+import { scan, SEEDS, TARGET, targetOf } from './scan.mjs';
 
 export { SEEDS, TARGET };
 const args = process.argv.slice(2), opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
@@ -41,7 +41,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   console.log(`the perfect party (the fruit never bitten): bugs how many times healthier the kept party holds, on ${SEEDS.length} seeds; target ${Math.round(TARGET * 100)}% with the perks ${FOR} (three stars, a win, the bots and the one plant: with them too)`);
   console.log('level'.padEnd(22) + 'hp'.padStart(5) + METAS.map((m) => m.padStart(7)).join('') + '  stars    won expert  smart  hp for the target   one plant (of the best)');
   for (const n of levels) { const of = (who) => { const q = clean5.findIndex((t) => t.n === n && t.who === who); return q < 0 ? null : cs[q].margin; }; if (of(FOR) == null) continue;
-    const k = kept(n), one = of('one'), ref = Math.max(of(FOR), of('expert') ?? 0, of('smart') ?? 0), hp = Math.round(LEVELS[n].hp * ref / TARGET * 100) / 100, q = other.findIndex((t) => t.n === n); hps[n + 1] = hp;
-    console.log(`${String(n + 1).padStart(2)} ${LEVELS[n].name.padEnd(19)}${String(LEVELS[n].hp).padStart(5)}${METAS.map((m) => pc(of(m))).join('')}${pc(stars[q].margin)}${pc(won[q].margin)}${pc(of('expert'))}${pc(of('smart'))}${String(hp).padStart(10)}          ${one == null ? '-' : `${k.mono.kind} ${pc(one).trim()} (${Math.round(one / ref * 100)}%)${one / ref >= 1 / TARGET ? '  ONE PLANT IS ENOUGH' : ''}`}`); }
+    const k = kept(n), one = of('one'), ref = Math.max(of(FOR), of('expert') ?? 0, of('smart') ?? 0), hp = Math.round(LEVELS[n].hp * ref / targetOf(n) * 100) / 100, q = other.findIndex((t) => t.n === n); hps[n + 1] = hp;
+    console.log(`${String(n + 1).padStart(2)} ${LEVELS[n].name.padEnd(19)}${String(LEVELS[n].hp).padStart(5)}${METAS.map((m) => pc(of(m))).join('')}${pc(stars[q].margin)}${pc(won[q].margin)}${pc(of('expert'))}${pc(of('smart'))}${String(hp).padStart(10)}          ${one == null ? '-' : `${k.mono.kind} ${pc(one).trim()} (${Math.round(one / ref * 100)}%)${one / ref >= 1 / targetOf(n) ? '  ONE PLANT IS ENOUGH' : ''}`}`); }
   if (opt('--hp')) writeFileSync(opt('--hp'), JSON.stringify(hps));
 }

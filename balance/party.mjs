@@ -22,7 +22,7 @@ import { exportData } from '../sim/js/export.mjs';
 import { build } from '../sim/js/play.mjs';
 import { resolve } from './scenario.mjs';
 import { EXPERT } from './plans.mjs';
-import { scan, search, searchAsync, pool, PAR, TARGET, SEEDS } from './scan.mjs';
+import { scan, search, searchAsync, pool, PAR, targetOf, SEEDS } from './scan.mjs';
 
 const args = process.argv.slice(2), opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const level = Number(opt('--level', 4)) - 1, SECS = Number(opt('--secs', 600)), STALL = Number(opt('--stall', 60)), RUNS = Number(opt('--runs', 1)), META = opt('--meta', 'exp3');
@@ -124,7 +124,7 @@ if (without.length) {
   console.log(`  без растения целиком: ${without.filter((w) => !w.f.includes('.')).sort((a, b) => b.cost - a.cost).map(show).join(', ') || '—'}`);
 }
 tm('done'); if (one) console.log(`  one plant alone: ${one.kind} ${pc(one.margin)} — ${Math.round(one.margin / m.clean.margin * 100)}% of the best`);
-const hp = m.clean.margin > 0 ? Math.round(LEVELS[level].hp * m.clean.margin / TARGET * 100) / 100 : null;
+const TARGET = targetOf(level), hp = m.clean.margin > 0 ? Math.round(LEVELS[level].hp * m.clean.margin / TARGET * 100) / 100 : null;
 console.log(`  for a garden of ${Math.round(100 / TARGET)}% of its strength to be the least that keeps the fruit whole: L${level + 1}.hp ${LEVELS[level].hp} → ${hp}`);
 const res = { level: level + 1, meta: META, secs: SECS, runs: runs.map((r) => ({ margin: r.margin, tried: r.tried, parties: r.parties, wavesSaved: r.waves_saved, history: r.history })), plan: best.plan, clean: m.clean, stars: m.stars.margin, won: m.won.margin, mono: one, unlike: unlike.map((e) => ({ margin: e.margin, scanned: e.scanned ?? null, mix: e.mix })), without, makes: arch.length, archive: arch.slice(0, 60).map((e) => ({ margin: e.margin, mix: e.mix, plan: e.plan })), hp: { now: LEVELS[level].hp, suggested: hp } };
 if (opt('--out')) { mkdirSync(dirname(opt('--out')), { recursive: true }); writeFileSync(opt('--out'), JSON.stringify(res)); }

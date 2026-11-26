@@ -5,9 +5,9 @@ import { PRICK_CAP, LEVELS, PLANTS, BUGS, PLANT_ORDER, PERKS, PERK_ORDER, WEED_C
 import { expectedMeta, fullMeta, fixedMap, lazyFixed } from '../balance/scenario.mjs';
 import { EXPERT } from '../balance/plans.mjs';
 import { kept, partyOf, clean, SEEDS } from '../balance/perfect.mjs';
-import { scan } from '../balance/scan.mjs';
+import { scan, targetOf } from '../balance/scan.mjs';
 // the levels on an open field (the fixed paths of the first ones come before them)
-const F = LEVELS.findIndex((L) => L.name === 'Лужайка');
+const F = LEVELS.findIndex((L) => L.name === 'Лужайка'), FIRST = 0;
 import { play } from '../sim/js/play.mjs';
 import { waveLint } from '../balance/lint.mjs';
 import { LEAK } from '../balance/rules.mjs';
@@ -138,11 +138,15 @@ test('played with thought, every level is won with the fruit whole; not by far, 
   const ks = LEVELS.map((_, n) => kept(n)); ks.forEach((k, n) => assert.ok(k, `no party kept for level ${n + 1}`));
   // (as the levels are tuned: balance/scan.mjs, a grid of health in steps of 5% on five seeds of the game, the margin
   // of a party the last rung before the first it is bitten on)
-  const best = LEVELS.map((_, n) => ({ level: n, opts: partyOf(n, ks[n], 'exp3') }));
-  scan(best, { from: 0, to: 3, quiet: true }).forEach((r, n) => assert.ok(r.open, `level ${n + 1}: bitten against bugs ×${r.grid.find((g) => g[2] < SEEDS.length)?.[1]} — the best party must hold 15% more`));
-  scan(best, { from: 9, to: 14, quiet: true }).forEach((r, n) => assert.ok(!r.open, `level ${n + 1}: clean against bugs up to twice as healthy — too easy`));
+  // (the band around the level's target — balance/scan.mjs targetOf: from four rungs of 5% below it, clean, to seven
+  // above it, bitten: with the target of 0.31, ×1.43, that was ×1.16 and ×1.98)
+  const best = LEVELS.map((_, n) => ({ level: n, opts: partyOf(n, ks[n], 'exp3') })), kT = (n) => Math.round(Math.log(targetOf(n)) / Math.log(1.05));
+  best.forEach((t, n) => { const [lo] = scan([t], { from: 0, to: kT(n) - 4, quiet: true }); assert.ok(lo.open, `level ${n + 1}: bitten against bugs ×${lo.grid.find((g) => g[2] < SEEDS.length)?.[1]} — the best party must hold more`); });
+  best.forEach((t, n) => { const [hi] = scan([t], { from: kT(n) + 2, to: kT(n) + 7, quiet: true }); assert.ok(!hi.open, `level ${n + 1}: clean against bugs far healthier than the target — too easy`); });
+  // («Развилка», the first level, is the lesson: since the threshold is half the best party (0.32), roses alone get
+  // through it — the owner keeps it so)
   const one = LEVELS.map((_, n) => ({ level: n, opts: partyOf(n, ks[n], 'exp3', true) }));
-  scan(one, { from: -6, to: 0, quiet: true }).forEach((r, n) => assert.ok(!r.open, `level ${n + 1}: ${ks[n].mono.kind} alone gets through with the fruit whole`));
+  scan(one, { from: -6, to: 0, quiet: true }).forEach((r, n) => assert.ok(n === FIRST || !r.open, `level ${n + 1}: ${ks[n].mono.kind} alone gets through with the fruit whole`));
 });
 // The learnt strategy (balance/strategy.json) is a fair player, not the best one (and here it has the perks of two
 // stars a level, not three). Till 0.30 it won more than half of the levels; since 0.31 the levels are tuned by far
@@ -158,12 +162,14 @@ test('a fair player wins the first level and gets through a third of the waves o
 // matrix (node balance/run.mjs full); these are its hard rules on one seed, quick enough for every run of the tests.
 test('a garden beside the untouched trail loses every level, however it is planted, with the most perks there can be by then', () => {
   // (where there is no maze to build, a lazy garden is one kind of plant on every bed, never grown to a branch)
-  const soft = [F - 2, F - 1, F + 2, F + 5, F + 6, F + 8], PLACES = ['best', 'end', 'start', 'spread']; // the two meadows, «Старый сад», «Два муравейника», «Заросли» and «Закат»: a lazy garden with every perk may still get through (bitten: never with the fruit whole)
+  // («Развилка», the first level, is the lesson: since the threshold is half the best party (0.32) a garden with no maze
+  // gets through it — the owner keeps it so)
+  const soft = [FIRST, F - 2, F - 1, F + 2, F + 5, F + 6, F + 8], PLACES = ['best', 'end', 'start', 'spread']; // the two meadows, «Старый сад», «Два муравейника», «Заросли» and «Закат»: a lazy garden with every perk may still get through (bitten: never with the fruit whole)
   const open = LEVELS.map((_, n) => n).filter((n) => !fixedMap(n)), fixed = LEVELS.map((_, n) => n).filter(fixedMap);
   const usual = playLevels(open.map((n) => [n, { route: 0, meta: expectedMeta(n) }]));
   open.forEach((n, a) => {
     const r = usual[a];
-    if (n < F - 2) assert.equal(r.won, false, `level ${n + 1}`); // (the two meadows before «Лужайка» are small: a maze on them pays little, their gardens are told apart by what is planted)
+    if (n < F - 2 && n !== FIRST) assert.equal(r.won, false, `level ${n + 1}`); // (the two meadows before «Лужайка» are small: a maze on them pays little, their gardens are told apart by what is planted)
     if (n >= F) assert.equal(r.won, false, `level ${n + 1}`);
     if (n >= F) assert.ok(!clean(r), `level ${n + 1}: a garden with no maze gets through with the fruit whole`); // (on the small meadow of «Поляна» it may: the maze there is the first one, and pays little)
     // («Опушка» is the exception: a row of chili with mint holds there until the last waves, and loses in them)
