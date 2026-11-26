@@ -102,11 +102,18 @@ export const FLY_HP = .4;
 export const TUNE = { hpGrowth: 3, bossEscort: .4, gap: .4 };
 // Frost and rain come back (up to POWER_MAX of each) after every POWER_EVERY-th wave.
 export const POWER_EVERY = 10, POWER_MAX = 2;
-// Most of the dew of a level is the pay for every wave got through: it grows evenly from pay[0] after the first wave
-// to pay[1] after the last but one (the last wave ends the level). A bug gives its own small reward, the same on
-// every level and in every wave: bugs grow in number wave by wave, and when they were the main income, dew was short
-// while the maze was being built and piled up by the end, and what a bug gave had to be scaled level by level and
-// faded wave by wave.
+// The pay of a wave: it grows evenly from pay[0] for the first wave to pay[1] for the last but one (the last wave ends
+// the level). Till 0.32 it was paid when the wave was got through, and a bug gave its own small reward; since 0.32
+// both together are the dew of the wave, paid by its bugs as they are killed (wavePool below).
+// The dew of a wave (since 0.32 every bit of it comes from the bugs killed, at once — the owner: a crowd ground down
+// should pay there and then): what the wave's pay and its bugs' own rewards came to before, shared among the bugs of
+// the wave by their weight `w` (an elite bug, a boss most of all, pays more). A bug that gets to the fruit pays nothing;
+// the brood of a boss pays its own small reward (BROOD_REWARD). The last wave ends the level and has no pay of its own.
+export function wavePool(L, wave) {
+  const spec = L.waves[wave - 1] || []; let pool = wave < L.count ? wavePay(L, wave) : 0, weight = 0;
+  for (const [kind, n] of spec) { pool += n * BUGS[kind].reward; weight += n * BUGS[kind].w; }
+  return { pool, weight };
+}
 export const wavePay = (L, wave) => Math.round(L.pay[0] + (L.pay[1] - L.pay[0]) * Math.min(1, Math.max(0, wave - 1) / Math.max(1, L.count - 2)));
 
 // Ground that changes the game. fertile: a plant on it is FERTILE times stronger (damage, health) and its

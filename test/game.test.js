@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame, step, place, placeProblem, plantOn, plantProblem, trail, trails, startWave, removePlant, upgrade, upgradeCost, usePower, earlyBonus, stubAt, refund, pstat, clearWeed, snapshot, restore, bugHp, COLS, ROWS, BREAK } from '../public/game.js';
-import { PRICK_CAP, LEVELS, PLANTS, BUGS, PLANT_ORDER, PERKS, PERK_ORDER, WEED_COST, FERTILE, MARK_T, wavePay } from '../public/data.js';
+import { PRICK_CAP, LEVELS, PLANTS, BUGS, PLANT_ORDER, PERKS, PERK_ORDER, WEED_COST, FERTILE, MARK_T, wavePay, wavePool } from '../public/data.js';
 import { expectedMeta, fullMeta, fixedMap, lazyFixed } from '../balance/scenario.mjs';
 import { EXPERT } from '../balance/plans.mjs';
 import { kept, partyOf, clean, SEEDS } from '../balance/perfect.mjs';
@@ -239,7 +239,7 @@ test('a digger eats through the wall in its way; the roots stay a hole till the 
   assert.equal(g.phase, 'build'); assert.equal(g.stubs.length, 0);
   const back = g.grid[s.j][s.i]; assert.equal(back?.type, 'rose'); assert.equal(back.lvl, lvl); assert.equal(back.hp, back.maxHp);
   assert.equal(bitten.hp, bitten.maxHp, 'the bitten plants are whole again');
-  assert.equal(g.dew, dew + wavePay(g.L, 1), 'for free'); assert.equal(trail(g).length, long);
+  assert.equal(g.dew, dew, 'for free (and no pay at the end of a wave: since 0.32 its dew comes with its bugs)'); assert.equal(trail(g).length, long);
 });
 
 test('a digger walks round when the way round is short', () => {
@@ -373,22 +373,33 @@ test('a level in progress is saved between waves and comes back as it was', () =
   assert.equal(restore({ ...snap, v: 7 }), null, 'a save of the rules with healing is dropped'); assert.equal(restore({ v: 0 }), null); assert.equal(restore({ v: 1, level: 0, plants: 'x' }), null);
 });
 
-test('a wave got through pays by the level, a bug gives its own reward whatever the level and the wave', () => {
+test('the dew of a wave comes with its bugs: shared by their weight, paid as each is killed, none at the end', () => {
+  // (since 0.32, the owner: a crowd ground down pays there and then) the wave's dew is what its pay and its bugs' own
+  // rewards came to before; the pay of a level grows over it, and the last wave has none of its own
   for (const L of LEVELS) {
     assert.equal(wavePay(L, 1), L.pay[0]); assert.equal(wavePay(L, L.count - 1), L.pay[1]);
     for (let w = 2; w < L.count; w++) assert.ok(wavePay(L, w) >= wavePay(L, w - 1));
+    const last = wavePool(L, L.count), sum = L.waves[L.count - 1].reduce((t, [k, n]) => t + n * BUGS[k].reward, 0);
+    assert.equal(last.pool, sum);
   }
   for (const level of [F, F + 4]) {
     const g = createGame(level); g.dew = 5000;
     for (let j = 0; j < ROWS; j++) for (const i of [9, 11]) place(g, 'pepper', i, j);
     for (const p of g.plants.slice()) { upgrade(g, p); upgrade(g, p); }
-    startWave(g); let kills = 0, paid = null;
+    const dew0 = g.dew; startWave(g); const { pool } = wavePool(g.L, 1); let paid = null, got = 0, bugs = 0; const by = {};
     for (let n = 0; n < 60 * 200 && paid == null; n++) {
       step(g, 1 / 60);
-      for (const e of g.events) { if (e.t === 'kill') { assert.equal(e.reward, BUGS[e.b.kind].reward); kills++; } if (e.t === 'waveDone') paid = e.bonus; }
+      for (const e of g.events) {
+        if (e.t === 'kill' && !e.b.brood) { got += e.reward; bugs++; by[BUGS[e.b.kind].w] = e.reward; }
+        if (e.t === 'bite') bugs++;
+        if (e.t === 'waveDone') paid = e.bonus;
+      }
       g.events.length = 0;
     }
-    assert.ok(kills > 0); assert.equal(paid, LEVELS[level].pay[0]);
+    assert.equal(paid, 0, 'nothing at the end of the wave');
+    assert.ok(bugs > 0 && Math.abs(got - pool) <= bugs, `the bugs killed paid ${got} of the wave's ${pool}`);
+    assert.equal(g.dew, dew0 + got);
+    const ws = Object.keys(by).map(Number).sort((a, b) => a - b); for (let k = 1; k < ws.length; k++) assert.ok(by[ws[k]] >= by[ws[k - 1]], 'a heavier bug pays more');
   }
 });
 

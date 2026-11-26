@@ -47,10 +47,12 @@ and in portrait (turned there).
   every level (`TUNE.hpGrowth` of its own health a wave). Since 0.32 the first level of
   a shooter is dear and growing pays: a few grown plants hold a level about a tenth better than many cheap ones (the
   owner's call; `balance/tallwide.mjs` measures it), while a pumpkin stays cheap — the maze is built of pumpkins.
-  There is never dew for all of it. Most of
-  the dew is the pay for every wave got through, growing evenly over a level (`pay` of the level); a bug gives its own
-  small reward, the same everywhere. Bosses are strong but a grown garden kills them. No
-  plant makes dew (it comes from finished waves, beaten bugs and waves called early). Caterpillars bite plants, mole
+  There is never dew for all of it. Since 0.32 the
+  dew comes as the bugs are killed, at once (the owner: a crowd ground down should pay there and then): the dew of a
+  wave — its pay, growing evenly over a level (`pay` of the level), and what its bugs gave before — is shared among
+  its bugs by their weight, an elite bug and a boss paying more, and a bug that gets to the fruit pays nothing
+  (`wavePool` in `public/data.js`). Bosses are strong but a grown garden kills them. No
+  plant makes dew (it comes from beaten bugs and waves called early). Caterpillars bite plants, mole
   crickets eat through walls. **No plant is healed in a wave**: its health is all it has for the wave, an eaten plant
   leaves roots — a hole the bugs walk through, where nothing can be planted — till the wave is over; then the whole
   garden grows back for nothing, at its levels and in full health. The rain (rare: it comes back every tenth wave)

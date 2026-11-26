@@ -2,7 +2,7 @@
 import * as A from './art.js';
 import {
   createGame, step, plantOn, plantProblem, blockingCells, previewTrails, trails, upgrade, upgradeCost, branchOpen, removePlant, refund, isFresh,
-  startWave, earlyBonus, wavePreview, usePower, stars, stubAt, bugHp, rewardOf, pstat, clearWeed,
+  startWave, earlyBonus, wavePreview, usePower, stars, stubAt, bugHp, pstat, clearWeed,
   snapshot, restore, digTrails, digHills, COLS, ROWS, BREAK,
 } from './game.js';
 import { PLANTS, BUGS, LEVELS, PERKS, PERK_ORDER, PLANT_ORDER, WEED_COST, FERTILE, TUNE, FLY_HP, BRANCHES, FALL_T, statOf } from './data.js';
@@ -95,7 +95,7 @@ const T = {
   zoomHint: 'Поле можно приблизить двумя пальцами',
   undoHint: 'Ошиблась клеткой? Пока волна не началась, растение продаётся за полную цену',
   won: 'Яблоко спасено!', lost: 'Жуки съели яблоко', retry: 'Ещё раз', levels: 'Уровни', nextLevel: 'Дальше', resume: 'Продолжить',
-  pause: 'Пауза', restart: 'Заново', waveDone: (b) => `Волна пройдена  +${b}`, early: (b) => `+${b} за смелость`,
+  pause: 'Пауза', restart: 'Заново', waveDone: (b) => (b ? `Волна пройдена  +${b}` : 'Волна пройдена'), early: (b) => `+${b} за смелость`,
   screams: ['Ай!', 'Ой-ой!', 'Больно!', 'Кусь?!', 'Ай-ай!'],
   up: 'Улучшить', sell: 'Продать', max: 'Максимум', lvl3: 'На 3 уровне', top: 'На 4 уровне', pick: 'Выбери ветку', opensAt: (n) => `откроется на ${n} уровне`, branches: 'Ветки на 3 уровне', newBranch: 'Новая ветка', webbed: 'В паутине!', onFertile: 'На чернозёме: +30%', fullRefund: 'вернётся вся роса',
   weed: 'Убрать куст', perks: 'Улучшения', guide: 'Справочник', sound: 'Звук', music: 'Музыка', close: 'Закрыть', ok: 'Понятно', reset: 'Сбросить',
@@ -428,7 +428,7 @@ function bugStats(kind, b) {
   if (B.dig) out.push('прогрызает стены');
   if (B.chew) out.push('кусает растения');
   if (B.mend) out.push('лечит жуков');
-  out.push(`кусает яблоко на ${B.bite}`, `+${b ? rewardOf(b) : B.reward} росы`);
+  out.push(`кусает яблоко на ${B.bite}`); // (no dew of its own since 0.32: a bug pays its share of the wave's dew)
   return out;
 }
 // The numbers of a plant: [label, value at this level, value at the next one or null]. On the field (p given) they

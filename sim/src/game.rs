@@ -54,6 +54,7 @@ pub struct Game<'a> {
     pub meta: Vec<usize>, // the tier of the perk of every plant kind
     pub grid: [Cell; N], pub tiles: [Tile; N], pub entries: Vec<(i32, i32)>, pub fruit: (i32, i32),
     pub dew: f64, pub hp: f64, pub max_hp: f64, pub wave: usize, pub waves: usize, pub phase: Phase, pub next_in: Option<f64>,
+    pub pay_per_w: f64, // the dew of the wave a bug pays by its weight (game.js payPerW)
     pub bugs: Vec<Bug>, pub shots: Vec<Shot>, pub plants: Vec<Plant>, pub stubs: Vec<Stub>, pub events: Vec<Event>, pub queue: VecDeque<Queued>,
     pub time: f64, pub wave_time: f64, pub frost: f64, pub rain: f64, pub power_max: f64, pub next_id: u32, rng: u32,
     pub refund: f64, pub dist: [f64; N], pub dig: [f64; N], pub stats: Stats,
@@ -80,7 +81,7 @@ impl<'a> Game<'a> {
         let mut g = Game {
             d, lv, level, seed, meta: d.plants.iter().map(|p| tier_of(&p.name)).collect(),
             grid: [Cell::Empty; N], tiles: [Tile::None; N], entries: lv.entries.iter().map(|&j| (COLS - 1, j)).collect(), fruit: lv.fruit,
-            dew: lv.dew + tier("dew"), hp, max_hp: hp, wave: 0, waves: lv.waves.len(), phase: Phase::Build, next_in: None,
+            dew: lv.dew + tier("dew"), hp, max_hp: hp, wave: 0, waves: lv.waves.len(), phase: Phase::Build, next_in: None, pay_per_w: 0.0,
             bugs: Vec::new(), shots: Vec::new(), plants: Vec::new(), stubs: Vec::new(), events: Vec::new(), queue: VecDeque::new(),
             time: 0.0, wave_time: 0.0, frost: 1.0 + clouds, rain: 1.0 + clouds, power_max: d.power_max + clouds, next_id: 1, rng: seed,
             refund: if refund != 0.0 { refund } else { d.refund },
@@ -317,6 +318,10 @@ impl<'a> Game<'a> {
         let bonus = self.early_bonus(); self.next_in = None;
         if bonus != 0.0 { self.gain(bonus); }
         let lv = self.lv; let spec = &lv.waves[self.wave]; self.wave += 1; self.phase = Phase::Wave; self.wave_time = 0.0;
+        // the dew of the wave, shared among its bugs by weight (data.js wavePool): its pay (none for the last) and their rewards
+        let mut pool = if self.wave < lv.count { lv.pay_at[self.wave - 1] } else { 0.0 }; let mut weight = 0.0;
+        for g in spec { let b = &self.d.bugs[g.kind]; pool += g.count as f64 * b.reward; weight += g.count as f64 * b.w; }
+        self.pay_per_w = if weight != 0.0 { pool / weight } else { 0.0 };
         // with two anthills the groups of a wave come out of them in turn
         // (a group starts when half the one before is out, but diggers only once all the others are)
         let mut q: Vec<Queued> = Vec::new(); let mut t0 = 0.0; let mut e = self.wave; let mut last = 0.0f64;
@@ -394,7 +399,7 @@ impl<'a> Game<'a> {
     fn kill(&mut self, bi: usize) {
         let d = self.d; let (kind, brood, fly, e) = { let b = &self.bugs[bi]; (b.kind, b.brood, b.fly, b.e) };
         let bd = &d.bugs[kind];
-        let reward = round(bd.reward * (if brood { d.brood_reward } else { 1.0 })).max(1.0);
+        let reward = round(if brood { bd.reward * d.brood_reward } else { bd.w * self.pay_per_w }).max(1.0);
         self.bugs[bi].hp = 0.0; self.gain(reward); self.stats.kills += 1.0;
         self.events.push(Event::Kill { reward });
         if let Some((k, n)) = bd.split { if !fly { for _ in 0..n { self.spawn(k, e, Some(bi)); } } }
@@ -748,7 +753,7 @@ impl<'a> Game<'a> {
                 for id in ids { self.regrow_stub(id); }
                 for p in self.plants.iter_mut() { p.hp = p.max_hp; p.warded = false; }
                 self.auras();
-                let bonus = self.lv.pay_at[self.wave - 1]; self.phase = Phase::Build; self.next_in = Some(self.d.brk); self.gain(bonus);
+                let bonus = 0.0; self.phase = Phase::Build; self.next_in = Some(self.d.brk); // (the dew of the wave came with its bugs)
                 if (self.wave as f64) % self.d.power_every == 0.0 { self.frost = self.power_max.min(self.frost + 1.0); self.rain = self.power_max.min(self.rain + 1.0); }
                 self.events.push(Event::WaveDone { bonus });
             }
