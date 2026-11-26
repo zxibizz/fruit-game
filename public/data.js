@@ -278,7 +278,7 @@ export const LEVELS = [
     dew: 530, pay: [285, 495],
     plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
     swell: [1, 1, 1.75, 1.15, 1, 1.15, 2.5, 2, 2.5, 1.95, 1, 2.5, 2.5, .5, 1.3, 1, 1.55, 1.45, 1.35, 1.45, .65, 1],
-    hp: 1.15, count: 22, budget: [10.5, 5.3], roster: [['ant', 1], ['aphid', 2], ['grasshopper', 3], ['beetle', 4], ['butterfly', 5], ['snail', 6], ['caterpillar', 8], ['cricket', 11], ['wasp', 14]], boss: [[11, 'queen', 1], [22, 'queen', 2]],
+    hp: 1.25, count: 22, budget: [10.5, 5.3], roster: [['ant', 1], ['aphid', 2], ['grasshopper', 3], ['beetle', 4], ['butterfly', 5], ['snail', 6], ['caterpillar', 8], ['cricket', 11], ['wasp', 14]], boss: [[11, 'queen', 1], [22, 'queen', 2]],
   },
   {
     name: 'Старый сад', theme: 'orchard', feature: 'mud',
@@ -346,7 +346,7 @@ export const LEVELS = [
     dew: 620, pay: [350, 625],
     plants: ['pumpkin', 'rose', 'pepper', 'mint', 'flytrap'],
     swell: [1, 1, 1.25, 1.25, .8, .95, .75, .9, .5, .8, .7, .45, 1, .75, 1.7, 1.35, .55, 1, .65, .45, 2.2, 1.4, .85, 1.65, .75, 1],
-    hp: 1.78, count: 26, budget: [10.7, 5.1], roster: [['ant', 1], ['aphid', 2], ['beetle', 3], ['wasp', 5], ['caterpillar', 7], ['firefly', 9], ['cricket', 11], ['pillbug', 14], ['snail', 17]], boss: [[13, 'queen', 1], [26, 'rhino', 2]],
+    hp: 1.84, count: 26, budget: [10.7, 5.1], roster: [['ant', 1], ['aphid', 2], ['beetle', 3], ['wasp', 5], ['caterpillar', 7], ['firefly', 9], ['cricket', 11], ['pillbug', 14], ['snail', 17]], boss: [[13, 'queen', 1], [26, 'rhino', 2]],
   },
   {
     name: 'Заросли', theme: 'orchard', feature: 'weed',
