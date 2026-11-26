@@ -28,13 +28,12 @@ and in portrait (turned there).
   hornet flies over the maze, the spider webs the plants.
 - **Balance** (0.32: tall against wide, [docs/rebalance-tall.md](docs/rebalance-tall.md); the levels retuned the 0.31 way): a level is tuned by its perfect party, played with the perks of three stars on every level
   before it (what a player of perfect parties has). The best party known of every level (`balance/party.mjs`, on
-  eight seeds of the game) gets through with the fruit never bitten against bugs about twice as healthy as they are
-  (the target 1/0.5 = 2, `TARGET` in `balance/scan.mjs`; till 0.32 it was 1/0.7), so a garden of half its strength is
-  the least that keeps the fruit whole. «Опушка» and «Болото» are tuned to 60% (`TARGETS`): at half, a garden there
-  with no maze got through. On «Развилка», the first level and the lesson, a garden with no maze and roses alone get
-  through (the owner keeps it so; the tests know it); on every other level no plant alone keeps the fruit whole.
-  Every branch is needed on one level at least and none on every level. The learnt strategy with the perks of two
-  stars wins most levels. The health of a level's bugs (`hp`) sets
+  eight seeds of the game) gets through with the fruit never bitten against bugs 1.41–1.48 times healthier than they
+  are (the target 1/0.7 = 1.43, `TARGET` in `balance/scan.mjs`; 0.32 tried 1/0.5 and came back), so a garden of
+  67–70% of its strength is the least that keeps the fruit whole, and no plant alone keeps it whole on any level
+  (the best, roses on «Развилка» and «Крапивный лог», hold 53% of the best). Every branch is needed on one level at
+  least and none on every level. The learnt strategy with the perks of two
+  stars wins some levels and gets through a third of the waves of every one. The health of a level's bugs (`hp`) sets
   that; the size of every wave (`swell`) is set so that no one or two waves are all the difficulty: a big wave, an
   ordinary one and a breather stand at 1.15, 1.3 and 1.6 times the margin of the hardest boss wave. Thorns, spikes and
   nettles together take no more than a quarter of a bug's health (`PRICK_CAP`): with no cap a thorny trail, cold mints
