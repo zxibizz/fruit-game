@@ -22,11 +22,10 @@ import { build, trustOf } from '../sim/js/play.mjs';
 // and ×1.05 on all eight, and that champion pushed the party of its make that held ×1.41 on eight out of the archive.
 export const SEEDS = [7, 11, 13, 17, 19, 23, 29, 31];
 export const SEARCH_SEEDS = SEEDS;
-// The margin the best party known of a level is tuned to: a garden of half its strength is the least that keeps the
-// fruit whole (the owner, 0.32; till then 1 / 0.7). «Опушка» and «Болото» are tuned to 60%: at half, a garden
-// there with no maze (beside the untouched trail) got through; «Развилка», the first level, is let be so (the tests).
-export const TARGET = 1 / 0.5;
-export const TARGETS = { 4: 1 / 0.6, 10: 1 / 0.6 };
+// The margin the best party known of a level is tuned to: a garden of 70% of its strength is the least that keeps the
+// fruit whole (the owner: tried at 50% for 0.32, back at 70% once the dew became a quarter shorter and came with the bugs).
+export const TARGET = 1 / 0.7;
+export const TARGETS = {};
 export const targetOf = (level) => TARGETS[level] ?? TARGET;
 const JOBS = Math.max(1, availableParallelism() - 1);
 // the bot's trust in its own count (balance/trust.json), as sim/js/play.mjs hands it over
