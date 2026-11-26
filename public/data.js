@@ -211,7 +211,7 @@ export const LEVELS = [
     dew: 390, pay: [160, 300],
     plants: ['pumpkin', 'rose', 'pepper', 'mint'],
     swell: [1, 1, .75, 1.85, .95, .7, 1, 1.4, .75, .6, 1.95, 1.2, .8, .6, 1],
-    hp: 1.13, count: 15, budget: [4.3, 2.3], roster: [['ant', 1], ['beetle', 3], ['grasshopper', 5], ['aphid', 7], ['caterpillar', 9]], boss: [[15, 'rhino', 1]],
+    hp: .96, count: 15, budget: [4.3, 2.3], roster: [['ant', 1], ['beetle', 3], ['grasshopper', 5], ['aphid', 7], ['caterpillar', 9]], boss: [[15, 'rhino', 1]],
   },
   {
     name: 'Поляна', theme: 'meadow', feature: 'meadow',

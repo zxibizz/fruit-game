@@ -30,7 +30,8 @@ and in portrait (turned there).
   before it (what a player of perfect parties has). The best party known of every level (`balance/party.mjs`, on
   eight seeds of the game) gets through with the fruit never bitten against bugs 1.41–1.48 times healthier than they
   are (the target 1/0.7 = 1.43, `TARGET` in `balance/scan.mjs`; 0.33 tried 1/0.5 and came back), so a garden of
-  67–70% of its strength is the least that keeps the fruit whole, and no plant alone keeps it whole on any level
+  67–70% of its strength is the least that keeps the fruit whole (on «Развилка», the first level, where no one has
+  perks yet, 60%: `TARGETS`, since 0.34.1), and no plant alone keeps it whole on any level
   (the best, roses on «Развилка» and «Крапивный лог», hold 53% of the best). Every branch is needed on one level at
   least and none on every level. The learnt strategy with the perks of two
   stars wins some levels and gets through a third of the waves of every one. The health of a level's bugs (`hp`) sets
