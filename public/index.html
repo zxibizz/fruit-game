@@ -49,6 +49,7 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 #home .sub{font-size:14px;opacity:.92;text-shadow:0 2px 0 rgba(0,0,0,.25);text-align:center}
 #home .menu{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
 #home .menu .btn{font-size:15px;padding:8px 14px;border-radius:15px}
+#bHub{text-decoration:none;display:inline-block}#bHub[hidden]{display:none}
 #levels{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:100%;max-width:440px;margin:auto 0;padding:4px 2px 8px;flex:0 1 auto;min-height:0}
 .lv{position:relative;min-height:92px;border-radius:20px;background:linear-gradient(#fffaf0,#f2d9a8);color:#6a3e1c;border:3px solid #6a3e1c;box-shadow:0 5px 0 #6a3e1c,0 8px 16px rgba(0,0,0,.3);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:6px 4px}
 .lv b{font-size:26px;line-height:1}.lv span{font-size:12.5px;line-height:1.1;text-align:center}.lv i{font-style:normal;font-size:17px;color:#f2a81a;letter-spacing:1px;text-shadow:0 2px 0 #b07a00;line-height:1.1}
@@ -115,7 +116,7 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
     <div class="logo"><img id="logo" alt=""><h1>Fruit Defense</h1></div>
     <div class="sub">Посади сад — не пусти жуков к яблоку</div>
     <button class="btn" id="cont" hidden></button>
-    <div class="menu"><button class="btn alt" id="bPerks"></button><button class="btn alt" id="bGuide">Справочник</button><button class="btn alt" id="bSet">Звук</button></div>
+    <div class="menu"><button class="btn alt" id="bPerks"></button><button class="btn alt" id="bGuide">Справочник</button><button class="btn alt" id="bSet">Звук</button><a class="btn alt" id="bHub" href="../" hidden>Все игры</a></div>
     <button class="btn" id="upd" hidden>Обновить игру</button>
   </div>
   <div id="levels"></div>

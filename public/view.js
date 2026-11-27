@@ -1493,6 +1493,8 @@ async function boot() {
   addEventListener('pagehide', (e) => { if (game && !e.persisted) tm.quit(game); tm.flush(true); }); tm.flush();
   resize(); drawLogo(); showHome(true);
   game = createGame(0); paused = true; // a field behind the menu
+  // opened inside the hub (all the family's games on one address, the game under its own path): a way back to it
+  $('bHub').hidden = new URL('..', location.href).pathname === new URL('.', location.href).pathname;
   $('bPerks').onclick = () => { sfx.tap(); openPerks(); }; $('bGuide').onclick = () => { sfx.tap(); guideTab = 'plants'; openGuide(); }; $('bSet').onclick = () => { sfx.tap(); openSound(); };
   $('cont').onclick = () => { goFullscreen(); sfx.tap(); resumeLevel(); };
   requestAnimationFrame(frame);
