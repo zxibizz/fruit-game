@@ -8,7 +8,7 @@
 // step() — optional, called after every history step that stayed in the page (a game that keeps something in the
 // address puts it right there: each entry has its own address).
 //
-// How: while the game is inside, extra history entries ("traps", up to two) lie on top of the page's own. Back takes
+// How: while the game is inside, extra history entries ("traps", MAX of them) lie on top of the page's own. Back takes
 // one away, the page stays, and popstate tells us. When the game goes home the traps are taken off (history.go), so
 // that back on the home screen leaves the page. A forward step onto a trap the game is no longer in is undone.
 // - Browsers skip, on back, entries a page added without the player's say (their guard against pages that trap the
@@ -17,16 +17,17 @@
 //   entry. WebKit: an entry added more than 10 s after the last activation is skipped together with the one before
 //   it. So traps are added only on the browser's own word that the player has just acted (navigator.userActivation)
 //   and only after a real tap since the last history step (a click event — the end of a swipe or some keys are
-//   not an activation everywhere). One tap is enough for both traps. In play: the first back pauses, the second does
-//   nothing; a third in a row, with no tap between, does leave the paused game for the hub — no page can prevent
-//   that. Any tap (the pause menu's own buttons) puts the traps back.
+//   not an activation everywhere). One tap is enough for all the traps: the first back pauses, the next ones do
+//   nothing, and any tap (the pause menu's own buttons) fills the traps up again. Only MAX + 1 backs in a row with no
+//   tap between leave the paused game for the hub — no page can prevent that. With two traps the owner's iPhone did
+//   it in two seconds (three quick swipes: pause, nothing, the hub), hence eight.
 // - The game's state is looked at on a timer, not at the game's calls: the game needs no change beyond the two
 //   functions above. A trap added a moment after the tap that started the game still counts as the player's.
 // - The page of a game is never a place to come back to: the hub is the only page before it and nothing is after.
 //   So when the page is shown by a history step while the hub was the page on the screen (`hub.here` in the tab's
 //   storage: the hub sets it when shown, a game clears it when loaded), it was "forward" out of the hub: the page,
 //   which hid itself when it was left, steps straight back.
-const TRAP = 'hubnav', MAX = 2;
+const TRAP = 'hubnav', MAX = 8;
 const HUB = typeof location === 'undefined' ? null : new URL('..', location.href);
 export const IN_HUB = !!HUB && HUB.pathname !== new URL('.', location.href).pathname;
 const FROM_KEY = typeof location === 'undefined' ? '' : 'hubnav.from:' + location.pathname;
