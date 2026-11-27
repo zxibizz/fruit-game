@@ -36,6 +36,18 @@ const ss = {
 };
 const root = () => document.documentElement;
 
+// A short trace of what happened to the history (the last 80 lines, in the tab's storage). The hub sends it to its
+// server when it is shown next (games-hub, /api/navlog): on a phone there is no other way to see why a back step
+// went where it did. A line: time (ms), the game, what, traps, inside, armed, the browser's activation, history.length.
+const LOG_KEY = 'hubnav.log', GAME = typeof location === 'undefined' ? '' : location.pathname.split('/').slice(-2, -1)[0] || '';
+function log(what) {
+  try {
+    const a = JSON.parse(ss.get(LOG_KEY) || '[]'), ua = navigator.userActivation;
+    a.push([Math.round(performance.now()), GAME, what, depthNow(), inside() ? 1 : 0, armed ? 1 : 0, ua ? (ua.isActive ? 1 : 0) : -1, history.length]);
+    ss.set(LOG_KEY, JSON.stringify(a.slice(-80)));
+  } catch { /* */ }
+}
+
 let inside = () => false, back = () => {}, step = () => {};
 let armed = false;       // the player tapped (a click) since the last history step
 let ours = 0;            // when a history step of ours was asked for (0 — none on its way): no second one meanwhile
@@ -52,10 +64,13 @@ function sync() {
   let d = depthNow();
   const is = !!inside();
   if (is && d < MAX && armed && active()) {
-    try { while (d < MAX) history.pushState({ [TRAP]: ++d }, ''); } catch { /* */ }
+    log('push');
+    try { while (d < MAX) history.pushState({ [TRAP]: ++d }, ''); } catch (e) { log('push failed ' + e.name); }
     depth = depthNow();
+    log('pushed');
   } else if (!is && d > 0) {
     ours = performance.now();
+    log('home: go ' + -d);
     history.go(-d);
   }
 }
@@ -64,6 +79,7 @@ function sync() {
 function bounced(byHistory) {
   if (!IN_HUB || !byHistory || ss.get('hub.here') !== '1') return false;
   root().style.visibility = 'hidden';
+  log('bounce: back');
   history.back();
   setTimeout(() => { if (document.visibilityState === 'visible') root().style.visibility = ''; }, 1500);   // nowhere to step back to
   return true;
@@ -78,17 +94,20 @@ export function initNav(game = {}) {
   addEventListener('popstate', () => {
     const was = depth, mine = pending();
     depth = depthNow(); ours = 0; armed = false;
+    log(`pop ${was}>${depth}${mine ? ' ours' : ''}`);
     if (depth > was) { if (!inside()) sync(); }   // forward onto a trap: fine in the game, undone at home
-    else if (!mine && inside()) back();           // the player's back: pause (in the pause menu it changes nothing)
+    else if (!mine && inside()) { back(); log('back()'); }   // the player's back: pause (in the pause menu it changes nothing)
     step();
   });
-  addEventListener('click', (e) => { if (e.isTrusted) { armed = true; sync(); } }, true);   // (Enter on a button is a click too)
+  addEventListener('click', (e) => { if (e.isTrusted) { if (!armed) { armed = true; log('tap'); } sync(); } }, true);   // (Enter on a button is a click too)
   setInterval(sync, 150);
-  addEventListener('pagehide', () => { if (IN_HUB) root().style.visibility = 'hidden'; });
-  addEventListener('pageshow', (e) => { if (!bounced(e.persisted)) root().style.visibility = ''; });
+  addEventListener('pagehide', (e) => { log('pagehide' + (e.persisted ? ' kept' : '')); if (IN_HUB) root().style.visibility = 'hidden'; });
+  addEventListener('pageshow', (e) => { log('pageshow' + (e.persisted ? ' kept' : '')); if (!bounced(e.persisted)) root().style.visibility = ''; });
+  document.addEventListener('visibilitychange', () => log('vis ' + document.visibilityState));
 
   const nav = performance.getEntriesByType && performance.getEntriesByType('navigation')[0];
   const type = nav ? nav.type : 'navigate';
+  log(`init ${type} here=${ss.get('hub.here')} from=${ss.get(FROM_KEY)} hub=${IN_HUB ? 1 : 0} app=${navigator.standalone === true || matchMedia('(display-mode: standalone)').matches ? 1 : 0}`);
   if (type === 'back_forward') { bounced(true); return; }
   if (!IN_HUB) return;
   ss.set('hub.here', '0');   // a game is on the screen now
@@ -106,8 +125,9 @@ export function toHub() {
   if (!IN_HUB) return;
   if (pending()) { setTimeout(toHub, 150); return; }   // a step of ours is on its way: after it
   const d = depthNow(), go = () => location.replace(HUB.href);
-  if (ss.get(FROM_KEY) !== '1' || history.length < d + 2) { go(); return; }
+  if (ss.get(FROM_KEY) !== '1' || history.length < d + 2) { log('toHub: replace'); go(); return; }
   ours = performance.now();
+  log('toHub: go ' + -(d + 1));
   history.go(-(d + 1));
   const t = setTimeout(() => { if (document.visibilityState === 'visible') go(); }, 2500);   // the step led nowhere
   addEventListener('pagehide', () => clearTimeout(t), { once: true });
