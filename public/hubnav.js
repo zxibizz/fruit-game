@@ -11,12 +11,15 @@
 // How: while the game is inside, extra history entries ("traps", up to two) lie on top of the page's own. Back takes
 // one away, the page stays, and popstate tells us. When the game goes home the traps are taken off (history.go), so
 // that back on the home screen leaves the page. A forward step onto a trap the game is no longer in is undone.
-// - Browsers skip, on back, entries a page added without the player touching it (their guard against pages that
-//   trap the back button: Chromium skips the entry that added one, WebKit the added one). So a trap is added only
-//   after a touch, one per touch — and a touch counts when the finger is lifted (pointerup, click), not when it
-//   lands. In play there are touches all the time and both traps are there: the first back pauses, the second does
-//   nothing; a third in a row, with no touch between, does leave the paused game for the hub — no page can prevent
-//   that. Any touch puts a trap back.
+// - Browsers skip, on back, entries a page added without the player's say (their guard against pages that trap the
+//   back button). Chromium: a page that adds an entry without a user activation gets ALL its entries skipped — back
+//   then goes straight to the page before, the hub; and after a back step it wants a new activation before another
+//   entry. WebKit: an entry added more than 10 s after the last activation is skipped together with the one before
+//   it. So traps are added only on the browser's own word that the player has just acted (navigator.userActivation)
+//   and only after a real tap since the last history step (a click event — the end of a swipe or some keys are
+//   not an activation everywhere). One tap is enough for both traps. In play: the first back pauses, the second does
+//   nothing; a third in a row, with no tap between, does leave the paused game for the hub — no page can prevent
+//   that. Any tap (the pause menu's own buttons) puts the traps back.
 // - The game's state is looked at on a timer, not at the game's calls: the game needs no change beyond the two
 //   functions above. A trap added a moment after the tap that started the game still counts as the player's.
 // - The page of a game is never a place to come back to: the hub is the only page before it and nothing is after.
@@ -34,19 +37,23 @@ const ss = {
 const root = () => document.documentElement;
 
 let inside = () => false, back = () => {}, step = () => {};
-let touched = false;     // the player touched the page since the last trap or history step
+let armed = false;       // the player tapped (a click) since the last history step
 let ours = 0;            // when a history step of ours was asked for (0 — none on its way): no second one meanwhile
 let depth = 0;           // the traps under the current entry, as last seen
 const depthNow = () => (history.state && history.state[TRAP]) | 0;
 const pending = () => ours && performance.now() - ours < 1500;
 
+// the browser's own word that the player has just acted (where it does not tell, the tap we saw has to do)
+const active = () => { const ua = navigator.userActivation; return ua ? ua.isActive : true; };
+
 function sync() {
   if (pending()) return;
   ours = 0;
-  const d = depthNow(), is = !!inside();
-  if (is && d < MAX && touched) {
-    touched = false;
-    try { history.pushState({ [TRAP]: d + 1 }, ''); depth = d + 1; } catch { /* */ }
+  let d = depthNow();
+  const is = !!inside();
+  if (is && d < MAX && armed && active()) {
+    try { while (d < MAX) history.pushState({ [TRAP]: ++d }, ''); } catch { /* */ }
+    depth = depthNow();
   } else if (!is && d > 0) {
     ours = performance.now();
     history.go(-d);
@@ -70,12 +77,12 @@ export function initNav(game = {}) {
   depth = depthNow();
   addEventListener('popstate', () => {
     const was = depth, mine = pending();
-    depth = depthNow(); ours = 0; touched = false;
+    depth = depthNow(); ours = 0; armed = false;
     if (depth > was) { if (!inside()) sync(); }   // forward onto a trap: fine in the game, undone at home
     else if (!mine && inside()) back();           // the player's back: pause (in the pause menu it changes nothing)
     step();
   });
-  for (const ev of ['pointerup', 'touchend', 'click', 'keydown']) addEventListener(ev, () => { touched = true; sync(); }, true);
+  addEventListener('click', (e) => { if (e.isTrusted) { armed = true; sync(); } }, true);   // (Enter on a button is a click too)
   setInterval(sync, 150);
   addEventListener('pagehide', () => { if (IN_HUB) root().style.visibility = 'hidden'; });
   addEventListener('pageshow', (e) => { if (!bounced(e.persisted)) root().style.visibility = ''; });
