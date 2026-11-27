@@ -1,4 +1,5 @@
 // Drawing, input, HUD and screens. The game state lives in game.js; this file only shows it and turns taps into actions.
+import { initNav, toHub, IN_HUB } from './hubnav.js';
 import * as A from './art.js';
 import {
   createGame, step, plantOn, plantProblem, blockingCells, previewTrails, trails, upgrade, upgradeCost, branchOpen, removePlant, refund, isFresh,
@@ -1494,7 +1495,10 @@ async function boot() {
   resize(); drawLogo(); showHome(true);
   game = createGame(0); paused = true; // a field behind the menu
   // opened inside the hub (all the family's games on one address, the game under its own path): a way back to it
-  $('bHub').hidden = new URL('..', location.href).pathname === new URL('.', location.href).pathname;
+  $('bHub').hidden = !IN_HUB;
+  $('bHub').addEventListener('click', (e) => { e.preventDefault(); toHub(); });
+  // the phone's "back": in a level — the pause (nothing while a card is open), on the home screen — out to the hub
+  initNav({ inside: () => $('home').hidden, back: () => { if ($('modal').hidden && game && !paused && game.phase !== 'won' && game.phase !== 'lost') openPause(); } });
   $('bPerks').onclick = () => { sfx.tap(); openPerks(); }; $('bGuide').onclick = () => { sfx.tap(); guideTab = 'plants'; openGuide(); }; $('bSet').onclick = () => { sfx.tap(); openSound(); };
   $('cont').onclick = () => { goFullscreen(); sfx.tap(); resumeLevel(); };
   requestAnimationFrame(frame);
