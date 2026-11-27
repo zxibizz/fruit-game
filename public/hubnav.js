@@ -3,6 +3,11 @@
 //   in the pause menu    → nothing (leave by its buttons);
 //   on the game's home   → the hub (the page before this one);
 //   in the hub           → never back into a game; and "forward" leads nowhere.
+// Installed on an iPhone (a home-screen app) there is no back at all: the hub opens a game, and a game the hub, in
+// place of the current page (location.replace), so the app's history is always one entry long and the edge swipe
+// has nowhere to go — in the hub, on a game's home screen, in a game. Nothing below about traps applies there. (The
+// owner's request, 2026-11-27: in a swipe game the edge swipe kept firing. Not on Android: with no history its back
+// button would close the app.)
 // The game only says whether it is "inside" (playing or paused — anywhere but its home screen) and what "back" does
 // there (pause):   initNav({ inside: () => mode !== 'home', back: () => pause() });   its hub button calls toHub().
 // step() — optional, called after every history step that stayed in the page (a game that keeps something in the
@@ -30,6 +35,8 @@
 const TRAP = 'hubnav', MAX = 8;
 const HUB = typeof location === 'undefined' ? null : new URL('..', location.href);
 export const IN_HUB = !!HUB && HUB.pathname !== new URL('.', location.href).pathname;
+// an iPhone home-screen app: no history, no traps (see the top)
+export const APP = typeof navigator !== 'undefined' && navigator.standalone === true;
 const FROM_KEY = typeof location === 'undefined' ? '' : 'hubnav.from:' + location.pathname;
 const ss = {
   get(k) { try { return sessionStorage.getItem(k); } catch { return null; } },
@@ -63,7 +70,7 @@ function sync() {
   if (pending()) return;
   ours = 0;
   let d = depthNow();
-  const is = !!inside();
+  const is = !APP && !!inside();   // (in the app, traps left by an earlier version of this page are taken off)
   if (is && d < MAX && armed && active()) {
     log('push');
     try { while (d < MAX) history.pushState({ [TRAP]: ++d }, ''); } catch (e) { log('push failed ' + e.name); }
@@ -97,7 +104,7 @@ export function initNav(game = {}) {
     depth = depthNow(); ours = 0; armed = false;
     log(`pop ${was}>${depth}${mine ? ' ours' : ''}`);
     if (depth > was) { if (!inside()) sync(); }   // forward onto a trap: fine in the game, undone at home
-    else if (!mine && inside()) { back(); log('back()'); }   // the player's back: pause (in the pause menu it changes nothing)
+    else if (!mine && !APP && inside()) { back(); log('back()'); }   // the player's back: pause (in the pause menu it changes nothing)
     step();
   });
   addEventListener('click', (e) => { if (e.isTrusted) { if (!armed) { armed = true; log('tap'); } sync(); } }, true);   // (Enter on a button is a click too)
@@ -126,7 +133,7 @@ export function toHub() {
   if (!IN_HUB) return;
   if (pending()) { setTimeout(toHub, 150); return; }   // a step of ours is on its way: after it
   const d = depthNow(), go = () => location.replace(HUB.href);
-  if (ss.get(FROM_KEY) !== '1' || history.length < d + 2) { log('toHub: replace'); go(); return; }
+  if (APP || ss.get(FROM_KEY) !== '1' || history.length < d + 2) { log('toHub: replace'); go(); return; }
   ours = performance.now();
   log('toHub: go ' + -(d + 1));
   history.go(-(d + 1));
